@@ -4,9 +4,9 @@ export default async function handler(req,res){
  try{await schema();const uid=userFrom(req);if(!uid)return json(res,401,{error:'Sign in required'});
  if(req.method==='GET'){
   const key=cacheKey(uid);const cached=await cacheGet(key);
-  if(cached){const data=typeof cached==='string'?JSON.parse(cached):cached;return json(res,200,data)}
+  if(cached){try{const parsed=typeof cached==='string'?JSON.parse(cached):cached;const data=typeof parsed==='string'?JSON.parse(parsed):parsed;if(data&&Array.isArray(data.transactions))return json(res,200,data)}catch(e){console.warn('[wealth-ledger:cache-invalid]',e?.message||e)}await cacheDel(key)}
   const rows=await sql.query('SELECT id,kind,category,description,amount,account,occurred_on FROM wealth_transactions WHERE user_id=$1 ORDER BY occurred_on DESC,created_at DESC LIMIT 500',[uid]);
-  const data={transactions:rows};await cacheSet(key,JSON.stringify(data),20);return json(res,200,data)
+  const data={transactions:rows};await cacheSet(key,data,20);return json(res,200,data)
  }
  if(req.method==='POST'){
   const b=await body(req);const kind=String(b.kind||'');const category=String(b.category||'').slice(0,60);const description=String(b.description||'').slice(0,180);const account=String(b.account||'').slice(0,80);const amount=Number(b.amount);const date=String(b.date||'');
