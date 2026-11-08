@@ -10,8 +10,8 @@ if (syntax.status !== 0) {
   process.exit(1);
 }
 
-const ids = new Set([...html.matchAll(/\\bid=["']([^"']+)["']/g)].map(m => m[1]));
-const refs = new Set([...js.matchAll(/\\$\\(["']([^"']+)["']\\)/g)].map(m => m[1]));
+const ids = new Set([...html.matchAll(/\bid=["']([^"']+)["']/g)].map(m => m[1]));
+const refs = new Set([...js.matchAll(/\$\(["']([^"']+)["']\)/g)].map(m => m[1]));
 const missing = [...refs].filter(id => !ids.has(id));
 if (missing.length) {
   console.error('Homepage is missing HTML elements referenced by app.js:', missing.join(', '));
@@ -20,7 +20,7 @@ if (missing.length) {
 
 const scripts = [...html.matchAll(/<script[^>]+src=["']([^"']+)["']/g)].map(m => m[1].split('?')[0]);
 for (const src of scripts) {
-  const file = src.replace(/^\\//, '');
+  const file = src.replace(/^\//, '');
   if (!existsSync(file)) {
     console.error('Homepage references a missing local script:', src);
     process.exit(1);
