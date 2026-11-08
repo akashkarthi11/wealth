@@ -141,3 +141,21 @@ button:focus-visible,[data-view]:focus-visible{outline:2px solid var(--green);ou
 .wealth-kpi strong{display:block;font-size:clamp(16px,2.5vw,22px);line-height:1.25;letter-spacing:-.5px;overflow-wrap:anywhere}
 .wealth-kpi>span{display:block;margin-top:6px;font-size:10px;color:var(--muted);line-height:1.4}.liability-kpi strong{color:#ffaaa6}
 @media(max-width:700px){.wealth-overview{gap:9px;margin:0 0 21px}.wealth-hero{padding:19px 17px;border-radius:17px;min-height:126px}.wealth-total{font-size:31px}.wealth-hero-mark{width:45px;height:45px;flex-basis:45px;border-radius:14px;font-size:24px}.wealth-kpis{gap:7px}.wealth-kpi{padding:12px 9px;border-radius:13px}.kpi-top{gap:5px;margin-bottom:9px;flex-wrap:wrap}.kpi-top small{font-size:9px;letter-spacing:.7px}.kpi-icon{width:23px;height:23px;font-size:14px;border-radius:7px}.wealth-kpi strong{font-size:clamp(14px,4.1vw,18px)}.wealth-kpi>span{font-size:9px}}
+
+/* Expandable financial summary cards */
+.wealth-kpi{appearance:none;text-align:left;color:inherit;font:inherit;cursor:pointer;transition:border-color .18s ease,transform .18s ease,background .18s ease}
+.wealth-kpi:hover,.wealth-kpi[aria-expanded="true"]{border-color:#6b9dba;background:linear-gradient(145deg,#1b3048,#14243a)}
+.wealth-kpi:focus-visible{outline:2px solid var(--green);outline-offset:3px}
+.kpi-top{width:100%}
+.wealth-chevron{margin-left:auto;font-style:normal;font-size:18px;line-height:1;color:var(--green);opacity:.9}
+.wealth-expanded{padding:15px 16px;border:1px solid #34516c;border-radius:16px;background:linear-gradient(145deg,#14243a,#0f1a2a);animation:wealthExpandIn .18s ease-out}
+.wealth-expanded-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:11px;border-bottom:1px solid var(--line);font-size:13px}
+.wealth-expanded-head strong{font-size:16px;color:var(--green);white-space:nowrap}
+.wealth-detail-list{display:grid;gap:0}
+.wealth-detail-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid #26364e;font-size:12px}
+.wealth-detail-row:last-child{border-bottom:0}
+.wealth-detail-row>span{min-width:0;overflow-wrap:anywhere;color:#c7d5e8}
+.wealth-detail-row>span small{display:block;margin-top:3px;font-size:10px;letter-spacing:0}
+.wealth-detail-row>b{white-space:nowrap;font-size:12px}
+@keyframes wealthExpandIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:700px){.wealth-expanded{padding:13px;border-radius:14px}.wealth-expanded-head{font-size:12px}.wealth-detail-row{font-size:11px}.wealth-detail-row>b{font-size:11px}}
