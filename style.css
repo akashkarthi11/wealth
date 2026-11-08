@@ -110,3 +110,17 @@ button:focus-visible,[data-view]:focus-visible{outline:2px solid var(--green);ou
 .chart-legend{display:flex;gap:18px;flex-wrap:wrap;margin:10px 0 0;color:#aebed4;font-size:11px}
 .chart-legend span{display:flex;align-items:center;gap:7px}.chart-legend i{width:9px;height:9px;border-radius:50%;display:inline-block}
 @media(max-width:700px){.analytics-grid{gap:8px}.analytics-grid .mini-card{padding:12px 10px}.chart-card{padding:13px 10px}.chart-head h4{font-size:14px}}
+
+/* Overall wealth position — first Home widget */
+.wealth-position{margin:8px 0 16px;padding:18px;border:1px solid #344963;border-radius:17px;background:linear-gradient(145deg,#1a2b43,#101b2b);box-shadow:0 12px 35px #0002}
+.wealth-position-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding-bottom:15px;border-bottom:1px solid #30425b}
+.wealth-position-head h3{margin:6px 0 0;font-size:16px;color:#c6d4e7}
+.wealth-position-head>strong{font-size:clamp(25px,5vw,34px);color:var(--green);font-weight:800;letter-spacing:-.7px;text-align:right}
+.wealth-position-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:13px}
+.position-tile{min-width:0;padding:13px;border:1px solid #2b4059;border-radius:12px;background:#0d1929}
+.position-tile small{display:block;font-size:9px;letter-spacing:.8px;line-height:1.45}
+.position-tile strong{display:block;margin-top:8px;font-size:clamp(16px,2.5vw,22px);overflow-wrap:anywhere}
+.position-tile span{display:block;margin-top:6px;color:var(--muted);font-size:10px;line-height:1.5}
+.liability-tile strong{color:#ffb1a8}
+.position-note{margin:12px 1px 0;color:#8295af;font-size:10px;line-height:1.5}
+@media(max-width:700px){.wealth-position{padding:14px 12px;border-radius:15px}.wealth-position-head{align-items:flex-start;flex-direction:column;gap:5px}.wealth-position-head>strong{text-align:left;font-size:29px}.wealth-position-grid{grid-template-columns:1fr;gap:8px}.position-tile{padding:12px}.position-tile strong{font-size:20px}.position-tile span{font-size:10px}}
