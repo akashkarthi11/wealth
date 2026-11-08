@@ -1,7 +1,7 @@
 import {sql,schema,json,body,userFrom,cacheGet,cacheSet,cacheDel} from './_lib.js';
 const cacheKey=uid=>'wealth:ledger:v1:'+uid;
 export default async function handler(req,res){
- try{await schema();const uid=userFrom(req);if(!uid)return json(res,401,{error:'Sign in required'});
+ try{const uid=userFrom(req);if(!uid)return json(res,401,{error:'Sign in required'});await schema();
  if(req.method==='GET'){
   const key=cacheKey(uid);const cached=await cacheGet(key);
   if(cached){try{const parsed=typeof cached==='string'?JSON.parse(cached):cached;const data=typeof parsed==='string'?JSON.parse(parsed):parsed;if(data&&Array.isArray(data.transactions))return json(res,200,data)}catch(e){console.warn('[wealth-ledger:cache-invalid]',e?.message||e)}await cacheDel(key)}
