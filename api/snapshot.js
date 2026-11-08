@@ -1,7 +1,7 @@
 import {sql,schema,json,userFrom,cacheGet,cacheSet} from './_lib.js';
 export default async function handler(req,res){
  try{
-  await schema();const uid=userFrom(req);if(!uid)return json(res,401,{error:'Sign in required'});
+  const uid=userFrom(req);if(!uid)return json(res,401,{error:'Sign in required'});await schema();
   const users=await sql.query('SELECT role FROM wealth_users WHERE id=$1',[uid]);
   if(!users.length||users[0].role!=='admin')return json(res,403,{error:'Owner admin only'});
   if(req.method==='GET'){
