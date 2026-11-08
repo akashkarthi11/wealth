@@ -124,3 +124,20 @@ button:focus-visible,[data-view]:focus-visible{outline:2px solid var(--green);ou
 .liability-tile strong{color:#ffb1a8}
 .position-note{margin:12px 1px 0;color:#8295af;font-size:10px;line-height:1.5}
 @media(max-width:700px){.wealth-position{padding:14px 12px;border-radius:15px}.wealth-position-head{align-items:flex-start;flex-direction:column;gap:5px}.wealth-position-head>strong{text-align:left;font-size:29px}.wealth-position-grid{grid-template-columns:1fr;gap:8px}.position-tile{padding:12px}.position-tile strong{font-size:20px}.position-tile span{font-size:10px}}
+
+/* Home financial overview — compact, hierarchy-first mobile dashboard */
+.wealth-overview{display:grid;gap:11px;margin:0 0 25px}
+.wealth-loading{padding:20px;border:1px solid var(--line);border-radius:18px;color:var(--muted);background:linear-gradient(145deg,#15243a,#101a2a)}
+.wealth-hero{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:space-between;gap:15px;padding:22px 21px;border:1px solid #34516c;border-radius:20px;background:radial-gradient(circle at 95% 5%,#2a5b5b88 0,transparent 38%),linear-gradient(135deg,#1b3048,#102033 72%);box-shadow:0 16px 38px #0002}
+.wealth-hero .eyebrow{font-size:10px;letter-spacing:1.5px}
+.wealth-total{margin-top:9px;font-size:clamp(30px,6vw,42px);font-weight:850;letter-spacing:-1.3px;color:#f2f7ff;line-height:1.1}
+.wealth-equation{margin-top:9px;font-size:11px;color:#a5b8cd}
+.wealth-hero-mark{display:grid;place-items:center;flex:0 0 54px;width:54px;height:54px;border-radius:17px;background:#ffffff12;border:1px solid #ffffff1c;color:#80e0bd;font-size:29px;font-weight:800}
+.wealth-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.wealth-kpi{min-width:0;padding:15px 14px;border:1px solid var(--line);border-radius:16px;background:linear-gradient(145deg,#152238,#101a2a)}
+.kpi-top{display:flex;align-items:center;gap:8px;margin-bottom:11px}.kpi-top small{font-size:10px;letter-spacing:1px}
+.kpi-icon{display:grid;place-items:center;width:27px;height:27px;border-radius:9px;font-size:17px;font-weight:800;background:#223b52;color:#8fc0ff}
+.invest-icon{background:#1c403c;color:#73dfb7}.liability-icon{background:#492d35;color:#ffaaa6}
+.wealth-kpi strong{display:block;font-size:clamp(16px,2.5vw,22px);line-height:1.25;letter-spacing:-.5px;overflow-wrap:anywhere}
+.wealth-kpi>span{display:block;margin-top:6px;font-size:10px;color:var(--muted);line-height:1.4}.liability-kpi strong{color:#ffaaa6}
+@media(max-width:700px){.wealth-overview{gap:9px;margin:0 0 21px}.wealth-hero{padding:19px 17px;border-radius:17px;min-height:126px}.wealth-total{font-size:31px}.wealth-hero-mark{width:45px;height:45px;flex-basis:45px;border-radius:14px;font-size:24px}.wealth-kpis{gap:7px}.wealth-kpi{padding:12px 9px;border-radius:13px}.kpi-top{gap:5px;margin-bottom:9px;flex-wrap:wrap}.kpi-top small{font-size:9px;letter-spacing:.7px}.kpi-icon{width:23px;height:23px;font-size:14px;border-radius:7px}.wealth-kpi strong{font-size:clamp(14px,4.1vw,18px)}.wealth-kpi>span{font-size:9px}}
