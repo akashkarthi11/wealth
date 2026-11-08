@@ -9,5 +9,8 @@
   "dependencies": {
     "@neondatabase/serverless": "^1.0.0",
     "redis": "^4.7.0"
+  },
+  "scripts": {
+    "build": "node scripts/validate-homepage.mjs"
   }
 }
