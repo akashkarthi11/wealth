@@ -21,7 +21,7 @@ export default async function handler(req,res){
   const p=String(data.password||'');
   if(!validEmail(e))return json(res,400,{error:'Enter a valid email address.'});
   if(action!=='login'&&!accessAllowed(data.secretKey))return json(res,403,{error:'Secret key is incorrect.'});
-  if(p.length<10||p.length>200)return json(res,400,{error:'Password must be at least 10 characters.'});
+  if(p.length>200)return json(res,400,{error:'Password is too long.'});
   if(action==='register'){
    const rows=await sql.query('INSERT INTO wealth_users(email,password_hash) VALUES($1,$2) ON CONFLICT(email) DO NOTHING RETURNING id,email,role',[e,hash(p)]);
    if(!rows.length)return json(res,409,{error:'An account with this email already exists.'});
