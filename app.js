@@ -26,7 +26,7 @@ $('authForm').onsubmit=async e=>{
  }catch(x){$('authMsg').textContent=x.message}
 };
 async function showApp(){
- $('auth').classList.add('hidden');$('app').classList.remove('hidden');$('logout').classList.remove('hidden');$('who').textContent=user.email+ (user.role==='admin'?' · OWNER / ADMIN':'');await load();if(user.role==='admin')await loadSnapshot();
+ $('auth').classList.add('hidden');$('app').classList.remove('hidden');$('logout').classList.remove('hidden');$('who').textContent=user.email+ (user.role==='admin'?' · OWNER / ADMIN':'');await Promise.all([load(),user.role==='admin'?loadSnapshot():Promise.resolve()]);
 }
 async function load(){
  const d=await api('/api/ledger');items=d.transactions||[];
