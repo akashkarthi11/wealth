@@ -1,9 +1,13 @@
-# Karthi Portfolio — Wealth Ledger
+# Karthi Wealth Ledger
 
 Standalone Vercel app. Required environment variables:
-- `WEALTH_DATABASE_URL`: dedicated Neon PostgreSQL connection string (recommended separate database/schema role)
+- `WEALTH_DATABASE_URL`: Neon PostgreSQL connection string
 - `WEALTH_SESSION_SECRET`: random secret with at least 32 characters
 
-Deploy this repository from its root directory (`.`), Node.js 20+, no build command. API routes initialize isolated `wealth_users` and `wealth_transactions` tables. Every ledger query is scoped by authenticated user UUID. Do not point this app at a production database until the DB role is restricted to the wealth tables and backups are enabled.
+Optional Redis cache (Upstash):
+- `UPSTASH_REDIS_REST_URL`
+- `UPSTASH_REDIS_REST_TOKEN`
 
-This first release is a ledger foundation, not bank sync, market-price tracking, tax advice, or a full asset valuation engine.
+The app uses Upstash Redis for short-lived, per-user caching of authenticated ledger and snapshot GET responses. Ledger cache entries expire after 20 seconds and are invalidated after successful inserts/deletes; snapshot cache entries expire after 60 seconds. Cache keys are scoped to the authenticated user. If Redis variables are absent or Redis is temporarily unavailable, requests fall back to Neon directly.
+
+Deploy from this repository root, Node.js 20+. API routes initialize the wealth tables. Do not commit database URLs, Redis tokens, session secrets, or personal financial snapshots to GitHub.
