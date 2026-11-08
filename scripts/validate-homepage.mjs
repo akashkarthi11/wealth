@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, copyFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
 const html = readFileSync('index.html', 'utf8');
@@ -10,8 +10,8 @@ if (syntax.status !== 0) {
   process.exit(1);
 }
 
-const ids = new Set([...html.matchAll(/\bid=["']([^"']+)["']/g)].map(m => m[1]));
-const refs = new Set([...js.matchAll(/\$\(["']([^"']+)["']\)/g)].map(m => m[1]));
+const ids = new Set([...html.matchAll(/id=["']([^"']+)["']/g)].map(m => m[1]));
+const refs = new Set([...js.matchAll(/[$][(]["']([^"']+)["'][)]/g)].map(m => m[1]));
 const missing = [...refs].filter(id => !ids.has(id));
 if (missing.length) {
   console.error('Homepage is missing HTML elements referenced by app.js:', missing.join(', '));
@@ -20,7 +20,7 @@ if (missing.length) {
 
 const scripts = [...html.matchAll(/<script[^>]+src=["']([^"']+)["']/g)].map(m => m[1].split('?')[0]);
 for (const src of scripts) {
-  const file = src.replace(/^\//, '');
+  const file = src.startsWith('/') ? src.slice(1) : src;
   if (!existsSync(file)) {
     console.error('Homepage references a missing local script:', src);
     process.exit(1);
@@ -34,4 +34,9 @@ for (const required of ['auth', 'app', 'logout', 'loginTab', 'authForm', 'viewCo
   }
 }
 
-console.log('Homepage validation passed: JavaScript syntax, referenced HTML IDs, and local scripts.');
+mkdirSync('public', { recursive: true });
+for (const file of ['index.html', 'app.js', 'style.css']) {
+  copyFileSync(file, 'public/' + file);
+}
+
+console.log('Homepage validation passed and static assets copied to public/.');
