@@ -1,7 +1,27 @@
 import { neon } from '@neondatabase/serverless';
+import { Redis } from '@upstash/redis';
 import { randomBytes, scryptSync, timingSafeEqual, createHmac } from 'node:crypto';
+
 const dbUrl=process.env.POSTGRES_URL || process.env.WEALTH_DATABASE_URL || process.env.DATABASE_URL;
 export const sql=dbUrl ? neon(dbUrl) : null;
+
+// Optional Upstash Redis cache. The app continues to work from Neon if Redis is not configured.
+const redisUrl=process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+const redisToken=process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+export const redis=redisUrl && redisToken ? new Redis({url:redisUrl,token:redisToken}) : null;
+
+export async function cacheGet(key){
+ if(!redis)return null;
+ try{return await redis.get(key)}catch(e){console.warn('[wealth-cache:get]',e?.message||e);return null}
+}
+export async function cacheSet(key,value,ttl=20){
+ if(!redis)return;
+ try{await redis.set(key,value,{ex:ttl})}catch(e){console.warn('[wealth-cache:set]',e?.message||e)}
+}
+export async function cacheDel(...keys){
+ if(!redis||!keys.length)return;
+ try{await redis.del(...keys)}catch(e){console.warn('[wealth-cache:del]',e?.message||e)}
+}
 export async function schema(){
  if(!sql) throw new Error('WEALTH_DATABASE_URL is not configured');
  await sql`CREATE TABLE IF NOT EXISTS wealth_users(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),email TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user','admin')),created_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
