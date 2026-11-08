@@ -1,26 +1,41 @@
 import { neon } from '@neondatabase/serverless';
-import { Redis } from '@upstash/redis';
+import { createClient } from 'redis';
 import { randomBytes, scryptSync, timingSafeEqual, createHmac } from 'node:crypto';
 
 const dbUrl=process.env.POSTGRES_URL || process.env.WEALTH_DATABASE_URL || process.env.DATABASE_URL;
 export const sql=dbUrl ? neon(dbUrl) : null;
 
-// Optional Upstash Redis cache. The app continues to work from Neon if Redis is not configured.
-const redisUrl=process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
-const redisToken=process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
-export const redis=redisUrl && redisToken ? new Redis({url:redisUrl,token:redisToken}) : null;
-
+// Vercel Redis integration provides REDIS_URL. Keep caching optional so Neon remains the source of truth.
+const redisUrl=process.env.REDIS_URL;
+const redisClient=redisUrl ? createClient({url:redisUrl}) : null;
+let redisConnectPromise=null;
+if(redisClient){
+ redisClient.on('error',e=>console.warn('[wealth-cache:redis]',e?.message||e));
+}
+async function getRedis(){
+ if(!redisClient)return null;
+ if(!redisClient.isOpen){
+  if(!redisConnectPromise){
+   redisConnectPromise=redisClient.connect().catch(e=>{
+    redisConnectPromise=null;
+    throw e;
+   });
+  }
+  await redisConnectPromise;
+ }
+ return redisClient;
+}
 export async function cacheGet(key){
- if(!redis)return null;
- try{return await redis.get(key)}catch(e){console.warn('[wealth-cache:get]',e?.message||e);return null}
+ try{const client=await getRedis();return client?await client.get(key):null}
+ catch(e){console.warn('[wealth-cache:get]',e?.message||e);return null}
 }
 export async function cacheSet(key,value,ttl=20){
- if(!redis)return;
- try{await redis.set(key,value,{ex:ttl})}catch(e){console.warn('[wealth-cache:set]',e?.message||e)}
+ try{const client=await getRedis();if(client)await client.set(key,JSON.stringify(value),{EX:ttl})}
+ catch(e){console.warn('[wealth-cache:set]',e?.message||e)}
 }
 export async function cacheDel(...keys){
- if(!redis||!keys.length)return;
- try{await redis.del(...keys)}catch(e){console.warn('[wealth-cache:del]',e?.message||e)}
+ try{const client=await getRedis();if(client&&keys.length)await client.del(keys)}
+ catch(e){console.warn('[wealth-cache:del]',e?.message||e)}
 }
 export async function schema(){
  if(!sql) throw new Error('WEALTH_DATABASE_URL is not configured');
