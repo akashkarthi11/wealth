@@ -78,3 +78,19 @@ button:focus-visible,[data-view]:focus-visible{outline:2px solid var(--green);ou
  .tabs button{padding:10px 5px;font-size:12px}
 }
 @media(min-width:701px){.mobile-nav{display:none}}
+
+/* Consolidated records and bank balance cards */
+.group-title{margin:22px 0 10px;font-size:16px;color:#dce8f8}
+.merged-records{border:1px solid var(--line);border-radius:15px;background:#101a2a;padding:4px 15px}
+.merged-record{padding:15px 0;border-bottom:1px solid #29384d}
+.merged-record:last-child{border-bottom:0}
+.merged-record h4{font-size:14px;line-height:1.4;margin:0;color:#e8f0fc}
+.bank-balance-card{padding:15px;margin:10px 0;border:1px solid #30425b;border-radius:14px;background:linear-gradient(145deg,#15243a,#101a2a)}
+.bank-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px}
+.bank-card-head h4{font-size:15px;margin:0;color:var(--green)}
+.bank-card-head span{font-size:11px;color:var(--muted);text-align:right}
+.bank-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.bank-metric{background:#0c1727;border-radius:9px;padding:10px;min-width:0}
+.bank-metric small{display:block;font-size:9px;letter-spacing:.5px;line-height:1.4}
+.bank-metric strong{display:block;font-size:14px;margin-top:5px;overflow-wrap:anywhere}
+@media(max-width:700px){.merged-records{padding:2px 12px}.merged-record{padding:13px 0}.merged-record h4{font-size:13px}.bank-balance-card{padding:13px}.bank-metric{padding:9px}.bank-metric strong{font-size:13px}}
