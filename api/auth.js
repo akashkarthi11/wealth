@@ -6,16 +6,17 @@ const accessAllowed = supplied => {
 };
 export default async function handler(req,res){
  try {
-  await schema();
   const action = new URL(req.url,'https://local').searchParams.get('action');
   if(req.method==='GET'){
    const uid=userFrom(req);
    if(!uid)return json(res,200,{user:null});
+   await schema();
    const rows=await sql.query('SELECT id,email,role,created_at FROM wealth_users WHERE id=$1',[uid]);
    return json(res,200,{user:rows[0]||null});
   }
   if(req.method!=='POST')return json(res,405,{error:'Method not allowed'});
   if(action==='logout'){cookie(res,'');return json(res,200,{ok:true});}
+  await schema();
   const data=await body(req);
   const e=String(data.email||'').trim().toLowerCase();
   const p=String(data.password||'');
