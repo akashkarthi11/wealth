@@ -18,4 +18,4 @@ $('logout').onclick=async()=>{await api('/api/auth?action=logout',{method:'POST'
 $('addToggle').onclick=()=>{$('txForm').classList.remove('hidden');$('date').value=new Date().toISOString().slice(0,10)};
 $('cancel').onclick=()=>$('txForm').classList.add('hidden');
 $('txForm').onsubmit=async e=>{e.preventDefault();$('txMsg').textContent='';try{await api('/api/ledger',{method:'POST',body:JSON.stringify({kind:$('kind').value,amount:$('amount').value,category:$('category').value,account:$('account').value,date:$('date').value,description:$('description').value})});e.target.reset();$('txForm').classList.add('hidden');await load();renderView(activeView)}catch(x){$('txMsg').textContent=x.message}};
-(async()=>{try{const d=await api('/api/auth');if(d.user){user=d.user;await showApp()}}catch(e){$('globalMsg').textContent='Service is not configured yet.'}})();
+(async()=>{try{const d=await api('/api/auth');if(d.user){user=d.user;await showApp()}else{$('auth').classList.remove('hidden')}}catch(e){$('auth').classList.remove('hidden');$('globalMsg').textContent='Unable to verify your session. Please try again.'}})();
