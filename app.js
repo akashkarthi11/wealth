@@ -1,60 +1,21 @@
 const $=id=>document.getElementById(id);
-let mode='login',user=null,items=[];
+let mode='login',user=null,items=[],sourceSections=[],activeView='overview';
 const money=n=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:2}).format(Number(n||0));
 const api=async(url,opt={})=>{const r=await fetch(url,{...opt,headers:{'Content-Type':'application/json',...(opt.headers||{})},credentials:'same-origin'});const d=await r.json();if(!r.ok)throw Error(d.error||'Request failed');return d};
-function setMode(m){
- mode=m;
- $('loginTab').classList.toggle('active',m==='login');
- $('registerTab').classList.toggle('active',m==='register');
- $('forgotTab').classList.toggle('active',m==='forgot');
- $('secretWrap').classList.toggle('hidden',m==='login');
- $('authSubmit').textContent=m==='login'?'Sign in securely':m==='register'?'Create private ledger':'Reset password';
- $('password').autocomplete=m==='login'?'current-password':'new-password';
- $('password').placeholder=m==='forgot'?'Enter your new password (10+ characters)':'At least 10 characters';
- $('authMsg').textContent='';
-}
-$('loginTab').onclick=()=>setMode('login');
-$('registerTab').onclick=()=>setMode('register');
-$('forgotTab').onclick=()=>setMode('forgot');
-$('authForm').onsubmit=async e=>{
- e.preventDefault();$('authMsg').textContent='';
- try{
-  const payload={email:$('email').value,password:$('password').value,secretKey:$('secretKey').value};
-  const d=await api('/api/auth?action='+mode,{method:'POST',body:JSON.stringify(payload)});
-  if(mode==='forgot'){ $('authMsg').textContent='Password reset. You can now sign in.';setMode('login');$('authMsg').textContent='Password reset. Please sign in.';return; }
-  user=d.user;await showApp();
- }catch(x){$('authMsg').textContent=x.message}
-};
-async function showApp(){
- $('auth').classList.add('hidden');$('app').classList.remove('hidden');$('logout').classList.remove('hidden');$('who').textContent=user.email+ (user.role==='admin'?' · OWNER / ADMIN':'');await Promise.all([load(),user.role==='admin'?loadSnapshot():Promise.resolve()]);
-}
-async function load(){
- const d=await api('/api/ledger');items=d.transactions||[];
- const sum=k=>items.filter(x=>x.kind===k).reduce((a,x)=>a+Number(x.amount),0);
- $('income').textContent=money(sum('income'));$('expense').textContent=money(sum('expense'));$('net').textContent=money(sum('income')-sum('expense'));$('count').textContent=items.length+' entries';
- $('entries').innerHTML=items.length?items.map(x=>{const sign=x.kind==='income'?'+':x.kind==='expense'?'-':'';return '<div class="entry"><div><b>'+esc(x.category)+'</b><small>'+esc(x.description||x.kind)+' · '+esc(x.account||'No account')+' · '+esc(String(x.occurred_on).slice(0,10))+'</small></div><span class="value '+(x.kind==='income'?'income':x.kind==='expense'?'expense':'')+'">'+sign+money(x.amount)+'</span><button class="delete" data-id="'+x.id+'" aria-label="Delete entry">×</button></div>'}).join(''):'<p class="muted">No entries yet. Add your first transaction.</p>';
- $('entries').querySelectorAll('.delete').forEach(b=>b.onclick=async()=>{if(confirm('Delete this ledger entry?')){await api('/api/ledger?id='+encodeURIComponent(b.dataset.id),{method:'DELETE'});await load()}});
-}
-
-async function loadSnapshot(){
- const panel=$('snapshotPanel');panel.classList.remove('hidden');
- try{
-  let d=await api('/api/snapshot');
-  if(!d.snapshot){$('snapshotStatus').textContent='No saved snapshot';return}
-  const snap=d.snapshot?.payload;
-  if(!snap){$('snapshotStatus').textContent='Not imported';return}
-  $('snapshotStatus').textContent='Saved in database · '+snap.snapshotDate;
-  $('snapshotContent').innerHTML=snap.sections.map((s,i)=>{
-   const tables=(s.tables||[]).map(rows=>'<div class="snapshot-table-wrap"><table class="snapshot-table"><tbody>'+rows.map((r,ri)=>'<tr>'+r.map(cell=>ri===0?'<th>'+esc(cell)+'</th>':'<td>'+esc(cell)+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>').join('');
-   const notes=(s.notes||[]).map(n=>'<li>'+esc(n)+'</li>').join('');
-   return '<details class="snapshot-section" '+(i<5?'open':'')+'><summary>'+esc(s.heading)+'</summary>'+tables+(notes?'<ul class="snapshot-notes">'+notes+'</ul>':'')+'</details>';
-  }).join('');
- }catch(e){$('snapshotStatus').textContent='Import error';$('snapshotContent').innerHTML='<p class="message">'+esc(e.message)+'</p>'}
-}
-
-function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function setMode(m){mode=m;$('loginTab').classList.toggle('active',m==='login');$('registerTab').classList.toggle('active',m==='register');$('forgotTab').classList.toggle('active',m==='forgot');$('secretWrap').classList.toggle('hidden',m==='login');$('authSubmit').textContent=m==='login'?'Sign in securely':m==='register'?'Create private ledger':'Reset password';$('password').autocomplete=m==='login'?'current-password':'new-password';$('password').placeholder=m==='forgot'?'Enter your new password (10+ characters)':'At least 10 characters';$('authMsg').textContent=''}
+$('loginTab').onclick=()=>setMode('login');$('registerTab').onclick=()=>setMode('register');$('forgotTab').onclick=()=>setMode('forgot');
+$('authForm').onsubmit=async e=>{e.preventDefault();$('authMsg').textContent='';try{const payload={email:$('email').value,password:$('password').value,secretKey:$('secretKey').value};const d=await api('/api/auth?action='+mode,{method:'POST',body:JSON.stringify(payload)});if(mode==='forgot'){setMode('login');$('authMsg').textContent='Password reset. Please sign in.';return}user=d.user;await showApp()}catch(x){$('authMsg').textContent=x.message}};
+async function showApp(){$('auth').classList.add('hidden');$('app').classList.remove('hidden');$('logout').classList.remove('hidden');$('who').textContent=user.email+(user.role==='admin'?' · OWNER / ADMIN':'');$('sourceNav').classList.toggle('hidden',user.role!=='admin');await Promise.all([load(),user.role==='admin'?loadSnapshot():Promise.resolve()]);renderView('overview')}
+async function load(){const d=await api('/api/ledger');items=d.transactions||[];const sum=k=>items.filter(x=>x.kind===k).reduce((a,x)=>a+Number(x.amount),0);$('income').textContent=money(sum('income'));$('expense').textContent=money(sum('expense'));$('net').textContent=money(sum('income')-sum('expense'));$('count').textContent=items.length+' entries';$('entries').innerHTML=items.length?items.map(x=>{const sign=x.kind==='income'?'+':x.kind==='expense'?'-':'';return '<div class="entry"><div><b>'+esc(x.category)+'</b><small>'+esc(x.description||x.kind)+' · '+esc(x.account||'No account')+' · '+esc(String(x.occurred_on).slice(0,10))+'</small></div><span class="value '+(x.kind==='income'?'income':x.kind==='expense'?'expense':'')+'">'+sign+money(x.amount)+'</span><button class="delete" data-id="'+x.id+'" aria-label="Delete entry">×</button></div>'}).join(''):'<p class="muted">No entries yet. Add your first transaction.</p>';$('entries').querySelectorAll('.delete').forEach(b=>b.onclick=async()=>{if(confirm('Delete this ledger entry?')){await api('/api/ledger?id='+encodeURIComponent(b.dataset.id),{method:'DELETE'});await load()}})}
+async function loadSnapshot(){try{const d=await api('/api/snapshot');sourceSections=[];(d.snapshots||[]).forEach(snap=>{let p=snap.payload;if(typeof p==='string'){try{p=JSON.parse(p)}catch{p={}}}(p.sections||[]).forEach(s=>sourceSections.push({...s,_source:snap.source_name,_date:String(snap.snapshot_date||'').slice(0,10)}))});$('snapshotStatus').textContent=sourceSections.length+' source sections · '+(d.snapshots||[]).length+' saved snapshots';$('sourceCount').textContent=sourceSections.length+' imported sections';renderView(activeView)}catch(e){$('snapshotStatus').textContent='Could not load source data';$('sourceCount').textContent=e.message}}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function groupFor(h){const x=h.toLowerCase();if(/bank|cash account|savings card|latest balance/.test(x))return'accounts';if(/precious metal|gold|silver/.test(x))return'metals';if(/equity|angel one|stock holding/.test(x))return'stocks';if(/mutual fund/.test(x))return'funds';if(/spending|category average/.test(x))return'spending';if(/activity|transactions added|movement summary|additional activity|new activity/.test(x))return'transactions';if(/ledger rules|investment policy/.test(x))return'planning';if(/historical|history retention/.test(x))return'history';if(/confirmation|reconciliation|refund/.test(x))return'review';return'other'}
+const views=[['overview','Overview'],['accounts','Accounts'],['metals','Gold & Silver'],['stocks','Stocks'],['funds','Mutual Funds'],['spending','Spending'],['transactions','Transactions'],['planning','Rules & Policy'],['history','History'],['review','Reconciliation'],['all','All Source Data']];
+function sectionHtml(s,i){const tables=(s.tables||[]).map(rows=>'<div class="snapshot-table-wrap"><table class="snapshot-table"><tbody>'+rows.map((r,ri)=>'<tr>'+r.map(cell=>ri===0?'<th>'+esc(cell)+'</th>':'<td>'+esc(cell)+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>').join('');const notes=(s.notes||[]).map(n=>'<li>'+esc(n)+'</li>').join('');return '<details class="snapshot-section" '+(i<2?'open':'')+'><summary>'+esc(s.heading)+'</summary><div class="source-meta">'+esc(s._date||'')+' · '+esc(s._source||'HTML source')+'</div>'+tables+(notes?'<ul class="snapshot-notes">'+notes+'</ul>':'')+'</details>'}
+function renderView(view){activeView=view;document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));const target=$('viewContent');if(!target)return;const filtered=sourceSections.filter(s=>view==='all'||(view==='overview'?['accounts','stocks','funds','metals','transactions'].includes(groupFor(s.heading)):groupFor(s.heading)===view));const title=(views.find(v=>v[0]===view)||views[0])[1];$('viewTitle').textContent=title;if(view==='overview'){target.innerHTML='<div class="overview-grid"><article class="mini-card"><small>IMPORTED SECTIONS</small><strong>'+sourceSections.length+'</strong></article><article class="mini-card"><small>LEDGER ENTRIES</small><strong>'+items.length+'</strong></article><article class="mini-card"><small>SOURCE</small><strong>HTML</strong><span>7–8 Nov 2026</span></article></div>'+filtered.map(sectionHtml).join('')}else if(view==='transactions'){target.innerHTML=filtered.map(sectionHtml).join('')+'<section class="card history"><div class="historyhead"><div><div class="eyebrow">LIVE LEDGER</div><h3>Recorded transactions</h3></div><span class="pill">'+items.length+' entries</span></div><div class="entries">'+$('entries').innerHTML+'</div></section>'}else target.innerHTML=filtered.length?filtered.map(sectionHtml).join(''):'<p class="muted">No source section is assigned to this menu yet. Check All Source Data for every imported section.</p>';if(view==='all')$('viewTitle').textContent='All source sections ('+sourceSections.length+')'}
+$('menuNav').addEventListener('click',e=>{const b=e.target.closest('[data-view]');if(b)renderView(b.dataset.view)});
 $('logout').onclick=async()=>{await api('/api/auth?action=logout',{method:'POST',body:'{}'});location.reload()};
 $('addToggle').onclick=()=>{$('txForm').classList.remove('hidden');$('date').value=new Date().toISOString().slice(0,10)};
 $('cancel').onclick=()=>$('txForm').classList.add('hidden');
-$('txForm').onsubmit=async e=>{e.preventDefault();$('txMsg').textContent='';try{await api('/api/ledger',{method:'POST',body:JSON.stringify({kind:$('kind').value,amount:$('amount').value,category:$('category').value,account:$('account').value,date:$('date').value,description:$('description').value})});e.target.reset();$('txForm').classList.add('hidden');await load()}catch(x){$('txMsg').textContent=x.message}};
+$('txForm').onsubmit=async e=>{e.preventDefault();$('txMsg').textContent='';try{await api('/api/ledger',{method:'POST',body:JSON.stringify({kind:$('kind').value,amount:$('amount').value,category:$('category').value,account:$('account').value,date:$('date').value,description:$('description').value})});e.target.reset();$('txForm').classList.add('hidden');await load();renderView(activeView)}catch(x){$('txMsg').textContent=x.message}};
 (async()=>{try{const d=await api('/api/auth');if(d.user){user=d.user;await showApp()}}catch(e){$('globalMsg').textContent='Service is not configured yet.'}})();
