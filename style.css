@@ -100,3 +100,13 @@ button:focus-visible,[data-view]:focus-visible{outline:2px solid var(--green);ou
 .bank-balance-card:hover,.bank-balance-card:focus-visible{border-color:var(--green);transform:translateY(-1px)}
 .bank-open{display:block;margin-top:12px;color:var(--green);font-size:12px;font-weight:650}
 .back-button{background:#1a2940;border:1px solid #30425d;border-radius:10px;color:#dbe8fa;padding:10px 14px;margin:4px 0 12px}
+
+/* Historical analytics */
+.analytics-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:8px 0 16px}
+.analytics-grid .mini-card span{line-height:1.5}
+.chart-card{margin:12px 0;padding:16px;border:1px solid #2a3b54;border-radius:15px;background:#0f1a2a}
+.chart-head h4{margin:0;font-size:15px}.chart-head p,.chart-foot{margin:5px 0 0;color:#91a4bd;font-size:11px;line-height:1.5}
+.chart-scroll{width:100%;overflow-x:auto;margin-top:12px}.chart-scroll svg{display:block;width:100%;min-width:440px;height:auto}
+.chart-legend{display:flex;gap:18px;flex-wrap:wrap;margin:10px 0 0;color:#aebed4;font-size:11px}
+.chart-legend span{display:flex;align-items:center;gap:7px}.chart-legend i{width:9px;height:9px;border-radius:50%;display:inline-block}
+@media(max-width:700px){.analytics-grid{gap:8px}.analytics-grid .mini-card{padding:12px 10px}.chart-card{padding:13px 10px}.chart-head h4{font-size:14px}}
