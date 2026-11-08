@@ -94,3 +94,9 @@ button:focus-visible,[data-view]:focus-visible{outline:2px solid var(--green);ou
 .bank-metric small{display:block;font-size:9px;letter-spacing:.5px;line-height:1.4}
 .bank-metric strong{display:block;font-size:14px;margin-top:5px;overflow-wrap:anywhere}
 @media(max-width:700px){.merged-records{padding:2px 12px}.merged-record{padding:13px 0}.merged-record h4{font-size:13px}.bank-balance-card{padding:13px}.bank-metric{padding:9px}.bank-metric strong{font-size:13px}}
+
+/* Click-through bank account cards */
+.bank-balance-card{display:block;width:100%;text-align:left;color:var(--text);font:inherit;cursor:pointer;transition:border-color .15s,transform .15s}
+.bank-balance-card:hover,.bank-balance-card:focus-visible{border-color:var(--green);transform:translateY(-1px)}
+.bank-open{display:block;margin-top:12px;color:var(--green);font-size:12px;font-weight:650}
+.back-button{background:#1a2940;border:1px solid #30425d;border-radius:10px;color:#dbe8fa;padding:10px 14px;margin:4px 0 12px}
