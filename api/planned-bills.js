@@ -3,7 +3,7 @@ export default async function handler(req,res){
  try{
   const uid=userFrom(req);if(!uid)return json(res,401,{error:'Sign in required'});
   if(req.method==='GET'){
-   const rows=await sql.query("SELECT b.id,b.title,b.amount,b.due_date,b.category,b.payee,b.reference_masked,b.recurrence,b.status,a.bank_name,a.account_name,a.masked_identifier FROM wealth_planned_bills b LEFT JOIN wealth_accounts a ON a.id=b.account_id AND a.user_id=b.user_id WHERE b.user_id=$1 AND b.status='planned' ORDER BY b.due_date ASC",[uid]);
+   const rows=await sql.query("SELECT b.id,b.title,b.amount,b.due_date,b.category,b.payee,b.reference_masked,b.recurrence,b.status,a.bank_name,a.account_name,a.masked_identifier,a.current_balance,a.balance_as_of,a.balance_status FROM wealth_planned_bills b LEFT JOIN wealth_accounts a ON a.id=b.account_id AND a.user_id=b.user_id WHERE b.user_id=$1 AND b.status='planned' ORDER BY b.due_date ASC",[uid]);
    return json(res,200,{bills:rows});
   }
   if(req.method==='PATCH'){
