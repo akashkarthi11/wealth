@@ -3,7 +3,7 @@ import {timingSafeEqual} from 'node:crypto';
 
 function validIngestSecret(req){
  const expected=process.env.WEALTH_ADVISOR_INGEST_SECRET||'';
- const supplied=String(req.headers.authorization||'').replace(/^Bearer\\s+/i,'');
+ const supplied=String(req.headers.authorization||'').replace(/^Bearer\s+/i,'');
  if(expected.length<32||supplied.length!==expected.length)return false;
  try{return timingSafeEqual(Buffer.from(supplied),Buffer.from(expected))}catch{return false}
 }
