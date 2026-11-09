@@ -1,3 +1,21 @@
+const APP_BUILD_ID='20261110-reload-prompt-2';
+(function promptForUpdatedApp(){
+  try {
+    const key='wealth-ledger:app-build';
+    const previous=localStorage.getItem(key)||'20261110-cache-fix-1';
+    if(previous!==APP_BUILD_ID){
+      if(window.confirm('A new Wealth Ledger version is available. Reload now to clear the old app cache and load the latest version?')){
+        localStorage.setItem(key,APP_BUILD_ID);
+        window.location.reload();
+        return;
+      }
+      sessionStorage.setItem(key+':dismissed',APP_BUILD_ID);
+    } else if(sessionStorage.getItem(key+':dismissed')===APP_BUILD_ID) {
+      return;
+    }
+    localStorage.setItem(key,APP_BUILD_ID);
+  } catch(e) { console.warn('[wealth-build-check]',e); }
+})();
 const $=id=>document.getElementById(id);
 let mode='login',user=null,items=[],accounts=[],sourceSections=[],activeView='overview',activeBank=null,accountingTemplate=null,showMonthSpend=false,plannedBills=[],subscriptions=[],positions=[];
 const money=n=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:2}).format(Number(n||0));
