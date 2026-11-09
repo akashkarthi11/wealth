@@ -10,7 +10,7 @@ if (syntax.status !== 0) {
   process.exit(1);
 }
 
-const ids = new Set([...html.matchAll(/id=["']([^"']+)["']/g)].map(m => m[1]));
+const ids = new Set([...html.matchAll(/id=["']([^"']+)["']/g), ...js.matchAll(/id=["']([^"']+)["']/g)].map(m => m[1]));
 const refs = new Set([...js.matchAll(/[$][(]["']([^"']+)["'][)]/g)].map(m => m[1]));
 const missing = [...refs].filter(id => !ids.has(id));
 if (missing.length) {
