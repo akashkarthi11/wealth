@@ -1,6 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import { createClient } from 'redis';
-import { Kafka } from 'kafkajs';
+import { waitUntil } from '@vercel/functions';
 import { randomBytes, scryptSync, timingSafeEqual, createHmac } from 'node:crypto';
 
 const dbUrl=process.env.POSTGRES_URL || process.env.WEALTH_DATABASE_URL || process.env.DATABASE_URL;
@@ -35,7 +35,7 @@ export async function cacheSet(key,value,ttl=20){
  catch(e){console.warn('[wealth-cache:set]',e?.message||e)}
 }
 export async function cacheLock(key,ttl=10){
- try{const client=await getRedis();return client?await client.set(key,'1',{EX:ttl,NX:true})==='OK':true}
+ try{const client=await getRedis();return client?await client.set(key,'1',{EX:ttl,NX:true})==='OK':false}
  catch(e){console.warn('[wealth-cache:lock]',e?.message||e);return false}
 }
 export async function cacheDel(...keys){
@@ -60,42 +60,18 @@ export function json(res,status,data){res.statusCode=status;res.setHeader('Conte
 export async function body(req){let s='';for await(const c of req)s+=c;if(s.length>20000)throw new Error('Request too large');return JSON.parse(s||'{}')}
 
 
-// Kafka is optional at API runtime. Configure KAFKA_BROKERS and credentials to enable
-// background stale-while-revalidate refreshes. Neon remains the source of truth.
-const kafkaBrokers=String(process.env.KAFKA_BROKERS||'').split(',').map(x=>x.trim()).filter(Boolean);
-const kafkaClient=kafkaBrokers.length?new Kafka({
- clientId:process.env.KAFKA_CLIENT_ID||'wealth-api',
- brokers:kafkaBrokers,
- ssl:String(process.env.KAFKA_SSL||'true').toLowerCase()!=='false',
- ...(process.env.KAFKA_USERNAME&&process.env.KAFKA_PASSWORD?{
-  sasl:{mechanism:process.env.KAFKA_SASL_MECHANISM||'plain',username:process.env.KAFKA_USERNAME,password:process.env.KAFKA_PASSWORD}
- }: {})
-}):null;
-let kafkaProducer=null,kafkaConnectPromise=null;
-async function getKafkaProducer(){
- if(!kafkaClient)return null;
- if(kafkaProducer)return kafkaProducer;
- if(!kafkaConnectPromise){
-  kafkaConnectPromise=kafkaClient.producer().connect().then(p=>(kafkaProducer=p,p)).catch(e=>{kafkaConnectPromise=null;throw e});
- }
- return kafkaConnectPromise;
-}
-export async function enqueueCacheRefresh(uid,resource){
- if(!uid||!['dashboard','ledger','snapshots'].includes(resource)||!kafkaClient)return false;
+// Schedule stale-while-revalidate work within the current Vercel Function lifetime.
+// The Redis lock is a cooldown (not released on success), preventing refresh storms.
+export function scheduleCacheRefresh(uid,resource,refresh,ttl){
+ if(!uid||typeof refresh!=='function')return;
  const lockKey='wealth:refresh-lock:v1:'+uid+':'+resource;
- const locked=await cacheLock(lockKey,20);
- if(!locked)return false;
- try{
-  const producer=await getKafkaProducer();
-  if(!producer){await cacheDel(lockKey);return false}
-  await producer.send({
-   topic:process.env.KAFKA_CACHE_REFRESH_TOPIC||'wealth.cache.refresh.v1',
-   messages:[{key:uid+':'+resource,value:JSON.stringify({uid,resource,requestedAt:new Date().toISOString(),version:1})}]
-  });
-  return true;
- }catch(e){
-  console.warn('[wealth-cache:enqueue]',e?.message||e);
-  await cacheDel(lockKey);
-  return false;
- }
+ waitUntil((async()=>{
+  const locked=await cacheLock(lockKey,ttl);
+  if(!locked)return;
+  try{await refresh()}
+  catch(e){
+   console.warn('[wealth-cache:refresh]',resource,e?.message||e);
+   await cacheDel(lockKey);
+  }
+ })());
 }
