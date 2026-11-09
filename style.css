@@ -252,3 +252,9 @@ button.dashboard-alert-banner:focus-visible{outline:2px solid #8bb5ff;outline-of
  .more-link-copy b{font-size:13px}
  .more-link-copy small{font-size:10px}
 }
+
+
+/* Consistent P&L semantics: losses red, gains green, zero neutral */
+.negative{color:#ff8f96!important}
+.positive{color:#6ce0b0!important}
+.neutral{color:#aebed4!important}
