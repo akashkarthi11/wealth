@@ -3,7 +3,7 @@ import {sql,schema,json,userFrom,cacheGet,cacheSet,cacheLock} from './_lib.js';
 const dashboardKey=uid=>'wealth:dashboard:v2:'+uid;
 const refreshLockKey=uid=>'wealth:dashboard:refresh:v1:'+uid;
 function unpack(value){if(!value)return null;try{let x=typeof value==='string'?JSON.parse(value):value;if(typeof x==='string')x=JSON.parse(x);return x}catch{return null}}
-function valid(c){return !!(c&&c.role&&c.template&&Array.isArray(c.transactions)&&Array.isArray(c.snapshots)&&Array.isArray(c.accounts)&&Array.isArray(c.positions))}
+function valid(c){return !!(c&&c.role&&Object.prototype.hasOwnProperty.call(c,'template')&&Array.isArray(c.transactions)&&Array.isArray(c.snapshots)&&Array.isArray(c.accounts)&&Array.isArray(c.positions))}
 async function readDashboard(uid){
  const [users,transactions,templates,accounts,positions]=await Promise.all([
   sql.query('SELECT role FROM wealth_users WHERE id=$1',[uid]),
