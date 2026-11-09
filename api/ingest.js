@@ -1,5 +1,5 @@
 import { neon } from '@neondatabase/serverless';
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { json, body } from './_lib.js';
 
 const db=process.env.WEALTH_INGESTION_DATABASE_URL?neon(process.env.WEALTH_INGESTION_DATABASE_URL):null;
