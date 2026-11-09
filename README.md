@@ -43,3 +43,39 @@ Both providers are called only from the server. Keys are read from environment v
 The UI reads cached data from Redis first. On a cache hit, the API returns the cached response and schedules a background refresh with Vercel Functions `waitUntil()`. The background task reads the latest records from Neon and updates Redis. A per-user, per-resource Redis lock limits refresh frequency to the cache TTL and prevents duplicate refreshes. If Redis is unavailable, background refresh is skipped and cache misses continue to read Neon synchronously.
 
 Neon remains the source of truth. Financial writes invalidate affected cache entries. `waitUntil()` is best-effort background execution, not a durable job queue; use a durable queue if future workflows require guaranteed delivery, long-running jobs, or independent retries.
+
+
+## Stock Advisor report ingestion
+
+The admin dashboard reads the latest report from `wealth_stock_advisor_reports`. Scheduled review jobs can persist a completed report through the server-only `POST /api/stock-advisor` endpoint. Configure `WEALTH_ADVISOR_INGEST_SECRET` in Vercel (at least 32 random characters) and send:
+
+```http
+POST /api/stock-advisor
+Authorization: Bearer <WEALTH_ADVISOR_INGEST_SECRET>
+Content-Type: application/json
+```
+
+```json
+{
+  "report_text": "Portfolio review summary",
+  "report_json": {
+    "summary": "Portfolio review summary",
+    "portfolio_review": {
+      "diversification": "Sector and concentration review",
+      "mtf": "Borrowing cost and exposure review"
+    },
+    "recommendations": [
+      {
+        "symbol": "RELIANCE",
+        "company": "Reliance Industries",
+        "action": "HOLD",
+        "reason": "Illustrative example only",
+        "entry_condition": "Use the actual review's price condition"
+      }
+    ]
+  },
+  "run_at": "2026-11-10T09:00:00+05:30"
+}
+```
+
+The endpoint resolves the admin account server-side; callers cannot choose another user's ID. It accepts only a valid bearer secret, validates the report shape and timestamp, and stores the full structured report in Neon. Apply `scripts/migrations/20261110_stock_advisor_reports.sql` to the production Neon database before enabling report ingestion. Never put the ingest secret in browser code or commit it to Git.
