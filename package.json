@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.0",
+    "@vercel/speed-insights": "^2.1.0",
     "redis": "^4.7.0"
   },
   "scripts": {
