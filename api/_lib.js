@@ -33,6 +33,10 @@ export async function cacheSet(key,value,ttl=20){
  try{const client=await getRedis();if(client)await client.set(key,JSON.stringify(value),{EX:ttl})}
  catch(e){console.warn('[wealth-cache:set]',e?.message||e)}
 }
+export async function cacheLock(key,ttl=10){
+ try{const client=await getRedis();return client?await client.set(key,'1',{EX:ttl,NX:true})==='OK':true}
+ catch(e){console.warn('[wealth-cache:lock]',e?.message||e);return false}
+}
 export async function cacheDel(...keys){
  try{const client=await getRedis();if(client&&keys.length)await client.del(keys)}
  catch(e){console.warn('[wealth-cache:del]',e?.message||e)}
