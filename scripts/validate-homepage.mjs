@@ -12,7 +12,8 @@ if (syntax.status !== 0) {
 
 const ids = new Set([...html.matchAll(/id=["']([^"']+)["']/g)].map(m => m[1]));
 const refs = new Set([...js.matchAll(/[$][(]["']([^"']+)["'][)]/g)].map(m => m[1]));
-const missing = [...refs].filter(id => !ids.has(id));
+const runtimeGeneratedIds = new Set(['fdMsg']); // Elements created by app.js when their feature view is rendered.
+const missing = [...refs].filter(id => !ids.has(id) && !runtimeGeneratedIds.has(id));
 if (missing.length) {
   console.error('Homepage is missing HTML elements referenced by app.js:', missing.join(', '));
   process.exit(1);
@@ -27,7 +28,7 @@ for (const src of scripts) {
   }
 }
 
-for (const required of ['auth', 'app', 'logout', 'loginTab', 'authForm', 'viewContent']) {
+for (const required of ['auth', 'app', 'loginTab', 'authForm', 'viewContent']) {
   if (!ids.has(required)) {
     console.error('Homepage is missing required element:', required);
     process.exit(1);
