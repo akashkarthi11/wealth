@@ -186,3 +186,18 @@ button.dashboard-alert-banner.quiet .dashboard-alert-icon{background:linear-grad
 button.dashboard-alert-banner.quiet .dashboard-alert-arrow{color:#8be7c2}
 button.dashboard-alert-banner:focus-visible{outline:2px solid #8bb5ff;outline-offset:3px}
 @media(max-width:480px){button.dashboard-alert-banner{grid-template-columns:38px minmax(0,1fr) auto;gap:10px;padding:14px 13px;min-height:82px}button.dashboard-alert-banner .dashboard-alert-icon{width:38px;height:38px;border-radius:12px}button.dashboard-alert-banner .dashboard-alert-copy b{font-size:14px}button.dashboard-alert-banner .dashboard-alert-copy small{font-size:11px}}
+
+/* Interactive homepage charts: readable labels and touch-friendly data points */
+.chart-interactive{position:relative;min-width:0}
+.chart-interactive .chart-scroll{overflow-x:auto;overscroll-behavior-x:contain;touch-action:pan-x pan-y}
+.chart-interactive svg{display:block;width:100%;min-width:560px;height:auto;overflow:visible}
+.chart-point{cursor:pointer;outline:none}
+.chart-point circle:first-child{pointer-events:all}
+.chart-point:focus circle:last-child,.chart-point.selected circle:last-child{r:7;stroke:#fff;stroke-width:2.5}
+.chart-touch-hint{margin:7px 2px 5px;color:#a9b9ce;font-size:12px}
+.chart-point-readout{min-height:42px;display:flex;align-items:center;padding:10px 13px;border:1px solid #344763;border-radius:12px;background:linear-gradient(110deg,#17283e,#122238);color:#eaf2ff;font-size:13px;font-weight:650;line-height:1.45}
+.chart-legend{display:flex;flex-wrap:wrap;gap:12px 18px;margin-top:12px;color:#c2cede;font-size:12px}
+.chart-legend span{display:inline-flex;align-items:center;gap:7px}
+.chart-legend i{width:9px;height:9px;border-radius:50%;display:inline-block;flex:none}
+.chart-card .chart-head p{max-width:58ch;line-height:1.5;color:#aebed2}
+@media(max-width:480px){.chart-interactive svg{min-width:520px}.chart-point-readout{font-size:12px}.chart-touch-hint{font-size:11px}}
