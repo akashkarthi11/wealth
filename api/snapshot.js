@@ -1,4 +1,4 @@
-import {sql,schema,json,userFrom,cacheGet,cacheSet,enqueueCacheRefresh} from './_lib.js';
+import {sql,schema,json,userFrom,cacheGet,cacheSet,scheduleCacheRefresh} from './_lib.js';
 export default async function handler(req,res){
  try{
   const uid=userFrom(req);if(!uid)return json(res,401,{error:'Sign in required'});await schema();
@@ -6,7 +6,7 @@ export default async function handler(req,res){
   if(!users.length||users[0].role!=='admin')return json(res,403,{error:'Owner admin only'});
   if(req.method==='GET'){
    const key='wealth:snapshots:v2:'+uid;const cached=await cacheGet(key);
-   if(cached){try{const data=typeof cached==='string'?JSON.parse(cached):cached;if(data&&Array.isArray(data.snapshots)){await enqueueCacheRefresh(uid,'snapshots');return json(res,200,data)}}catch(e){console.warn('[wealth-snapshot:cache-invalid]',e?.message||e)}}
+   if(cached){try{const data=typeof cached==='string'?JSON.parse(cached):cached;if(data&&Array.isArray(data.snapshots)){scheduleCacheRefresh(uid,'snapshots',async()=>{const freshRows=await sql.query('SELECT id,source_key,source_name,snapshot_date,payload,created_at FROM wealth_snapshots WHERE user_id=$1 ORDER BY snapshot_date DESC,created_at DESC',[uid]);await cacheSet(key,{snapshots:freshRows},60)},60);return json(res,200,data)}}catch(e){console.warn('[wealth-snapshot:cache-invalid]',e?.message||e)}}
    const rows=await sql.query('SELECT id,source_key,source_name,snapshot_date,payload,created_at FROM wealth_snapshots WHERE user_id=$1 ORDER BY snapshot_date DESC,created_at DESC',[uid]);
    const data={snapshots:rows};await cacheSet(key,data,60);return json(res,200,data);
   }
