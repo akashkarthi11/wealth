@@ -9,11 +9,9 @@
   "dependencies": {
     "@neondatabase/serverless": "^1.0.0",
     "redis": "^4.7.0",
-    "@vercel/functions": "^2.2.12",
-    "kafkajs": "^2.2.4"
+    "@vercel/functions": "^2.2.12"
   },
   "scripts": {
-    "build": "node scripts/validate-homepage.mjs",
-    "worker": "node workers/cache-refresh.js"
+    "build": "node scripts/validate-homepage.mjs"
   }
 }
