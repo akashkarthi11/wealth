@@ -1,4 +1,4 @@
-import {sql,schema,json,userFrom,cacheGet,cacheSet,enqueueCacheRefresh} from './_lib.js';
+import {sql,schema,json,userFrom,cacheGet,cacheSet,scheduleCacheRefresh} from './_lib.js';
 async function readDashboard(uid){
  const [users,transactions,templates,accounts,positions]=await Promise.all([
   sql.query('SELECT role FROM wealth_users WHERE id=$1',[uid]),
@@ -24,7 +24,7 @@ export default async function handler(req,res){
     const payload=typeof cached==='string'?JSON.parse(cached):cached;
     if(payload&&Array.isArray(payload.transactions)&&Array.isArray(payload.accounts)&&Array.isArray(payload.positions)){
      // Return cached data immediately; refresh from Neon asynchronously via Kafka.
-     await enqueueCacheRefresh(uid,'dashboard');
+     scheduleCacheRefresh(uid,'dashboard',async()=>{const fresh=await readDashboard(uid);if(fresh)await cacheSet(key,fresh,120)},120);
      return json(res,200,{transactions:payload.transactions,snapshots:payload.snapshots||[],template:payload.template||null,accounts:payload.accounts,positions:payload.positions});
     }
    }catch(e){console.warn('[wealth-dashboard:cache-invalid]',e?.message||e)}
