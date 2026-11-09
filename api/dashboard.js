@@ -1,9 +1,4 @@
-import {waitUntil} from '@vercel/functions';
-import {sql,schema,json,userFrom,cacheGet,cacheSet,cacheLock} from './_lib.js';
-const dashboardKey=uid=>'wealth:dashboard:v2:'+uid;
-const refreshLockKey=uid=>'wealth:dashboard:refresh:v1:'+uid;
-function unpack(value){if(!value)return null;try{let x=typeof value==='string'?JSON.parse(value):value;if(typeof x==='string')x=JSON.parse(x);return x}catch{return null}}
-function valid(c){return !!(c&&c.role&&Object.prototype.hasOwnProperty.call(c,'template')&&Array.isArray(c.transactions)&&Array.isArray(c.snapshots)&&Array.isArray(c.accounts)&&Array.isArray(c.positions))}
+import {sql,schema,json,userFrom,cacheSet} from './_lib.js';
 async function readDashboard(uid){
  const [users,transactions,templates,accounts,positions]=await Promise.all([
   sql.query('SELECT role FROM wealth_users WHERE id=$1',[uid]),
@@ -28,15 +23,11 @@ export default async function handler(req,res){
   if(req.method!=='GET')return json(res,405,{error:'Method not allowed'});
   const uid=userFrom(req);if(!uid)return json(res,401,{error:'Sign in required'});
   await schema();
-  const cached=unpack(await cacheGet(dashboardKey(uid)));
-  if(valid(cached)){
-   // Serve the last known dashboard immediately; refresh it from Neon after the response.
-   waitUntil(refreshDashboard(uid));
-   return json(res,200,{transactions:cached.transactions,snapshots:cached.snapshots,template:cached.template,accounts:cached.accounts,positions:cached.positions});
-  }
+  // Neon tables are the source of truth. Redis is write-through cache only;
+  // never serve an older cached dashboard as current financial data.
   const payload=await readDashboard(uid);
   if(!payload)return json(res,401,{error:'Sign in required'});
-  await cacheSet(dashboardKey(uid),payload,120);
+  await cacheSet('wealth:dashboard:v2:'+uid,payload,120);
   return json(res,200,{transactions:payload.transactions,snapshots:payload.snapshots,template:payload.template,accounts:payload.accounts,positions:payload.positions});
  }catch(e){console.error('[wealth-dashboard]',e?.message||e);return json(res,500,{error:'Unable to load dashboard.'})}
 }
