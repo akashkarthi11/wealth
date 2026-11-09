@@ -258,3 +258,7 @@ button.dashboard-alert-banner:focus-visible{outline:2px solid #8bb5ff;outline-of
 .negative{color:#ff8f96!important}
 .positive{color:#6ce0b0!important}
 .neutral{color:#aebed4!important}
+
+
+/* Keep the net-worth hero exclusive to Home; retain the category shortcuts elsewhere. */
+#stats.non-home-view .wealth-hero{display:none!important}

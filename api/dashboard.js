@@ -1,31 +1,37 @@
-import {sql,schema,json,userFrom,cacheGet,cacheSet} from './_lib.js';
-const dashboardKey=uid=>'wealth:dashboard:v2:'+uid;
-function unpack(value){if(!value)return null;try{let x=typeof value==='string'?JSON.parse(value):value;if(typeof x==='string')x=JSON.parse(x);return x}catch{return null}}
+import {sql,schema,json,userFrom,cacheGet,cacheSet,scheduleCacheRefresh} from './_lib.js';
+async function readDashboard(uid){
+ const [users,transactions,templates,accounts,positions]=await Promise.all([
+  sql.query('SELECT role FROM wealth_users WHERE id=$1',[uid]),
+  sql.query("SELECT t.id,t.kind,t.category,t.description,t.amount,t.account_id,COALESCE(NULLIF(trim(a.account_name || ' ' || COALESCE(a.masked_identifier,'')),''),NULLIF(t.account,''),'Unassigned') AS account,t.occurred_on FROM wealth_transactions t LEFT JOIN wealth_accounts a ON a.user_id=t.user_id AND a.id=t.account_id WHERE t.user_id=$1 ORDER BY t.occurred_on DESC,t.created_at DESC LIMIT 500",[uid]),
+  sql.query("SELECT config,version,updated_at FROM wealth_templates WHERE user_id=$1 AND template_key='wealth_classification' LIMIT 1",[uid]),
+  sql.query("SELECT id,account_key,bank_name,account_name,account_type,masked_identifier,currency,current_balance,balance_as_of,balance_status FROM wealth_accounts WHERE user_id=$1 ORDER BY bank_name,account_name",[uid]),
+  sql.query("SELECT id,category,institution_name,platform_name,record_type,name,ticker,currency,quantity,current_value,invested_value,balance_as_of,source_key,metadata FROM wealth_positions WHERE user_id=$1 ORDER BY category,platform_name,record_type,name",[uid]).catch(()=>[])
+ ]);
+ if(!users.length)return null;
+ const role=users[0].role;
+ const snapshots=role==='admin'?await sql.query('SELECT id,source_key,source_name,snapshot_date,payload,created_at FROM wealth_snapshots WHERE user_id=$1 ORDER BY snapshot_date DESC,created_at DESC',[uid]):[];
+ return {role,transactions,snapshots,template:templates[0]?.config||null,accounts,positions};
+}
 export default async function handler(req,res){
  try{
   if(req.method!=='GET')return json(res,405,{error:'Method not allowed'});
   const uid=userFrom(req);if(!uid)return json(res,401,{error:'Sign in required'});
   await schema();
-  // One Redis read serves the whole dashboard: role, ledger and saved snapshots.
-  const cached=unpack(await cacheGet(dashboardKey(uid)));
-  if(cached&&cached.role&&cached.template&&Array.isArray(cached.transactions)&&Array.isArray(cached.snapshots)&&Array.isArray(cached.accounts)){
-   return json(res,200,{transactions:cached.transactions,snapshots:cached.snapshots,template:cached.template,accounts:cached.accounts});
+  const key='wealth:dashboard:v2:'+uid;
+  const cached=await cacheGet(key);
+  if(cached){
+   try{
+    const payload=typeof cached==='string'?JSON.parse(cached):cached;
+    if(payload&&Array.isArray(payload.transactions)&&Array.isArray(payload.accounts)&&Array.isArray(payload.positions)){
+     // Return cached data immediately; refresh from Neon asynchronously via waitUntil().
+     scheduleCacheRefresh(uid,'dashboard',async()=>{const fresh=await readDashboard(uid);if(fresh)await cacheSet(key,fresh,120)},120);
+     return json(res,200,{transactions:payload.transactions,snapshots:payload.snapshots||[],template:payload.template||null,accounts:payload.accounts,positions:payload.positions});
+    }
+   }catch(e){console.warn('[wealth-dashboard:cache-invalid]',e?.message||e)}
   }
-  // Cache miss: fetch all required data concurrently from Neon.
-  const [users,transactions,templates,accounts]=await Promise.all([
-   sql.query('SELECT role FROM wealth_users WHERE id=$1',[uid]),
-   sql.query("SELECT t.id,t.kind,t.category,t.description,t.amount,t.account_id,COALESCE(NULLIF(trim(a.account_name || ' ' || COALESCE(a.masked_identifier,'')),''),NULLIF(t.account,''),'Unassigned') AS account,t.occurred_on FROM wealth_transactions t LEFT JOIN wealth_accounts a ON a.user_id=t.user_id AND a.id=t.account_id WHERE t.user_id=$1 ORDER BY t.occurred_on DESC,t.created_at DESC LIMIT 500",[uid]),
-   sql.query("SELECT config,version,updated_at FROM wealth_templates WHERE user_id=$1 AND template_key='wealth_classification' LIMIT 1",[uid]),
-   sql.query("SELECT id,account_key,bank_name,account_name,account_type,masked_identifier,currency,current_balance,balance_as_of,balance_status FROM wealth_accounts WHERE user_id=$1 ORDER BY bank_name,account_name",[uid])
-  ]);
-  if(!users.length)return json(res,401,{error:'Sign in required'});
-  const role=users[0].role;
-  const snapshots=role==='admin'
-   ?await sql.query('SELECT id,source_key,source_name,snapshot_date,payload,created_at FROM wealth_snapshots WHERE user_id=$1 ORDER BY snapshot_date DESC,created_at DESC',[uid])
-   :[];
-  const template=templates[0]?.config||null;
-  const payload={role,transactions,snapshots,template,accounts};
-  await cacheSet(dashboardKey(uid),payload,15);
-  return json(res,200,{transactions,snapshots,template,accounts});
+  const payload=await readDashboard(uid);
+  if(!payload)return json(res,401,{error:'Sign in required'});
+  await cacheSet(key,payload,120);
+  return json(res,200,{transactions:payload.transactions,snapshots:payload.snapshots,template:payload.template,accounts:payload.accounts,positions:payload.positions});
  }catch(e){console.error('[wealth-dashboard]',e?.message||e);return json(res,500,{error:'Unable to load dashboard.'})}
 }

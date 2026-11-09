@@ -4,11 +4,10 @@ Standalone Vercel app. Required environment variables:
 - `WEALTH_DATABASE_URL`: Neon PostgreSQL connection string
 - `WEALTH_SESSION_SECRET`: random secret with at least 32 characters
 
-Optional Redis cache (Upstash):
-- `UPSTASH_REDIS_REST_URL`
-- `UPSTASH_REDIS_REST_TOKEN`
+Optional Redis cache:
+- `REDIS_URL` — Redis connection URL (for example, a managed Redis provider)
 
-The app uses Upstash Redis for short-lived, per-user caching of authenticated ledger and snapshot GET responses. Ledger cache entries expire after 20 seconds and are invalidated after successful inserts/deletes; snapshot cache entries expire after 60 seconds. Cache keys are scoped to the authenticated user. If Redis variables are absent or Redis is temporarily unavailable, requests fall back to Neon directly.
+The app uses Redis for short-lived, per-user caching of authenticated dashboard, ledger, and snapshot GET responses. Ledger cache entries expire after 20 seconds, dashboard entries after 120 seconds, and snapshot entries after 60 seconds. Successful financial writes invalidate affected caches. If Redis is absent or temporarily unavailable, requests fall back to Neon directly.
 
 Deploy from this repository root, Node.js 20+. API routes initialize the wealth tables. Do not commit database URLs, Redis tokens, session secrets, or personal financial snapshots to GitHub.
 
@@ -37,3 +36,10 @@ The owner/admin-only `POST /api/providers` endpoint supports:
 - `{"action":"quote","ticker":"AAPL"}` — requests the previous trading session aggregate from Massive's US Stocks endpoint. Results are cached in Redis for 5 minutes. This route explicitly identifies USD and US Stocks; it must not be used to price Indian-listed securities.
 
 Both providers are called only from the server. Keys are read from environment variables and are never sent to the browser or stored in Neon. Indian equity prices must use an appropriate India-supported source and must not be inferred from a Massive US ticker response. The adapter returns setup-required status when keys are absent.
+
+
+## Background cache refresh
+
+The UI reads cached data from Redis first. On a cache hit, the API returns the cached response and schedules a background refresh with Vercel Functions `waitUntil()`. The background task reads the latest records from Neon and updates Redis. A per-user, per-resource Redis lock limits refresh frequency to the cache TTL and prevents duplicate refreshes. If Redis is unavailable, background refresh is skipped and cache misses continue to read Neon synchronously.
+
+Neon remains the source of truth. Financial writes invalidate affected cache entries. `waitUntil()` is best-effort background execution, not a durable job queue; use a durable queue if future workflows require guaranteed delivery, long-running jobs, or independent retries.

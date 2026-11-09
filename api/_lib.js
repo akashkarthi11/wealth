@@ -1,5 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import { createClient } from 'redis';
+import { waitUntil } from '@vercel/functions';
 import { randomBytes, scryptSync, timingSafeEqual, createHmac } from 'node:crypto';
 
 const dbUrl=process.env.POSTGRES_URL || process.env.WEALTH_DATABASE_URL || process.env.DATABASE_URL;
@@ -33,12 +34,16 @@ export async function cacheSet(key,value,ttl=20){
  try{const client=await getRedis();if(client)await client.set(key,JSON.stringify(value),{EX:ttl})}
  catch(e){console.warn('[wealth-cache:set]',e?.message||e)}
 }
+export async function cacheLock(key,ttl=10){
+ try{const client=await getRedis();return client?await client.set(key,'1',{EX:ttl,NX:true})==='OK':false}
+ catch(e){console.warn('[wealth-cache:lock]',e?.message||e);return false}
+}
 export async function cacheDel(...keys){
  try{const client=await getRedis();if(client&&keys.length)await client.del(keys)}
  catch(e){console.warn('[wealth-cache:del]',e?.message||e)}
 }
 export async function invalidateUserCaches(uid){
- await cacheDel('wealth:ledger:v1:'+uid,'wealth:dashboard:v1:'+uid,'wealth:dashboard:v2:'+uid);
+ await cacheDel('wealth:ledger:v1:'+uid,'wealth:dashboard:v1:'+uid,'wealth:dashboard:v2:'+uid,'wealth:snapshots:v2:'+uid);
 }
 // Database schema is provisioned by migrations, never by request handlers.
 // Avoid running DDL and role UPDATE statements on every serverless cold start.
@@ -53,3 +58,20 @@ export function userFrom(req){try{const c=String(req.headers.cookie||'').split('
 export function cookie(res,v){res.setHeader('Set-Cookie',v?'wealth_session='+v+'; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800':'wealth_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0')}
 export function json(res,status,data){res.statusCode=status;res.setHeader('Content-Type','application/json; charset=utf-8');res.setHeader('Cache-Control','no-store');res.end(JSON.stringify(data))}
 export async function body(req){let s='';for await(const c of req)s+=c;if(s.length>20000)throw new Error('Request too large');return JSON.parse(s||'{}')}
+
+
+// Schedule stale-while-revalidate work within the current Vercel Function lifetime.
+// The Redis lock is a cooldown (not released on success), preventing refresh storms.
+export function scheduleCacheRefresh(uid,resource,refresh,ttl){
+ if(!uid||typeof refresh!=='function')return;
+ const lockKey='wealth:refresh-lock:v1:'+uid+':'+resource;
+ waitUntil((async()=>{
+  const locked=await cacheLock(lockKey,ttl);
+  if(!locked)return;
+  try{await refresh()}
+  catch(e){
+   console.warn('[wealth-cache:refresh]',resource,e?.message||e);
+   await cacheDel(lockKey);
+  }
+ })());
+}
