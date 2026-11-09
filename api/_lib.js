@@ -37,6 +37,9 @@ export async function cacheDel(...keys){
  try{const client=await getRedis();if(client&&keys.length)await client.del(keys)}
  catch(e){console.warn('[wealth-cache:del]',e?.message||e)}
 }
+export async function invalidateUserCaches(uid){
+ await cacheDel('wealth:ledger:v1:'+uid,'wealth:dashboard:v1:'+uid);
+}
 // Database schema is provisioned by migrations, never by request handlers.
 // Avoid running DDL and role UPDATE statements on every serverless cold start.
 export async function schema(){
