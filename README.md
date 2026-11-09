@@ -37,3 +37,36 @@ The owner/admin-only `POST /api/providers` endpoint supports:
 - `{"action":"quote","ticker":"AAPL"}` — requests the previous trading session aggregate from Massive's US Stocks endpoint. Results are cached in Redis for 5 minutes. This route explicitly identifies USD and US Stocks; it must not be used to price Indian-listed securities.
 
 Both providers are called only from the server. Keys are read from environment variables and are never sent to the browser or stored in Neon. Indian equity prices must use an appropriate India-supported source and must not be inferred from a Massive US ticker response. The adapter returns setup-required status when keys are absent.
+
+
+## Kafka cache refresh worker
+
+The UI uses Redis as a fast read cache. A cache hit is returned immediately and
+publishes a deduplicated Kafka refresh event. A separate long-running worker reads
+the latest records from Neon and refreshes the Redis entry. Cache misses are read
+from Neon by the API and populated directly. Neon remains authoritative; successful
+writes invalidate affected caches.
+
+Required environment variables for the Vercel API and worker:
+- `WEALTH_DATABASE_URL` (or `POSTGRES_URL` / `DATABASE_URL`)
+- `REDIS_URL`
+- `KAFKA_BROKERS` — comma-separated broker host:port list
+- `KAFKA_USERNAME`
+- `KAFKA_PASSWORD`
+- `KAFKA_SASL_MECHANISM` — usually `plain` or `scram-sha-256` / `scram-sha-512`
+- `KAFKA_SSL` — defaults to `true` (set `false` only for a trusted private network)
+
+Optional:
+- `KAFKA_CLIENT_ID` (defaults to `wealth-api`)
+- `KAFKA_CACHE_REFRESH_TOPIC` (defaults to `wealth.cache.refresh.v1`)
+- `KAFKA_GROUP_ID` (worker defaults to `wealth-cache-refresh-v1`)
+
+Run the worker as a persistent Node.js 20+ service (not as a Vercel Function):
+`npm install && npm run worker`
+
+The worker creates the refresh topic through the Kafka broker's auto-topic-creation
+setting if enabled; otherwise create `wealth.cache.refresh.v1` with one or more
+partitions before starting it. It uses a per-user cache key and refreshes dashboard,
+ledger, or admin snapshots. Duplicate events are safe to process. If Kafka is not
+configured in the API, requests continue using Neon/Redis synchronously and no
+Kafka events are published.

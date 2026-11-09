@@ -1,5 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import { createClient } from 'redis';
+import { Kafka } from 'kafkajs';
 import { randomBytes, scryptSync, timingSafeEqual, createHmac } from 'node:crypto';
 
 const dbUrl=process.env.POSTGRES_URL || process.env.WEALTH_DATABASE_URL || process.env.DATABASE_URL;
@@ -57,3 +58,44 @@ export function userFrom(req){try{const c=String(req.headers.cookie||'').split('
 export function cookie(res,v){res.setHeader('Set-Cookie',v?'wealth_session='+v+'; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800':'wealth_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0')}
 export function json(res,status,data){res.statusCode=status;res.setHeader('Content-Type','application/json; charset=utf-8');res.setHeader('Cache-Control','no-store');res.end(JSON.stringify(data))}
 export async function body(req){let s='';for await(const c of req)s+=c;if(s.length>20000)throw new Error('Request too large');return JSON.parse(s||'{}')}
+
+
+// Kafka is optional at API runtime. Configure KAFKA_BROKERS and credentials to enable
+// background stale-while-revalidate refreshes. Neon remains the source of truth.
+const kafkaBrokers=String(process.env.KAFKA_BROKERS||'').split(',').map(x=>x.trim()).filter(Boolean);
+const kafkaClient=kafkaBrokers.length?new Kafka({
+ clientId:process.env.KAFKA_CLIENT_ID||'wealth-api',
+ brokers:kafkaBrokers,
+ ssl:String(process.env.KAFKA_SSL||'true').toLowerCase()!=='false',
+ ...(process.env.KAFKA_USERNAME&&process.env.KAFKA_PASSWORD?{
+  sasl:{mechanism:process.env.KAFKA_SASL_MECHANISM||'plain',username:process.env.KAFKA_USERNAME,password:process.env.KAFKA_PASSWORD}
+ }: {})
+}):null;
+let kafkaProducer=null,kafkaConnectPromise=null;
+async function getKafkaProducer(){
+ if(!kafkaClient)return null;
+ if(kafkaProducer)return kafkaProducer;
+ if(!kafkaConnectPromise){
+  kafkaConnectPromise=kafkaClient.producer().connect().then(p=>(kafkaProducer=p,p)).catch(e=>{kafkaConnectPromise=null;throw e});
+ }
+ return kafkaConnectPromise;
+}
+export async function enqueueCacheRefresh(uid,resource){
+ if(!uid||!['dashboard','ledger','snapshots'].includes(resource)||!kafkaClient)return false;
+ const lockKey='wealth:refresh-lock:v1:'+uid+':'+resource;
+ const locked=await cacheLock(lockKey,20);
+ if(!locked)return false;
+ try{
+  const producer=await getKafkaProducer();
+  if(!producer){await cacheDel(lockKey);return false}
+  await producer.send({
+   topic:process.env.KAFKA_CACHE_REFRESH_TOPIC||'wealth.cache.refresh.v1',
+   messages:[{key:uid+':'+resource,value:JSON.stringify({uid,resource,requestedAt:new Date().toISOString(),version:1})}]
+  });
+  return true;
+ }catch(e){
+  console.warn('[wealth-cache:enqueue]',e?.message||e);
+  await cacheDel(lockKey);
+  return false;
+ }
+}

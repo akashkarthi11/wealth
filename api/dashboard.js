@@ -1,4 +1,4 @@
-import {sql,schema,json,userFrom,cacheSet} from './_lib.js';
+import {sql,schema,json,userFrom,cacheGet,cacheSet,enqueueCacheRefresh} from './_lib.js';
 async function readDashboard(uid){
  const [users,transactions,templates,accounts,positions]=await Promise.all([
   sql.query('SELECT role FROM wealth_users WHERE id=$1',[uid]),
@@ -17,11 +17,21 @@ export default async function handler(req,res){
   if(req.method!=='GET')return json(res,405,{error:'Method not allowed'});
   const uid=userFrom(req);if(!uid)return json(res,401,{error:'Sign in required'});
   await schema();
-  // Neon tables are the source of truth. Redis is write-through cache only;
-  // never serve an older cached dashboard as current financial data.
+  const key='wealth:dashboard:v2:'+uid;
+  const cached=await cacheGet(key);
+  if(cached){
+   try{
+    const payload=typeof cached==='string'?JSON.parse(cached):cached;
+    if(payload&&Array.isArray(payload.transactions)&&Array.isArray(payload.accounts)&&Array.isArray(payload.positions)){
+     // Return cached data immediately; refresh from Neon asynchronously via Kafka.
+     await enqueueCacheRefresh(uid,'dashboard');
+     return json(res,200,{transactions:payload.transactions,snapshots:payload.snapshots||[],template:payload.template||null,accounts:payload.accounts,positions:payload.positions});
+    }
+   }catch(e){console.warn('[wealth-dashboard:cache-invalid]',e?.message||e)}
+  }
   const payload=await readDashboard(uid);
   if(!payload)return json(res,401,{error:'Sign in required'});
-  await cacheSet('wealth:dashboard:v2:'+uid,payload,120);
+  await cacheSet(key,payload,120);
   return json(res,200,{transactions:payload.transactions,snapshots:payload.snapshots,template:payload.template,accounts:payload.accounts,positions:payload.positions});
  }catch(e){console.error('[wealth-dashboard]',e?.message||e);return json(res,500,{error:'Unable to load dashboard.'})}
 }
