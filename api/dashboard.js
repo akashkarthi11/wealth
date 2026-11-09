@@ -23,7 +23,7 @@ export default async function handler(req,res){
    try{
     const payload=typeof cached==='string'?JSON.parse(cached):cached;
     if(payload&&Array.isArray(payload.transactions)&&Array.isArray(payload.accounts)&&Array.isArray(payload.positions)){
-     // Return cached data immediately; refresh from Neon asynchronously via Kafka.
+     // Return cached data immediately; refresh from Neon asynchronously via waitUntil().
      scheduleCacheRefresh(uid,'dashboard',async()=>{const fresh=await readDashboard(uid);if(fresh)await cacheSet(key,fresh,120)},120);
      return json(res,200,{transactions:payload.transactions,snapshots:payload.snapshots||[],template:payload.template||null,accounts:payload.accounts,positions:payload.positions});
     }
