@@ -201,3 +201,16 @@ button.dashboard-alert-banner:focus-visible{outline:2px solid #8bb5ff;outline-of
 .chart-legend i{width:9px;height:9px;border-radius:50%;display:inline-block;flex:none}
 .chart-card .chart-head p{max-width:58ch;line-height:1.5;color:#aebed2}
 @media(max-width:480px){.chart-interactive svg{min-width:520px}.chart-point-readout{font-size:12px}.chart-touch-hint{font-size:11px}}
+
+/* Chart-first UX: show values inside the plot, not as explanatory copy underneath */
+.chart-interactive{position:relative;padding-top:2px}
+.chart-interactive .chart-tooltip{position:absolute;z-index:3;top:10px;right:12px;max-width:min(220px,65%);padding:10px 13px;border:1px solid rgba(120,168,255,.55);border-radius:12px;background:rgba(13,25,43,.96);box-shadow:0 8px 22px rgba(0,0,0,.32);pointer-events:none}
+.chart-interactive .chart-tooltip[hidden]{display:none}
+.chart-tooltip b{display:block;color:#fff;font-size:17px;line-height:1.25;font-weight:800;font-variant-numeric:tabular-nums}
+.chart-tooltip span{display:block;margin-top:3px;color:#b9c9df;font-size:11px;line-height:1.35}
+.chart-point{cursor:pointer;outline:none}
+.chart-point circle:last-child{transition:r .15s ease,stroke-width .15s ease}
+.chart-point:focus circle:last-child,.chart-point.selected circle:last-child{r:7;stroke:#fff;stroke-width:2.5}
+.chart-legend{padding:0 2px}
+.chart-card .chart-head h4{font-size:16px;letter-spacing:-.01em}
+@media(max-width:480px){.chart-interactive .chart-tooltip{top:7px;right:7px;padding:8px 10px}.chart-tooltip b{font-size:15px}}
