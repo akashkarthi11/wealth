@@ -8,7 +8,8 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.0",
-    "redis": "^4.7.0"
+    "redis": "^4.7.0",
+    "@vercel/functions": "^2.2.12"
   },
   "scripts": {
     "build": "node scripts/validate-homepage.mjs"
