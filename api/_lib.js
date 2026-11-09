@@ -38,7 +38,7 @@ export async function cacheDel(...keys){
  catch(e){console.warn('[wealth-cache:del]',e?.message||e)}
 }
 export async function invalidateUserCaches(uid){
- await cacheDel('wealth:ledger:v1:'+uid,'wealth:dashboard:v1:'+uid);
+ await cacheDel('wealth:ledger:v1:'+uid,'wealth:dashboard:v1:'+uid,'wealth:dashboard:v2:'+uid);
 }
 // Database schema is provisioned by migrations, never by request handlers.
 // Avoid running DDL and role UPDATE statements on every serverless cold start.
