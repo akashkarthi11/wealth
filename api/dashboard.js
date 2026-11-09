@@ -12,12 +12,6 @@ async function readDashboard(uid){
  const snapshots=role==='admin'?await sql.query('SELECT id,source_key,source_name,snapshot_date,payload,created_at FROM wealth_snapshots WHERE user_id=$1 ORDER BY snapshot_date DESC,created_at DESC',[uid]):[];
  return {role,transactions,snapshots,template:templates[0]?.config||null,accounts,positions};
 }
-async function refreshDashboard(uid){
- const locked=await cacheLock(refreshLockKey(uid),15);
- if(!locked)return;
- try{const payload=await readDashboard(uid);if(payload)await cacheSet(dashboardKey(uid),payload,120)}
- catch(e){console.error('[wealth-dashboard:background-refresh]',e?.message||e)}
-}
 export default async function handler(req,res){
  try{
   if(req.method!=='GET')return json(res,405,{error:'Method not allowed'});
