@@ -4,11 +4,10 @@ Standalone Vercel app. Required environment variables:
 - `WEALTH_DATABASE_URL`: Neon PostgreSQL connection string
 - `WEALTH_SESSION_SECRET`: random secret with at least 32 characters
 
-Optional Redis cache (Upstash):
-- `UPSTASH_REDIS_REST_URL`
-- `UPSTASH_REDIS_REST_TOKEN`
+Optional Redis cache:
+- `REDIS_URL` — Redis connection URL (for example, a managed Redis provider)
 
-The app uses Upstash Redis for short-lived, per-user caching of authenticated ledger and snapshot GET responses. Ledger cache entries expire after 20 seconds and are invalidated after successful inserts/deletes; snapshot cache entries expire after 60 seconds. Cache keys are scoped to the authenticated user. If Redis variables are absent or Redis is temporarily unavailable, requests fall back to Neon directly.
+The app uses Redis for short-lived, per-user caching of authenticated dashboard, ledger, and snapshot GET responses. Ledger cache entries expire after 20 seconds, dashboard entries after 120 seconds, and snapshot entries after 60 seconds. Successful financial writes invalidate affected caches. If Redis is absent or temporarily unavailable, requests fall back to Neon directly.
 
 Deploy from this repository root, Node.js 20+. API routes initialize the wealth tables. Do not commit database URLs, Redis tokens, session secrets, or personal financial snapshots to GitHub.
 
@@ -39,34 +38,8 @@ The owner/admin-only `POST /api/providers` endpoint supports:
 Both providers are called only from the server. Keys are read from environment variables and are never sent to the browser or stored in Neon. Indian equity prices must use an appropriate India-supported source and must not be inferred from a Massive US ticker response. The adapter returns setup-required status when keys are absent.
 
 
-## Kafka cache refresh worker
+## Background cache refresh
 
-The UI uses Redis as a fast read cache. A cache hit is returned immediately and
-publishes a deduplicated Kafka refresh event. A separate long-running worker reads
-the latest records from Neon and refreshes the Redis entry. Cache misses are read
-from Neon by the API and populated directly. Neon remains authoritative; successful
-writes invalidate affected caches.
+The UI reads cached data from Redis first. On a cache hit, the API returns the cached response and schedules a background refresh with Vercel Functions `waitUntil()`. The background task reads the latest records from Neon and updates Redis. A per-user, per-resource Redis lock limits refresh frequency to the cache TTL and prevents duplicate refreshes. If Redis is unavailable, background refresh is skipped and cache misses continue to read Neon synchronously.
 
-Required environment variables for the Vercel API and worker:
-- `WEALTH_DATABASE_URL` (or `POSTGRES_URL` / `DATABASE_URL`)
-- `REDIS_URL`
-- `KAFKA_BROKERS` — comma-separated broker host:port list
-- `KAFKA_USERNAME`
-- `KAFKA_PASSWORD`
-- `KAFKA_SASL_MECHANISM` — usually `plain` or `scram-sha-256` / `scram-sha-512`
-- `KAFKA_SSL` — defaults to `true` (set `false` only for a trusted private network)
-
-Optional:
-- `KAFKA_CLIENT_ID` (defaults to `wealth-api`)
-- `KAFKA_CACHE_REFRESH_TOPIC` (defaults to `wealth.cache.refresh.v1`)
-- `KAFKA_GROUP_ID` (worker defaults to `wealth-cache-refresh-v1`)
-
-Run the worker as a persistent Node.js 20+ service (not as a Vercel Function):
-`npm install && npm run worker`
-
-The worker creates the refresh topic through the Kafka broker's auto-topic-creation
-setting if enabled; otherwise create `wealth.cache.refresh.v1` with one or more
-partitions before starting it. It uses a per-user cache key and refreshes dashboard,
-ledger, or admin snapshots. Duplicate events are safe to process. If Kafka is not
-configured in the API, requests continue using Neon/Redis synchronously and no
-Kafka events are published.
+Neon remains the source of truth. Financial writes invalidate affected cache entries. `waitUntil()` is best-effort background execution, not a durable job queue; use a durable queue if future workflows require guaranteed delivery, long-running jobs, or independent retries.
