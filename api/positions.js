@@ -13,7 +13,7 @@ export default async function handler(req,res){
   const maturity=String(b.maturity_date||'').trim();
   if(!name||!Number.isFinite(invested)||invested<=0||invested>1e12||!Number.isFinite(current)||current<=0||current>1e12||
     (rate!==null&&(!Number.isFinite(rate)||rate<0||rate>100))||
-    (maturity&&!/^\\d{4}-\\d{2}-\\d{2}$/.test(maturity))){
+    (maturity&&(!/^\d{4}-\d{2}-\d{2}$/.test(maturity)||!Number.isFinite(Date.parse(maturity+'T00:00:00Z'))))){
    return json(res,400,{error:'Enter a valid FD name, invested amount and current value. Interest rate and maturity date are optional.'});
   }
   const metadata={};

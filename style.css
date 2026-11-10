@@ -535,3 +535,8 @@ button.dashboard-alert-banner:focus-visible{outline:2px solid #8bb5ff;outline-of
 .interest-day-chart-legend span{display:inline-flex;align-items:center;gap:7px}
 .interest-day-chart-legend i{display:inline-block;width:8px;height:8px;border-radius:50%}
 @media(max-width:520px){.interest-day-chart-wrap{padding:7px 2px 0}.interest-day-chart{min-height:170px}.interest-day-chart-legend{font-size:10px;gap:8px 13px}}
+
+/* Claude Plan 1: transactions header actions */
+.activity-head-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.activity-head-actions .primary{padding:9px 14px;font-size:13px}
+@media(max-width:620px){.activity-head-actions{justify-content:flex-start}}
