@@ -13,6 +13,7 @@
   },
   "scripts": {
     "build": "node scripts/validate-homepage.mjs && node scripts/migrate-db.mjs",
-    "test:us-valuation": "node --test scripts/test-us-holdings-valuation.test.mjs"
+    "test:us-valuation": "node --test scripts/test-us-holdings-valuation.test.mjs",
+    "db:schema": "node scripts/db/generate-schema.mjs"
   }
 }

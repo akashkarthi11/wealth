@@ -25,7 +25,30 @@ Create module-specific folders as needed:
 - `modules/database/` — schema, migrations, integrity constraints and reconciliation.
 - `modules/infra/` — deployment, CI/CD, environment configuration and observability.
 
+- `modules/interest/` — savings and FD interest ledger, statements, rates and sources.
+- `modules/obligations/` — planned bills, mandates, recurring commitments and payment alerts.
+- `modules/auth/` — login, sessions, roles and access control.
+- `modules/integrations/` — Angel One SmartAPI, Exa, Massive and Stock Advisor ingestion.
+
 A fix that spans modules should have one canonical record in the primary/root-cause module and cross-links from other relevant module indexes or records where useful.
+
+## Module reference
+
+Each module folder has a `README.md` describing its files, APIs, tables, rules and known issues. Read it before changing that module.
+
+| Module | Reference |
+|---|---|
+| Dashboard | [modules/dashboard/README.md](modules/dashboard/README.md) |
+| Investments | [modules/investments/README.md](modules/investments/README.md) |
+| Market data | [modules/market-data/README.md](modules/market-data/README.md) |
+| Accounts & transactions | [modules/accounts/README.md](modules/accounts/README.md) |
+| Liabilities | [modules/liabilities/README.md](modules/liabilities/README.md) |
+| Interest | [modules/interest/README.md](modules/interest/README.md) |
+| Obligations & alerts | [modules/obligations/README.md](modules/obligations/README.md) |
+| Auth & security | [modules/auth/README.md](modules/auth/README.md) |
+| Integrations | [modules/integrations/README.md](modules/integrations/README.md) |
+| Database | [modules/database/README.md](modules/database/README.md) |
+| Infrastructure | [modules/infra/README.md](modules/infra/README.md) |
 
 ## Fix record template
 
@@ -48,6 +71,15 @@ Each module fix note should include:
 | Date | Module | Issue | Canonical fix note | Status |
 |---|---|---|---|---|
 | 2026-11-10 | Dashboard / Investments | US holding INR totals and row values used different fallback rules; recurrence confirmed in Development screenshot | [US holdings total mismatch](modules/dashboard/2026-11-10-us-holdings-total-mismatch.md) | Unified valuation committed on fix branch; validation and Development deployment pending approval |
+
+## Plans
+
+| Date | Plan | Status |
+|---|---|---|
+| 2026-11-10 | **[TSD — Claude Plan 1: stabilisation, security and account hierarchy](plans/claude-plan-1.md)** (master technical specification; links the plans below) | Draft v1.0 — for review |
+| 2026-11-10 | [Database optimization](plans/2026-11-10-database-optimization-plan.md) | Proposed |
+| 2026-11-10 | [Data normalization — no duplicates, PK/FK](plans/2026-11-10-data-normalization-design.md) | Proposed; stage 1–2 SQL drafted |
+| 2026-11-10 | [Account hierarchy model — user → account (CASA/Investment/Liability) → subtype → data](plans/2026-11-10-account-hierarchy-model.md) | Proposed; schema + backfill drafted |
 
 ## Reliability project
 
