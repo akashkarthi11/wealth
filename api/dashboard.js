@@ -1,5 +1,6 @@
-import {sql,schema,json,sessionUser} from './_lib.js';
-import {pageTransactions,spendingRows} from './_queries.js';
+import {sql,schema,json,sessionUser,dataModel} from './_lib.js';
+import {pageTransactions,spendingRows,accountHierarchyRows} from './_queries.js';
+import {valuePortfolio} from './_valuation.js';
 
 async function readPositions(uid){
  const enrichedQuery=`SELECT p.id,p.category,p.institution_name,p.platform_name,p.record_type,p.name,p.ticker,p.currency,p.quantity,
@@ -59,6 +60,13 @@ export default async function handler(req,res){
   // for every dashboard request; keep cache invalidation for other resources separate.
   const payload=await readDashboard(uid);
   if(!payload)return json(res,401,{error:'Sign in required'});
-  return json(res,200,{transactions:payload.transactions,nextCursor:payload.nextCursor,spending:payload.spending,snapshots:payload.snapshots,template:payload.template,accounts:payload.accounts,positions:payload.positions,interest:payload.interest,interestStatements:payload.interestStatements,categorySymbols});
+  // Account hierarchy (v2): on when WEALTH_DATA_MODEL=v2, or for the owner with ?model=v2 to compare before switching.
+  const wantV2=dataModel()==='v2'||(payload.role==='admin'&&new URL(req.url,'https://local').searchParams.get('model')==='v2');
+  let model=null;
+  if(wantV2){
+   try{model={version:'v2',generatedAt:new Date().toISOString(),...valuePortfolio(await accountHierarchyRows(uid))}}
+   catch(e){console.error('[wealth-dashboard:v2]',e?.message||e);model={version:'v2',error:'Account model is not available yet.'}}
+  }
+  return json(res,200,{transactions:payload.transactions,nextCursor:payload.nextCursor,spending:payload.spending,snapshots:payload.snapshots,template:payload.template,accounts:payload.accounts,positions:payload.positions,interest:payload.interest,interestStatements:payload.interestStatements,categorySymbols,model});
  }catch(e){console.error('[wealth-dashboard]',e?.message||e);return json(res,500,{error:'Unable to load dashboard.'})}
 }

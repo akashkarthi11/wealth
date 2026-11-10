@@ -46,3 +46,46 @@ export async function spendingRows(uid, db = sql) {
     WHERE user_id=$1 AND occurred_on <= (now() AT TIME ZONE 'Asia/Kolkata')::date
     GROUP BY 1,2,3 ORDER BY 1,2,3`, [uid]);
 }
+
+// Account hierarchy read model (TSD Phase 5, TR-5.3). Returns raw rows for api/_valuation.js.
+export async function accountHierarchyRows(uid, db = sql) {
+  const [accounts, balances, holdings, fx] = await Promise.all([
+    db.query(`SELECT a.id, s.category, s.code AS subtype, s.label AS subtype_label, s.valuation, s.sort_order,
+        a.bank_name AS institution, a.account_name AS name, a.masked_identifier, trim(a.currency) AS currency
+      FROM wealth_accounts a JOIN wealth_account_subtypes s ON s.code = a.subtype_code
+      WHERE a.user_id = $1 AND a.status = 'active'
+      ORDER BY s.sort_order, a.bank_name, a.account_name`, [uid]),
+    db.query(`SELECT b.account_id, b.balance::float8 AS balance, b.as_of, b.status, b.note
+      FROM wealth_v_latest_balances b JOIN wealth_accounts a ON a.id = b.account_id
+      WHERE a.user_id = $1`, [uid]),
+    db.query(`SELECT h.account_id, h.instrument_id, i.symbol, i.name, i.asset_class, i.unit, trim(i.currency) AS currency,
+        h.quantity::float8 AS quantity, h.invested_value::float8 AS invested_value,
+        p.price::float8 AS price, p.as_of AS price_as_of, p.source AS price_source,
+        p.fx_to_inr::float8 AS fx_to_inr, p.fetched_at
+      FROM wealth_holdings h
+      JOIN wealth_accounts a ON a.id = h.account_id
+      JOIN wealth_instruments i ON i.id = h.instrument_id
+      LEFT JOIN wealth_v_latest_prices p ON p.instrument_id = h.instrument_id
+      WHERE a.user_id = $1 AND a.status = 'active'
+      ORDER BY i.symbol`, [uid]),
+    db.query(`SELECT fx_to_inr::float8 AS rate, fetched_at AS as_of FROM wealth_instrument_prices
+      WHERE fx_to_inr > 0 ORDER BY fetched_at DESC LIMIT 1`),
+  ]);
+  return { accounts, balances, holdings, marketFx: fx[0] || null };
+}
+
+// v2 "add fixed deposit": account + first balance in one statement (TR-5.6). Throws 23505 on a duplicate.
+export async function createFixedDepositAccount(uid, { key, institution, name, balance, note }, db = sql) {
+  const rows = await db.query(
+    `WITH acc AS (
+        INSERT INTO wealth_accounts(user_id,account_key,bank_name,account_name,account_type,subtype_code,currency,balance_status)
+        VALUES($1,$2,$3,$4,'fixed_deposit','fixed_deposit','INR','unknown') RETURNING id,bank_name,account_name
+      ), bal AS (
+        INSERT INTO wealth_account_balances(account_id,as_of,balance,status,note)
+        SELECT id,now(),$5,'reported',$6 FROM acc RETURNING account_id,as_of,balance,status,note
+      )
+      SELECT acc.id,acc.bank_name AS institution,acc.account_name AS name,bal.balance::float8 AS balance,bal.as_of,bal.status,bal.note
+      FROM acc JOIN bal ON bal.account_id=acc.id`,
+    [uid, key, institution, name, balance, note]);
+  return rows[0];
+}

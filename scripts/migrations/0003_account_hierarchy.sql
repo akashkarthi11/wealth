@@ -1,18 +1,4 @@
--- Account hierarchy, step 1 of 2: schema.  DRAFT — not run by scripts/migrate-db.mjs.
---
---   wealth_users                      (who)
---     └─ wealth_accounts              (one row per real account; user_id lives ONLY here)
---          ├─ subtype → wealth_account_subtypes → category CASA | INVESTMENT | LIABILITY
---          ├─ wealth_account_balances (cash / outstanding balance history)   PK (account_id, as_of)
---          ├─ wealth_holdings         (units of an instrument)               PK (account_id, instrument_id)
---          └─ wealth_transactions     (existing, already keyed by account_id)
---   wealth_instruments                (shared by all users: a stock / fund / metal exists once)
---     └─ wealth_instrument_prices     (price history, stored once per instrument) PK (instrument_id, as_of, source)
---
--- Additive only: new tables + new nullable column on wealth_accounts. Existing tables keep working
--- until the app is switched over; old tables are dropped in a later, separately approved step.
-
-BEGIN;
+-- 0003: account hierarchy schema (TSD Phase 5, TR-5.1). Additive: new tables and views only.
 
 -- 1. Type → subtype catalogue (reference data, no user_id).
 CREATE TABLE IF NOT EXISTS wealth_account_subtypes (
@@ -128,4 +114,3 @@ LEFT JOIN LATERAL (
 ) h ON true
 WHERE a.status = 'active';
 
-COMMIT;

@@ -1,4 +1,10 @@
-import {sql,schema,json,body,sessionUser,invalidateUserCaches} from './_lib.js';
+import {sql,schema,json,body,sessionUser,invalidateUserCaches,dataModel} from './_lib.js';
+import {createFixedDepositAccount} from './_queries.js';
+
+// Add a fixed deposit.
+//   v1: a FIXED_DEPOSIT row in wealth_positions (legacy model).
+//   v2: a fixed_deposit account plus its first balance, in one statement (TSD TR-5.6).
+const slug=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
 
 export default async function handler(req,res){
  try{
@@ -16,6 +22,21 @@ export default async function handler(req,res){
     (maturity&&(!/^\d{4}-\d{2}-\d{2}$/.test(maturity)||!Number.isFinite(Date.parse(maturity+'T00:00:00Z'))))){
    return json(res,400,{error:'Enter a valid FD name, invested amount and current value. Interest rate and maturity date are optional.'});
   }
+
+  if(dataModel()==='v2'){
+   const bank=institution||'Angel One';
+   const note=['Invested ₹'+invested.toFixed(2),rate!==null?rate+'% p.a.':null,maturity?'matures '+maturity:null].filter(Boolean).join(' · ');
+   try{
+    const r=await createFixedDepositAccount(uid,{key:slug(bank)+'-fixed_deposit-'+slug(name),institution:bank,name,balance:current,note});
+    await invalidateUserCaches(uid);
+    return json(res,201,{account:{id:r.id,category:'INVESTMENT',subtype:'fixed_deposit',institution:r.institution,name:r.name,currency:'INR',
+     balance:{amount:Number(r.balance),currency:'INR'},balanceAsOf:r.as_of,balanceStatus:r.status,balanceNote:r.note,holdings:[]}});
+   }catch(e){
+    if(e?.code==='23505')return json(res,409,{error:'An FD with this name already exists at this institution.'});
+    throw e;
+   }
+  }
+
   const metadata={};
   if(rate!==null)metadata.interest_rate=rate;
   if(maturity)metadata.maturity_date=maturity;

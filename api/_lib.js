@@ -45,6 +45,8 @@ export async function cacheDel(...keys){
 export async function invalidateUserCaches(uid){
  await cacheDel('wealth:ledger:v1:'+uid,'wealth:ledger:v2:'+uid,'wealth:dashboard:v1:'+uid,'wealth:dashboard:v2:'+uid,'wealth:dashboard:v3:'+uid,'wealth:dashboard:v4:'+uid,'wealth:dashboard:v5:'+uid,'wealth:snapshots:v2:'+uid);
 }
+// Data model switch (TSD §13): 'v1' legacy positions (default) or 'v2' account hierarchy.
+export function dataModel(){return String(process.env.WEALTH_DATA_MODEL||'v1').trim().toLowerCase()==='v2'?'v2':'v1'}
 // Database schema is provisioned by migrations, never by request handlers.
 // Avoid running DDL and role UPDATE statements on every serverless cold start.
 export async function schema(){

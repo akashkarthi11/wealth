@@ -1,10 +1,6 @@
--- Account hierarchy, step 2 of 2: copy today's data into the new structure.  DRAFT — not run by migrate-db.
--- Requires step 1. Idempotent (ON CONFLICT DO NOTHING). Old tables are NOT modified except:
---   * wealth_accounts.subtype_code is filled in,
---   * the duplicate 'fixed-deposits' account is marked status='merged' (kept for audit, not deleted).
--- Ends with a reconciliation check that aborts the whole transaction if anything was not carried over.
-
-BEGIN;
+-- 0004: copy existing positions, prices and balances into the account hierarchy (TSD Phase 5, TR-5.1).
+-- Idempotent inserts; aborts the whole migration if any active holding or balance is not carried over.
+-- Legacy tables are left unchanged except wealth_accounts.subtype_code and the duplicate FD account (status=merged).
 
 -- 0. Mapping from legacy position record types to subtypes.
 CREATE TEMP TABLE _subtype_map (record_type text PRIMARY KEY, subtype text NOT NULL) ON COMMIT DROP;
@@ -34,6 +30,7 @@ WHERE subtype_code IS NULL AND account_type IN ('savings', 'current', 'credit_ca
 
 UPDATE wealth_accounts a SET status = 'merged', updated_at = now()
 WHERE a.account_type = 'fixed_deposit' AND a.status = 'active'
+  AND a.subtype_code IS NULL   -- only the legacy "Fixed Deposits" row, never an FD account created by this model
   AND EXISTS (SELECT 1 FROM _pos p WHERE p.user_id = a.user_id AND p.subtype = 'fixed_deposit');
 
 -- 2. Investment accounts: one per platform+subtype for holdings, one per FD / EPF record.
@@ -148,4 +145,3 @@ BEGIN
   END IF;
 END $$;
 
-COMMIT;
