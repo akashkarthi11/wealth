@@ -4,7 +4,7 @@ const YAHOO='https://query1.finance.yahoo.com/v8/finance/chart/';
 const TROY_OUNCE_GRAMS=31.1034768;
 async function mutualFundNav(asset){
  let schemeCode=String(asset.price_source_symbol||'');
- if(!/^\\d+$/.test(schemeCode)){
+ if(!/^[0-9]+$/.test(schemeCode)){
   const query=String(asset.price_source_symbol||asset.display_name||'').replace(/ - Direct Plan - Growth$/i,'');
   const search=await fetch('https://api.mfapi.in/mf/search?q='+encodeURIComponent(query),{signal:AbortSignal.timeout(8000)});
   if(!search.ok)throw new Error('MFAPI scheme search HTTP '+search.status);
