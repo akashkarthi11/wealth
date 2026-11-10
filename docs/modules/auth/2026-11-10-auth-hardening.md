@@ -36,3 +36,17 @@ Until migration 0001 is applied, `sessionUser()` falls back to signature-only ch
 ## Deployment
 
 Not deployed. Requires explicit approval per environment.
+
+## Regression — 2026-11-10: login failed on the dev team's Preview of `claude-dev`
+
+**Observed:** login on the Preview deployment built by the `development-b9bc/wealth` Vercel team failed; Vercel's runtime logs showed no useful error. (Not a "D1 database binding" problem: D1 in this repo means TSD decision D1; the stack is Vercel + Neon.)
+
+**Root causes (reproduced locally):**
+1. Login now calls Redis for rate limiting. With `REDIS_URL` pointing at an unreachable host, the Redis client retried forever and the call never returned — still waiting after 12 s, past Vercel's 10 s function limit. A timeout leaves no error in the logs.
+2. With an invalid `REDIS_URL` (for example a `[SENSITIVE]` placeholder copied from a pulled env file), `createClient` threw while the module loaded, so every API route failed — login included.
+
+**Fix (`api/_lib.js`):** the Redis client is created lazily inside a guarded path; every operation has a 1 s limit (`REDIS_OP_TIMEOUT_MS`); a failed connection does not retry; after any failure Redis is skipped for 30 s. Rate limiting and caching fail open, so login works without Redis.
+
+**Verified:** `scripts/tests/redis-failopen.test.mjs` — unreachable Redis returns in ~1 s and then instantly; an invalid URL no longer crashes the module.
+
+**Still to check in the `development-b9bc` Vercel team (not accessible from this machine's CLI login):** its Preview environment variables must hold real values — `WEALTH_SESSION_SECRET` (≥ 32 characters; otherwise login returns 500), `WEALTH_ACCESS_KEY`, a database URL, and either a valid `REDIS_URL` or none. Values copied from a pulled `.env` file may be `[SENSITIVE]` placeholders.
