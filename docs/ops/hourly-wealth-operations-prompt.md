@@ -12,6 +12,8 @@ PRODUCTION ONLY · WRITES THROUGH THE API ONLY
 
 0) PREFLIGHT (stop and report if it fails)
 - GET $WEALTH_API_BASE/api/health → database.reachable is true and database.latestMigration is 0008_plan3_data_quality_interest_obligations_audit or later.
+- GET $WEALTH_API_BASE/api/email-imports/seen?ids=preflight with the Bearer token → must be 200 ({"seen":[]}). 404 = the Plan 3 code is not
+  deployed yet; 401 = WEALTH_INGEST_SECRET is missing or wrong. In either case stop and report (the database alone is not enough).
 
 HOLDINGS — read-only SQL, one source for every section
   SELECT a.id AS account_id, a.bank_name AS institution, s.code AS subtype, i.id AS instrument_id, i.asset_class, i.symbol, i.name,
