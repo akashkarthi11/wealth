@@ -210,8 +210,25 @@ const V2_STATUS={fresh:'live price',stale:'price older than 36 h',manual:'manual
 function v2Icon(subtype){const k=V2_ICON[subtype]||'•';return window.wealthCategorySymbols?.[k]||({equity:'↗',mutual_fund:'◫',indmoney_us:'＄',gold:'◆',silver:'◇',fixed_deposit:'▤',provident_fund:'◎'}[k]||k)}
 function moneyIn(amount,currency){if(amount==null)return '—';return new Intl.NumberFormat(currency==='USD'?'en-US':'en-IN',{style:'currency',currency:currency||'INR',maximumFractionDigits:2}).format(Number(amount))}
 function v2Date(x){return x?new Date(x).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):''}
+// Amounts that could not be converted to INR, per currency (e.g. US holdings without a USD/INR rate).
+function v2Uncounted(accounts){
+ const out={};
+ accounts.forEach(a=>{
+  (a.holdings||[]).forEach(h=>{if(h.valueInr==null&&h.value.amount!=null)out[h.value.currency]=(out[h.value.currency]||0)+Number(h.value.amount)});
+  const balanceExcluded=modelV2.totals.excluded.some(e=>e.accountId===a.id&&!e.symbol);
+  if(balanceExcluded&&a.balance.amount!=null)out[a.balance.currency]=(out[a.balance.currency]||0)+Number(a.balance.amount);
+ });
+ return out;
+}
+// Never show ₹0.00 for something that simply could not be valued: show the native amount and why.
+function v2ValueHtml(inr,accounts){
+ const extra=Object.entries(v2Uncounted(accounts)).filter(([,v])=>v).map(([c,v])=>moneyIn(v,c));
+ if(!extra.length)return money(inr);
+ const note='<small class="negative" style="display:block;font-weight:500">'+esc(extra.join(' + '))+' not counted · no USD/INR rate yet</small>';
+ return (Number(inr)?money(inr):esc(extra.join(' + ')))+note;
+}
 function v2AccountHtml(a){
- const head='<div class="investment-us-row"><span><b>'+esc(a.institution)+' · '+esc(a.name)+(a.maskedIdentifier?' '+esc(a.maskedIdentifier):'')+'</b><small>'+esc(a.subtypeLabel)+(a.balanceAsOf?' · as of '+esc(v2Date(a.balanceAsOf)):'')+(a.stale?' · <span class="negative">stale</span>':'')+(a.complete?'':' · <span class="negative">partly not counted</span>')+'</small>'+(a.balance.amount!=null?'<small>'+(a.valuation==='holdings'?'Cash ':'Balance ')+esc(moneyIn(a.balance.amount,a.balance.currency))+(a.balanceStatus?' · '+esc(a.balanceStatus.replace('_',' ')):'')+(a.balanceNote?' · '+esc(a.balanceNote):'')+'</small>':'')+'</span><b>'+money(a.valueInr)+'</b></div>';
+ const head='<div class="investment-us-row"><span><b>'+esc(a.institution)+' · '+esc(a.name)+(a.maskedIdentifier?' '+esc(a.maskedIdentifier):'')+'</b><small>'+esc(a.subtypeLabel)+(a.balanceAsOf?' · as of '+esc(v2Date(a.balanceAsOf)):'')+(a.stale?' · <span class="negative">stale</span>':'')+(a.complete?'':' · <span class="negative">partly not counted</span>')+'</small>'+(a.balance.amount!=null?'<small>'+(a.valuation==='holdings'?'Cash ':'Balance ')+esc(moneyIn(a.balance.amount,a.balance.currency))+(a.balanceStatus?' · '+esc(a.balanceStatus.replace('_',' ')):'')+(a.balanceNote?' · '+esc(a.balanceNote):'')+'</small>':'')+'</span><b>'+v2ValueHtml(a.valueInr,[a])+'</b></div>';
  const rows=(a.holdings||[]).map(h=>'<div class="investment-us-row"><span><b>'+esc(h.symbol)+'</b><small>'+esc(h.name)+' · '+esc(String(h.quantity))+' '+esc(h.unit)+(h.price.amount!=null?' × '+esc(moneyIn(h.price.amount,h.price.currency)):'')+'</small><small>'+esc(V2_STATUS[h.valuationStatus]||h.valuationStatus)+(h.priceAsOf?' · '+esc(v2Date(h.priceAsOf)):'')+(h.invested.amount!=null?' · invested '+esc(moneyIn(h.invested.amount,h.invested.currency)):'')+'</small></span><b>'+(h.valueInr!=null?money(h.valueInr):esc(moneyIn(h.value.amount,h.value.currency)))+'</b></div>').join('');
  return '<div class="investment-holdings">'+head+rows+'</div>';
 }
@@ -221,7 +238,7 @@ function v2ExpandedHtml(key){
  let body;
  if(cat==='INVESTMENT'){
   const groups=[];accs.forEach(a=>{let g=groups.find(x=>x.subtype===a.subtype);if(!g){g={subtype:a.subtype,label:a.subtypeLabel,accounts:[],total:0};groups.push(g)}g.accounts.push(a);g.total+=Number(a.valueInr||0)});
-  body='<section class="investment-summary"><div class="investment-summary-list">'+groups.map(g=>'<details class="investment-summary-row"><summary><span class="investment-summary-icon">'+esc(v2Icon(g.subtype))+'</span><span class="investment-summary-copy"><b>'+esc(g.label)+'</b><small>'+g.accounts.length+' account'+(g.accounts.length===1?'':'s')+'</small></span><strong>'+money(g.total)+'</strong></summary><div class="investment-summary-expanded">'+g.accounts.map(v2AccountHtml).join('')+'</div></details>').join('')+'</div></section>';
+  body='<section class="investment-summary"><div class="investment-summary-list">'+groups.map(g=>'<details class="investment-summary-row"><summary><span class="investment-summary-icon">'+esc(v2Icon(g.subtype))+'</span><span class="investment-summary-copy"><b>'+esc(g.label)+'</b><small>'+g.accounts.length+' account'+(g.accounts.length===1?'':'s')+'</small></span><strong>'+v2ValueHtml(g.total,g.accounts)+'</strong></summary><div class="investment-summary-expanded">'+g.accounts.map(v2AccountHtml).join('')+'</div></details>').join('')+'</div></section>';
  }else body=accs.length?accs.map(v2AccountHtml).join(''):'<p class="muted">No accounts of this type.</p>';
  const excluded=modelV2.totals.excluded.filter(e=>accs.some(a=>a.id===e.accountId));
  const excludedHtml=excluded.length?'<p class="investment-note">Not counted in the total: '+excluded.map(e=>esc((e.symbol||'balance')+' ('+(V2_STATUS[e.reason]||e.reason.replace('_',' '))+')')).join(', ')+'.</p>':'';

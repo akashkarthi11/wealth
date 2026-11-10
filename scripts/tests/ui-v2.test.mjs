@@ -76,3 +76,14 @@ test('liabilities show the card and amount owed', () => {
   assert.match(html, /••2222/);
   assert.match(html, /₹300\.00/);
 });
+
+test('a group that cannot be valued in INR shows its USD amount, never ₹0.00', () => {
+  const v = loadView();
+  const html = v.v2ExpandedHtml('investments');
+  const usGroup = html.split('<details').find(s => s.includes('US stocks &amp; ETFs'));
+  assert.ok(usGroup, 'US group present');
+  const summary = usGroup.split('</summary>')[0];
+  assert.ok(!summary.includes('₹0.00'), 'group header must not show ₹0.00');
+  assert.match(summary, /\$80\.00/);
+  assert.match(summary, /not counted · no USD\/INR rate yet/);
+});
