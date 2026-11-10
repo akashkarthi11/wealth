@@ -1,11 +1,40 @@
 import {sql,schema,json,userFrom,cacheGet,cacheSet,scheduleCacheRefresh} from './_lib.js';
+
+async function readPositions(uid){
+ const enrichedQuery=`SELECT p.id,p.category,p.institution_name,p.platform_name,p.record_type,p.name,p.ticker,p.currency,p.quantity,
+  CASE WHEN mp.status='fresh' AND mp.fetched_at>now()-interval '36 hours' AND a.id IS NOT NULL AND p.quantity IS NOT NULL THEN p.quantity*mp.unit_price ELSE p.current_value END AS current_value,
+  p.invested_value,p.balance_as_of,p.source_key,p.metadata,mp.unit_price AS market_unit_price,mp.currency AS market_price_currency,
+  mp.source AS market_price_source,mp.fetched_at AS market_price_updated_at,mp.status AS market_price_status,a.quantity_unit,
+  (mp.metadata->>'fx_to_inr')::numeric AS market_fx_to_inr,
+  CASE WHEN mp.status='fresh' AND mp.fetched_at>now()-interval '36 hours' AND p.quantity IS NOT NULL
+   THEN CASE WHEN mp.currency='USD' THEN p.quantity*mp.unit_price*NULLIF((mp.metadata->>'fx_to_inr')::numeric,0)
+             WHEN mp.currency='INR' THEN p.quantity*mp.unit_price ELSE NULL END ELSE NULL END AS market_value_inr
+  FROM wealth_positions p
+  LEFT JOIN wealth_investment_assets a ON a.position_id=p.id
+  LEFT JOIN wealth_market_prices mp ON mp.asset_id=a.id
+  WHERE p.user_id=$1 ORDER BY p.category,p.platform_name,p.record_type,p.name`;
+ try{
+  return await sql.query(enrichedQuery,[uid]);
+ }catch(error){
+  console.error('[wealth-dashboard:priced-positions]',error?.message||error);
+  // A missing pricing table must never hide the user's saved positions or turn totals into zero.
+  return await sql.query(`SELECT id,category,institution_name,platform_name,record_type,name,ticker,currency,quantity,
+   current_value,invested_value,balance_as_of,source_key,metadata,
+   NULL::numeric AS market_unit_price,NULL::char(3) AS market_price_currency,
+   NULL::text AS market_price_source,NULL::timestamptz AS market_price_updated_at,
+   NULL::text AS market_price_status,NULL::text AS quantity_unit,
+   NULL::numeric AS market_fx_to_inr,NULL::numeric AS market_value_inr
+   FROM wealth_positions WHERE user_id=$1
+   ORDER BY category,platform_name,record_type,name`,[uid]);
+ }
+}
 async function readDashboard(uid){
  const [users,transactions,templates,accounts,positions]=await Promise.all([
   sql.query('SELECT role FROM wealth_users WHERE id=$1',[uid]),
   sql.query("SELECT t.id,t.kind,t.category,t.description,t.amount,t.account_id,COALESCE(NULLIF(trim(a.account_name || ' ' || COALESCE(a.masked_identifier,'')),''),NULLIF(t.account,''),'Unassigned') AS account,t.occurred_on FROM wealth_transactions t LEFT JOIN wealth_accounts a ON a.user_id=t.user_id AND a.id=t.account_id WHERE t.user_id=$1 ORDER BY t.occurred_on DESC,t.created_at DESC LIMIT 500",[uid]),
   sql.query("SELECT config,version,updated_at FROM wealth_templates WHERE user_id=$1 AND template_key='wealth_classification' LIMIT 1",[uid]),
   sql.query("SELECT id,account_key,bank_name,account_name,account_type,masked_identifier,currency,current_balance,balance_as_of,balance_status FROM wealth_accounts WHERE user_id=$1 ORDER BY bank_name,account_name",[uid]),
-  sql.query("SELECT p.id,p.category,p.institution_name,p.platform_name,p.record_type,p.name,p.ticker,p.currency,p.quantity,CASE WHEN mp.status='fresh' AND mp.fetched_at>now()-interval '36 hours' AND a.id IS NOT NULL AND p.quantity IS NOT NULL THEN p.quantity*mp.unit_price ELSE p.current_value END AS current_value,p.invested_value,p.balance_as_of,p.source_key,p.metadata,mp.unit_price AS market_unit_price,mp.currency AS market_price_currency,mp.source AS market_price_source,mp.fetched_at AS market_price_updated_at,mp.status AS market_price_status,a.quantity_unit,(mp.metadata->>'fx_to_inr')::numeric AS market_fx_to_inr,CASE WHEN mp.status='fresh' AND mp.fetched_at>now()-interval '36 hours' AND p.quantity IS NOT NULL THEN CASE WHEN mp.currency='USD' THEN p.quantity*mp.unit_price*NULLIF((mp.metadata->>'fx_to_inr')::numeric,0) WHEN mp.currency='INR' THEN p.quantity*mp.unit_price ELSE NULL END ELSE NULL END AS market_value_inr FROM wealth_positions p LEFT JOIN wealth_investment_assets a ON a.position_id=p.id LEFT JOIN wealth_market_prices mp ON mp.asset_id=a.id WHERE p.user_id=$1 ORDER BY p.category,p.platform_name,p.record_type,p.name",[uid]).catch(()=>[])
+  readPositions(uid)
  ]);
  if(!users.length)return null;
  const role=users[0].role;
