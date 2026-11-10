@@ -433,3 +433,22 @@ button.dashboard-alert-banner:focus-visible{outline:2px solid #8bb5ff;outline-of
 .interest-table td:nth-child(2),.interest-table td:nth-child(3){color:var(--green);font-weight:700}
 .interest-footnote{margin:12px 0 0;color:var(--muted);font-size:11px;line-height:1.5}
 @media(max-width:700px){.interest-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.interest-kpis .mini-card{min-width:0}.interest-table{min-width:540px}}
+
+/* Interest page hierarchy: two product totals, then one daily ledger */
+.interest-kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0}
+.interest-kpis .mini-card{width:100%;min-width:0;min-height:112px;padding:16px}
+.interest-kpis .mini-card small{letter-spacing:.07em}
+.interest-kpis .mini-card strong{display:block;margin:12px 0 6px;font-size:clamp(21px,4vw,28px);font-variant-numeric:tabular-nums}
+.interest-active{margin-top:14px;padding:18px}
+.interest-active .chart-head{margin-bottom:12px}
+.interest-table-wrap{border:1px solid var(--line);border-radius:12px}
+.interest-table{min-width:570px}
+.interest-table th{position:sticky;top:0;background:var(--card, #101d30);z-index:1}
+.interest-table td:nth-child(2),.interest-table td:nth-child(3){font-weight:700}
+.interest-footnote{padding:10px 12px;border-radius:10px;background:rgba(130,160,190,.07)}
+@media(max-width:700px){
+ .interest-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+ .interest-kpis .mini-card{padding:13px 11px;min-height:104px}
+ .interest-kpis .mini-card strong{font-size:22px}
+ .interest-active{padding:14px}
+}
