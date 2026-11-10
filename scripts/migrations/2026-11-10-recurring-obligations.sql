@@ -105,7 +105,7 @@ JOIN wealth_planned_bills b
   ON b.user_id=s.user_id
  AND (
    b.bill_key=s.provider_key
-   OR b.bill_key LIKE s.provider_key || '\\_%' ESCAPE '\\'
+   OR left(b.bill_key,length(s.provider_key)+1)=s.provider_key || '_'
  )
 WHERE o.user_id=b.user_id
   AND o.source_type='planned_bill'
@@ -142,7 +142,7 @@ FROM wealth_subscriptions s
 WHERE NOT EXISTS (
   SELECT 1 FROM wealth_planned_bills b
   WHERE b.user_id=s.user_id
-    AND (b.bill_key=s.provider_key OR b.bill_key LIKE s.provider_key || '\\_%' ESCAPE '\\')
+    AND (b.bill_key=s.provider_key OR left(b.bill_key,length(s.provider_key)+1)=s.provider_key || '_'
 )
 ON CONFLICT (user_id, obligation_key) DO NOTHING;
 
