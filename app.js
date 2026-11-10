@@ -1,4 +1,4 @@
-const APP_BUILD_ID='20261110-interest-dashboard-1';
+const APP_BUILD_ID='20261110-dashboard-error-fix-8';
 (function promptForUpdatedApp(){
   try {
     const key='wealth-ledger:app-build';
