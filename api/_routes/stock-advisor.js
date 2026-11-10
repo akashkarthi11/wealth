@@ -1,12 +1,15 @@
-import {sql,schema,json,sessionUser,body} from './_lib.js';
+import {sql,schema,json,sessionUser,body} from '../_lib.js';
 import {timingSafeEqual} from 'node:crypto';
-import {startJob,finishJob} from './_jobs.js';
+import {startJob,finishJob} from '../_jobs.js';
 
+// The agents' shared WEALTH_INGEST_SECRET (Plan 3) or the older advisor-only secret.
 function validIngestSecret(req){
- const expected=process.env.WEALTH_ADVISOR_INGEST_SECRET||'';
  const supplied=String(req.headers.authorization||'').replace(/^Bearer\s+/i,'');
- if(expected.length<32||supplied.length!==expected.length)return false;
- try{return timingSafeEqual(Buffer.from(supplied),Buffer.from(expected))}catch{return false}
+ return [process.env.WEALTH_INGEST_SECRET,process.env.WEALTH_ADVISOR_INGEST_SECRET].some(v=>{
+  const expected=String(v||'').trim();
+  if(expected.length<32||supplied.length!==expected.length)return false;
+  try{return timingSafeEqual(Buffer.from(supplied),Buffer.from(expected))}catch{return false}
+ });
 }
 
 async function latestSavedReport(uid){

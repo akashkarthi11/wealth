@@ -1,5 +1,5 @@
-import {sql,schema,json,body,sessionUser,cacheGet,cacheSet,cacheDel,invalidateUserCaches,scheduleCacheRefresh} from './_lib.js';
-import {pageTransactions,PAGE_DEFAULT} from './_queries.js';
+import {sql,schema,json,body,sessionUser,cacheGet,cacheSet,cacheDel,invalidateUserCaches,scheduleCacheRefresh} from '../_lib.js';
+import {pageTransactions,PAGE_DEFAULT} from '../_queries.js';
 
 // Only the default first page is cached; later pages and custom sizes always read Neon.
 const cacheKey=uid=>'wealth:ledger:v2:'+uid;

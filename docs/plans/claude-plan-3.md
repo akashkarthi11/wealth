@@ -389,9 +389,16 @@ Development database first, then Production, each with backup → dry run → ap
 
 About 6 working days plus owner input. Phase 1 needs decisions DV3-1 … DV3-3 and DV3-6 before it can run.
 
-## 14. Implementation status
+## 14. Implementation status (2026-11-11)
+
+Code is on `claude-dev` with tests passing (102). Migration **0008** is **applied to Development** (encrypted backup and restore drill first).
+**Production is not deployed.** The previous `main` deploy failed on the Hobby 12-function limit; this change fixes that with a single-function router (see [fix record](../modules/infra/2026-11-11-hobby-function-limit-single-router.md)).
 
 | Phase | Status | Evidence |
 |---|---|---|
-| 4 — Data-quality report | **Done**: `GET/POST /api/data-quality`, owner page "Data quality" (More), acceptances stored (0007, applied to Development). Read-only run on Production: 0 high, 13 medium, 26 low open issues | `reconcile-dq.test.mjs` |
-| 1, 2, 3, 5, 6 | Not started (Phase 1 needs owner decisions DV3-1 … DV3-6) | — |
+| 1 — Data-quality corrections | **Tooling done; owner decisions pending**: duplicate marking (`duplicate_of`, excluded from totals), FD terms columns + `PATCH /api/accounts`, quantity correction with evidence (`PUT /api/holdings`), Nippon price hold (DQ-1), metal policy (India benchmark by default; futures only with `WEALTH_METAL_PRICE_SOURCE=futures`), duplicate Slice rate period closed by 0008, account suggestions for unassigned transactions. Credit card "owed" figure: two labelled balances via `POST /api/balances` | `plan3.test.mjs`; Development: rate period closed, hold set |
+| 2 — Ingest APIs | **Done**: `POST /api/prices`, `POST /api/email-imports`, `GET /api/email-imports/seen`, `POST /api/balances`, `PUT /api/holdings`, `POST/PATCH /api/accounts`, `/api/transaction-review`; Bearer `WEALTH_INGEST_SECRET` or owner session; `?dryRun=1`; agent prompts rewritten ([daily](../ops/daily-wealth-operations-prompt.md), [hourly](../ops/hourly-wealth-operations-prompt.md)) — use them only after the Production deploy | `plan3.test.mjs` |
+| 3 — Interest engine | **Done**: `wealth_interest_links` (4 links seeded), `POST /api/interest/rates`, `POST /api/interest/run`, `POST /api/interest/credits`, `GET /api/interest` + Interest sources panel; nightly cron `/api/nightly` 01:30 IST. Dry run on Development: Slice Savings ₹7.21509589 and Atom ₹9.55643836 for 10 Nov (same formula as the agent rows); FDs `pending_terms`; BOI/HDFC/Roarbank `needs_link` | `plan3.test.mjs` (leap year, rate change, stale principal, catch-up, corrections, confirmed rows untouched, idempotency) |
+| 4 — Data-quality report | **Done** (earlier); now also reports price holds, FD terms, interest links, nightly jobs, backup and ingest configuration | `reconcile-dq.test.mjs` |
+| 5 — Obligations read model | **Done**: triggers keep obligations/occurrences in step with legacy bills and mandates; `GET /api/obligations` (grouped by account); alerts de-duplicate by obligation id | `plan3.test.mjs` |
+| 6 — Operations | **Done in code; owner settings pending**: encrypted nightly backup to a private Blob store, restore tool + drill (passed on Development data: 29 tables, 1,218 rows), `wealth_audit_log` with actor, [runbook](../ops/operations-runbook.md) for environments and key rotation. Needs `WEALTH_BACKUP_KEY`, a private Blob store, `WEALTH_INGEST_SECRET`, and Preview → Development database | `plan3.test.mjs` (backup round trip, tamper, restore) |

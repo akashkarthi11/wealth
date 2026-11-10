@@ -1,5 +1,5 @@
-import { sql, schema, json, body, sessionUser } from './_lib.js';
-import { collectIssues } from './_dataquality.js';
+import { sql, schema, json, body, sessionUser } from '../_lib.js';
+import { collectIssues } from '../_dataquality.js';
 
 // GET  /api/data-quality             — open data-quality issues (owner only)
 // POST /api/data-quality {issueId, reason} — accept a known issue with a reason (kept, never deleted)

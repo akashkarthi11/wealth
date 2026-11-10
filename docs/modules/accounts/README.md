@@ -6,9 +6,9 @@ Bank accounts (CASA), balance snapshots and the ledger of income/expense/transfe
 
 | File | Responsibility |
 |---|---|
-| [`api/ledger.js`](../../../api/ledger.js) | `GET/POST/DELETE /api/ledger` |
-| [`api/dashboard.js`](../../../api/dashboard.js) | Returns accounts and the latest 500 transactions |
-| [`api/snapshot.js`](../../../api/snapshot.js) | `GET /api/snapshot` — admin-only saved HTML/JSON source snapshots |
+| [`api/_routes/ledger.js`](../../../api/_routes/ledger.js) | `GET/POST/DELETE /api/ledger` |
+| [`api/_routes/dashboard.js`](../../../api/_routes/dashboard.js) | Returns accounts and the latest 500 transactions |
+| [`api/_routes/snapshot.js`](../../../api/_routes/snapshot.js) | `GET /api/snapshot` — admin-only saved HTML/JSON source snapshots |
 | [`app.js`](../../../app.js) | Banks view (`bankCards`, `accountRecords`), Transactions view (`activitiesHtml`, `activityRowsHtml`), spend analytics |
 
 ## Tables

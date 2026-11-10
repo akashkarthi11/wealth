@@ -38,13 +38,38 @@ export async function pageTransactions(uid, { cursor = null, limit = PAGE_DEFAUL
 
 // Spending statistics over ALL of the user's transactions (TR-3.1), grouped small enough to send whole.
 // Dates up to "today" in India, matching how the dashboard reports elapsed days.
+// Transactions marked as duplicates (migration 0008, TR3-1.3) are left out.
 export async function spendingRows(uid, db = sql) {
-  return db.query(`SELECT to_char(occurred_on,'YYYY-MM') AS month, kind,
+  const q = notDuplicate => db.query(`SELECT to_char(occurred_on,'YYYY-MM') AS month, kind,
       COALESCE(NULLIF(trim(category),''),'Uncategorised') AS category,
       sum(amount)::float8 AS total, count(*)::int AS n
     FROM wealth_transactions
-    WHERE user_id=$1 AND occurred_on <= (now() AT TIME ZONE 'Asia/Kolkata')::date
+    WHERE user_id=$1 AND occurred_on <= (now() AT TIME ZONE 'Asia/Kolkata')::date${notDuplicate ? ' AND duplicate_of IS NULL' : ''}
     GROUP BY 1,2,3 ORDER BY 1,2,3`, [uid]);
+  return q(true).catch(e => { if (e?.code === '42703') return q(false); throw e; });   // database before 0008
+}
+
+// Obligations read model (TSD Claude Plan 3, TR3-5.1): one row per obligation with its next planned occurrence and
+// mandate, grouped by the paying account. The obligation id is the de-duplication key for alerts (TR3-5.3).
+export async function obligationsByAccount(uid, db = sql) {
+  const rows = await db.query(`SELECT o.id, o.title, o.obligation_type, o.expected_amount::float8 AS expected_amount, o.amount_type, o.frequency,
+      o.status, o.source_type, o.account_id, a.bank_name, a.account_name, a.masked_identifier,
+      coalesce(n.due_date, o.next_due_date)::text AS next_due_date, n.expected_amount::float8 AS next_amount, n.planned_bill_id,
+      s.id AS mandate_id, s.provider_name AS mandate_provider, s.status AS mandate_status
+    FROM wealth_recurring_obligations o
+    LEFT JOIN wealth_accounts a ON a.user_id = o.user_id AND a.id = o.account_id
+    LEFT JOIN wealth_subscriptions s ON s.user_id = o.user_id AND s.id = o.mandate_id
+    LEFT JOIN LATERAL (SELECT p.due_date, p.expected_amount, p.planned_bill_id FROM wealth_payment_occurrences p
+      WHERE p.obligation_id = o.id AND p.status = 'planned' ORDER BY p.due_date LIMIT 1) n ON true
+    WHERE o.user_id = $1 AND o.status IN ('active', 'paused')
+    ORDER BY a.bank_name NULLS LAST, a.account_name, coalesce(n.due_date, o.next_due_date) NULLS LAST, o.title`, [uid]);
+  const groups = new Map();
+  for (const r of rows) {
+    const key = r.account_id || 'unassigned';
+    if (!groups.has(key)) groups.set(key, { accountId: r.account_id, account: r.account_id ? `${r.bank_name} · ${r.account_name}${r.masked_identifier ? ' ' + r.masked_identifier : ''}` : 'No account', obligations: [] });
+    groups.get(key).obligations.push(r);
+  }
+  return { accounts: [...groups.values()], count: rows.length };
 }
 
 function holdingRows(uid, db, withStatus) {

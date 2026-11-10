@@ -9,6 +9,8 @@ export function adapter(db) {
   return {
     exec: text => db.exec(text),
     query: async (text, params = []) => (await db.query(text, params)).rows,
+    // One transaction per batch, like Neon's sql.transaction([...]).
+    txBatch: stmts => db.transaction(async tx => { const out = []; for (const [t, p] of stmts) out.push((await tx.query(t, p || [])).rows); return out; }),
   };
 }
 

@@ -1,5 +1,5 @@
-import { sql, json, configStatus } from './_lib.js';
-import { jobActivity } from './_jobs.js';
+import { sql, json, configStatus } from '../_lib.js';
+import { jobActivity } from '../_jobs.js';
 
 // GET /api/health — which settings this deployment has, as yes/no only (never values), plus whether the
 // database answers and which migrations are applied. Open it on each environment to compare them.
@@ -40,6 +40,11 @@ export default async function handler(req, res) {
     if (!refresh) problems.push('price refresh has never run');
     else if (hoursSince(refresh.startedAt) > 36) problems.push(`price refresh last ran ${Math.round(hoursSince(refresh.startedAt))} h ago`);
     for (const job of jobs.failingTwice) problems.push(`${job} failed on its last two runs`);
+    for (const job of ['interest-accrual', 'backup']) {
+      const r = jobs.lastRuns[job];
+      if (r && hoursSince(r.startedAt) > 36) problems.push(`${job} last ran ${Math.round(hoursSince(r.startedAt))} h ago`);
+      if (r && job === 'backup' && r.status !== 'succeeded') problems.push('last backup was not stored');
+    }
     if (jobs.advisorLastReport && hoursSince(jobs.advisorLastReport) > 3) problems.push(`no Stock Advisor report for ${Math.round(hoursSince(jobs.advisorLastReport))} h`);
   }
   if (!status.database.configured) problems.push('no database URL');
@@ -48,6 +53,7 @@ export default async function handler(req, res) {
   if (!status.accessKey) problems.push('WEALTH_ACCESS_KEY missing (registration disabled)');
   if (status.redis === 'invalid (ignored)') problems.push('REDIS_URL is not a redis:// URL (caching and rate limits off)');
   if (database.syncIssues24h?.count) problems.push(`${database.syncIssues24h.count} legacy→v2 sync issue(s) in the last 24 h (see wealth_sync_issues)`);
-  if (status.environment === 'production' && !status.cronSecret) problems.push('CRON_SECRET missing (daily price refresh is rejected)');
+  if (status.environment === 'production' && !status.cronSecret) problems.push('CRON_SECRET missing (daily price refresh and nightly jobs are rejected)');
+  if (status.environment === 'production' && !status.backup) problems.push('backups not configured (WEALTH_BACKUP_KEY, BLOB_READ_WRITE_TOKEN)');
   return json(res, problems.some(p => /database|SESSION_SECRET/.test(p)) ? 503 : 200, { ok: problems.length === 0, problems, config: status, database, jobs });
 }
