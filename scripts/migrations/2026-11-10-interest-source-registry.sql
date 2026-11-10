@@ -117,13 +117,30 @@ WHERE NOT EXISTS (
   WHERE s.user_id = u.id AND s.source_key = 'angel-one-fd'
 );
 
+-- Reclassify the existing canonical aggregate FD record as Slice FD per user confirmation.
+UPDATE public.wealth_positions
+SET name = 'Slice FD',
+    institution_name = 'Slice',
+    platform_name = 'Slice',
+    metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
+      'source_label', 'Slice Fixed Deposit',
+      'displayed_current_value_inr', 3004.41,
+      'interest_rate', 0.0775,
+      'reconciliation_status', 'balance_reconciliation_required'
+    ),
+    updated_at = now()
+WHERE id = 'd28c7a72-5314-47d8-bb87-3550020547c3'::uuid;
+
 INSERT INTO public.wealth_interest_sources
   (user_id, source_key, source_name, provider, product_key,
-   current_rate_id, link_status, notes)
+   position_id, current_rate_id, link_status, notes)
 SELECT u.id, 'slice-fd', 'Slice FD', 'Slice Small Finance Bank',
-       'slice-fd', r.id, 'needs_link',
-       'Needs canonical Slice FD position link if not present; never guess or duplicate an FD position.'
+       'slice-fd', p.id, r.id, 'linked',
+       'FK to existing FD aggregate reclassified as Slice FD per user confirmation. Stored balance remains ₹3,001 until reconciled against screenshot value ₹3,004.41.'
 FROM public.wealth_users u
+JOIN public.wealth_positions p
+  ON p.user_id = u.id
+ AND p.id = 'd28c7a72-5314-47d8-bb87-3550020547c3'::uuid
 LEFT JOIN public.wealth_interest_rates r
   ON r.provider = 'Slice Small Finance Bank'
  AND r.product_key = 'slice-fd'
