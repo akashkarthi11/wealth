@@ -58,6 +58,22 @@ async function runAngelOnePriceHistoryMigration(){
  console.log('[db-migrate] Angel One historical LTP backfill ready:',JSON.stringify(counts[0]||{}));
 }
 
+
+async function runAngelOneLivePositionsMigration(){
+ const url=new URL('./migrations/2026-11-10-convert-angelone-equity-to-live-positions.sql',import.meta.url);
+ const source=await readFile(url,'utf8');
+ const statements=source
+  .replace(/^\\s*--.*$/gm,'')
+  .split(';')
+  .map(statement=>statement.trim())
+  .filter(Boolean);
+ for(const statement of statements) await sql.query(statement);
+ const counts=await sql.query(`SELECT
+  (SELECT count(*)::int FROM wealth_positions WHERE source_key LIKE 'angelone-equity-holding-%' AND category='INVESTMENT') AS individual_equity_positions,
+  (SELECT count(*)::int FROM wealth_positions WHERE name='Angel One equity portfolio aggregate' AND category='ARCHIVED') AS archived_aggregates`);
+ console.log('[db-migrate] Angel One equity positions converted:',JSON.stringify(counts[0]||{}));
+}
+
 async function migrate(){
  // Idempotent schema migration: safe to run on every deployment and on both preview/production DBs.
  await sql.query(`CREATE TABLE IF NOT EXISTS wealth_category_symbols (
@@ -150,6 +166,7 @@ async function migrate(){
  // Provision the unified recurring-obligation model after the legacy source tables exist.
  await runRecurringObligationsMigration();
  await runAngelOnePriceHistoryMigration();
+ await runAngelOneLivePositionsMigration();
 
  // Reconcile duplicate planned-bill reminders against active bank mandates.
  await runMandateDuplicateCleanupMigration();
