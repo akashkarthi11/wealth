@@ -1,13 +1,5 @@
--- Normalization stage 1: keys and constraints only. No rows are inserted, updated or deleted.
--- DRAFT — not run by scripts/migrate-db.mjs. Apply to a Neon branch first, then Development
--- (approval), then Production (separate approval). See docs/plans/2026-11-10-data-normalization-design.md.
---
--- Goal: make it impossible for a child row to belong to a different user than its parent,
--- and impossible to store the same holding / report twice.
--- Pattern: composite foreign keys (user_id, parent_id) -> parent(user_id, id), added NOT VALID
--- (instant, no scan) and then VALIDATEd. If validation finds a bad row, the whole stage rolls back.
-
-BEGIN;
+-- 0002: owner-matching keys and duplicate prevention (TSD Phase 4, TR-4.1 to TR-4.3).
+-- Keys and constraints only: no rows are inserted, updated or deleted.
 
 -- 1. Parents expose (user_id, id) so children can reference both columns.
 --    wealth_accounts and wealth_transactions already have this.
@@ -74,11 +66,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS wealth_transactions_user_external_ref_uq
   ON wealth_transactions (user_id, external_ref) WHERE external_ref IS NOT NULL;
 
 -- 4. Drop indexes that exactly duplicate a constraint index.
---    NOTE: scripts/migrate-db.mjs re-creates the first two on every deploy; remove those
---    CREATE INDEX lines there in the same change, or they come back.
+--    (The old migrate-db.mjs re-created the first two on every deploy; the versioned runner does not.)
 DROP INDEX IF EXISTS wealth_investment_assets_position_id_uidx;   -- = wealth_investment_assets_position_id_key
 DROP INDEX IF EXISTS wealth_category_symbols_user_category_uidx;  -- = wealth_category_symbols_pkey
 DROP INDEX IF EXISTS wealth_interest_rates_lookup_idx;            -- = wealth_interest_rates_period_uq
+DROP INDEX IF EXISTS wealth_stock_advisor_reports_user_run_idx;   -- = wealth_stock_advisor_reports_user_run_uq (added above)
 DROP INDEX IF EXISTS wealth_payment_occurrences_obligation_due_idx; -- = wealth_payment_occurrences_due_uq
 
 -- 5. The single-column foreign keys are now implied by the composite ones; drop them so each
@@ -97,4 +89,3 @@ ALTER TABLE wealth_payment_occurrences  DROP CONSTRAINT IF EXISTS wealth_payment
 ALTER TABLE wealth_email_imports        DROP CONSTRAINT IF EXISTS wealth_email_imports_transaction_id_fkey;
 ALTER TABLE wealth_interest_ledger      DROP CONSTRAINT IF EXISTS wealth_interest_ledger_transaction_id_fkey;
 
-COMMIT;
