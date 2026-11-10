@@ -70,7 +70,8 @@ INSERT INTO wealth_recurring_obligations
   (user_id, obligation_key, title, obligation_type, expected_amount, amount_type,
    frequency, start_date, next_due_date, account_id, source_type, source_record_id,
    status, notes, created_at, updated_at)
-SELECT b.user_id,
+SELECT DISTINCT ON (b.user_id, COALESCE(NULLIF(b.bill_key,''), b.id::text))
+       b.user_id,
        'bill:' || COALESCE(NULLIF(b.bill_key,''), b.id::text),
        b.title,
        CASE
@@ -89,12 +90,13 @@ SELECT b.user_id,
        CASE WHEN b.status='planned' THEN b.due_date ELSE NULL END,
        b.account_id,
        'planned_bill',
-       b.id,
+       NULL,
        CASE WHEN b.status='cancelled' THEN 'cancelled' WHEN b.status='paid' THEN 'completed' ELSE 'active' END,
        COALESCE(b.payee,'') || CASE WHEN b.reference_masked IS NOT NULL THEN ' · ' || b.reference_masked ELSE '' END,
        b.created_at,
        b.updated_at
 FROM wealth_planned_bills b
+ORDER BY b.user_id, COALESCE(NULLIF(b.bill_key,''), b.id::text), CASE WHEN b.status='planned' THEN 0 ELSE 1 END, b.due_date ASC
 ON CONFLICT (user_id, obligation_key) DO NOTHING;
 
 -- Attach existing mandates to their corresponding planned-bill obligation where the keys match.
@@ -109,7 +111,7 @@ JOIN wealth_planned_bills b
  )
 WHERE o.user_id=b.user_id
   AND o.source_type='planned_bill'
-  AND o.source_record_id=b.id
+  AND o.obligation_key='bill:' || COALESCE(NULLIF(b.bill_key,''),b.id::text)
   AND o.mandate_id IS NULL;
 
 -- Preserve mandates that have no matching planned bill as their own recurring obligation.
@@ -168,7 +170,7 @@ FROM wealth_planned_bills b
 JOIN wealth_recurring_obligations o
   ON o.user_id=b.user_id
  AND o.source_type='planned_bill'
- AND o.source_record_id=b.id
+ AND o.obligation_key='bill:' || COALESCE(NULLIF(b.bill_key,''),b.id::text)
 ON CONFLICT (obligation_id, due_date) DO NOTHING;
 
 -- Backfill the next known due date for mandate-only recurring obligations.
