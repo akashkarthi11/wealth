@@ -48,15 +48,7 @@ export default async function handler(req,res){
   if(req.method!=='GET')return json(res,405,{error:'Method not allowed'});
   const uid=await sessionUser(req);if(!uid)return json(res,401,{error:'Sign in required'});
   await schema();
-  // Self-heal the category-symbol table on databases where the app code was deployed before its DB migration.
-  await sql.query(`CREATE TABLE IF NOT EXISTS wealth_category_symbols (
-    user_id uuid NOT NULL REFERENCES wealth_users(id) ON DELETE CASCADE,
-    category_key text NOT NULL,
-    display_symbol text NOT NULL,
-    updated_at timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY(user_id,category_key),
-    CONSTRAINT wealth_category_symbols_nonempty CHECK (length(trim(display_symbol)) BETWEEN 1 AND 16)
-  )`);
+  // Schema is created by scripts/migrate-db.mjs (0000_baseline); request handlers never run DDL (TR-2.5).
   const symbolRows=await sql.query('SELECT category_key,display_symbol FROM wealth_category_symbols WHERE user_id=$1',[uid]).catch(e=>{console.warn('[wealth-dashboard:symbols]',e?.message||e);return []});
   const categorySymbols=Object.fromEntries(symbolRows.map(r=>[r.category_key,r.display_symbol]));
   // Financial balances must never be served stale from Redis. A stale-while-revalidate
