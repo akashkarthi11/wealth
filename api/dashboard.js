@@ -1,4 +1,4 @@
-import {sql,schema,json,userFrom,cacheGet,cacheSet,scheduleCacheRefresh} from './_lib.js';
+import {sql,schema,json,userFrom} from './_lib.js';
 
 async function readPositions(uid){
  const enrichedQuery=`SELECT p.id,p.category,p.institution_name,p.platform_name,p.record_type,p.name,p.ticker,p.currency,p.quantity,
@@ -59,21 +59,12 @@ export default async function handler(req,res){
   )`);
   const symbolRows=await sql.query('SELECT category_key,display_symbol FROM wealth_category_symbols WHERE user_id=$1',[uid]).catch(e=>{console.warn('[wealth-dashboard:symbols]',e?.message||e);return []});
   const categorySymbols=Object.fromEntries(symbolRows.map(r=>[r.category_key,r.display_symbol]));
-  const key='wealth:dashboard:v5:'+uid;
-  const cached=await cacheGet(key);
-  if(cached){
-   try{
-    const payload=typeof cached==='string'?JSON.parse(cached):cached;
-    if(payload&&Array.isArray(payload.transactions)&&Array.isArray(payload.accounts)&&Array.isArray(payload.positions)&&Array.isArray(payload.interest)&&Array.isArray(payload.interestStatements)){
-     // Return cached data immediately; refresh from Neon asynchronously via waitUntil().
-     scheduleCacheRefresh(uid,'dashboard',async()=>{const fresh=await readDashboard(uid);if(fresh)await cacheSet(key,fresh,120)},120);
-     return json(res,200,{transactions:payload.transactions,snapshots:payload.snapshots||[],template:payload.template||null,accounts:payload.accounts,positions:payload.positions,interest:payload.interest,interestStatements:payload.interestStatements,categorySymbols});
-    }
-   }catch(e){console.warn('[wealth-dashboard:cache-invalid]',e?.message||e)}
-  }
+  // Financial balances must never be served stale from Redis. A stale-while-revalidate
+  // response can temporarily omit a newly added holding (or retain a deleted one),
+  // making category totals disagree with the holdings list. Read the current DB rows
+  // for every dashboard request; keep cache invalidation for other resources separate.
   const payload=await readDashboard(uid);
   if(!payload)return json(res,401,{error:'Sign in required'});
-  await cacheSet(key,payload,120);
   return json(res,200,{transactions:payload.transactions,snapshots:payload.snapshots,template:payload.template,accounts:payload.accounts,positions:payload.positions,interest:payload.interest,interestStatements:payload.interestStatements,categorySymbols});
  }catch(e){console.error('[wealth-dashboard]',e?.message||e);return json(res,500,{error:'Unable to load dashboard.'})}
 }
