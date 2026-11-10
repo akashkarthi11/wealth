@@ -1,4 +1,4 @@
-const APP_BUILD_ID='20261110-angelone-latest-snapshot-2';
+const APP_BUILD_ID='20261110-investment-live-pricing-3';
 (function promptForUpdatedApp(){
   try {
     const key='wealth-ledger:app-build';
@@ -136,12 +136,10 @@ function wealthPosition(){
  const gold=sum(p=>p.category==='INVESTMENT'&&/^(GOLD|DIGITAL_GOLD)$/.test(p.record_type));
  const silver=sum(p=>p.category==='INVESTMENT'&&/^(SILVER|DIGITAL_SILVER)$/.test(p.record_type));
  const pf=sum(p=>p.category==='INVESTMENT'&&/^(EPF|EPS|PROVIDENT_FUND|PF|PPF)$/.test(p.record_type));
- const usStocks=positions.filter(isUs).reduce((n,p)=>n+Number(p.current_value||0),0);
+ const usPositions=positions.filter(isUs);
+ const usStocks=usPositions.reduce((n,p)=>n+Number(p.current_value||0),0);
+ const usPortfolioInr=usPositions.reduce((n,p)=>n+Number(p.market_value_inr??p.metadata?.inr_conversion?.current_value_inr??0),0);
  const liabilities=positions.filter(p=>p.category==='LIABILITY'&&String(p.currency||'INR').trim()==='INR'&&p.current_value!=null).reduce((n,p)=>n+Number(p.current_value||0),0);
- const indmoneyAggregate=positions.find(p=>p.record_type==='US_PORTFOLIO_INR'&&/INDmoney/i.test(String(p.platform_name||'')))||positions.find(p=>p.record_type==='US_PORTFOLIO_INR');
- const indmoneyMeta=indmoneyAggregate?.metadata||{};
- const indmoneyAccountTotalInr=Number(indmoneyMeta.cash_balance?.account_total_inr_reference||indmoneyMeta.fx_reconciled_holdings?.account_total_inr_reference||0);
- const usPortfolioInr=indmoneyAccountTotalInr||eligible.filter(p=>p.record_type==='US_PORTFOLIO_INR').reduce((n,p)=>n+Number(p.current_value||0),0);
  const casa=bank,investments=equity+mutualFunds+gold+silver+fd+pf+usPortfolioInr;
  return {bank,latestAccounts,roarbank:0,atom:latestAccounts.Atom||0,fd,pf,casa,equity,mutualFunds,gold,silver,usStocks,usPortfolioInr,investments,liabilities,total:casa+investments-liabilities,unverifiedAccounts:accounts.filter(a=>a.balance_status!=='verified'||a.current_balance==null).length,missingCategories:{equity:!inrPositions.some(p=>p.category==='INVESTMENT'&&/^(EQUITY|STOCK|INDIAN_EQUITY|ETF)$/.test(p.record_type)),mutualFunds:!inrPositions.some(p=>p.record_type==='MUTUAL_FUND'||p.record_type==='MF'),gold:!inrPositions.some(p=>p.record_type==='GOLD'||p.record_type==='DIGITAL_GOLD'),silver:!inrPositions.some(p=>p.record_type==='SILVER'||p.record_type==='DIGITAL_SILVER'),pf:!inrPositions.some(p=>/^(EPF|EPS|PROVIDENT_FUND|PF|PPF)$/.test(p.record_type))}};
 }
