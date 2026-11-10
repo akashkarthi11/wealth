@@ -12,7 +12,7 @@ async function readPositions(uid){
   FROM wealth_positions p
   LEFT JOIN wealth_investment_assets a ON a.position_id=p.id
   LEFT JOIN wealth_market_prices mp ON mp.asset_id=a.id
-  WHERE p.user_id=$1 ORDER BY p.category,p.platform_name,p.record_type,p.name`;
+  WHERE p.user_id=$1 AND p.record_type NOT LIKE '%_ARCHIVED' ORDER BY p.category,p.platform_name,p.record_type,p.name`;
  try{
   return await sql.query(enrichedQuery,[uid]);
  }catch(error){
@@ -24,7 +24,7 @@ async function readPositions(uid){
    NULL::text AS market_price_source,NULL::timestamptz AS market_price_updated_at,
    NULL::text AS market_price_status,NULL::text AS quantity_unit,
    NULL::numeric AS market_fx_to_inr,NULL::numeric AS market_value_inr
-   FROM wealth_positions WHERE user_id=$1
+   FROM wealth_positions WHERE user_id=$1 AND record_type NOT LIKE '%_ARCHIVED'
    ORDER BY category,platform_name,record_type,name`,[uid]);
  }
 }
@@ -59,7 +59,7 @@ export default async function handler(req,res){
   )`);
   const symbolRows=await sql.query('SELECT category_key,display_symbol FROM wealth_category_symbols WHERE user_id=$1',[uid]).catch(e=>{console.warn('[wealth-dashboard:symbols]',e?.message||e);return []});
   const categorySymbols=Object.fromEntries(symbolRows.map(r=>[r.category_key,r.display_symbol]));
-  const key='wealth:dashboard:v4:'+uid;
+  const key='wealth:dashboard:v5:'+uid;
   const cached=await cacheGet(key);
   if(cached){
    try{
