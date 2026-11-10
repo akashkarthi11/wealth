@@ -420,3 +420,16 @@ button.dashboard-alert-banner:focus-visible{outline:2px solid #8bb5ff;outline-of
 .interest-row>strong{flex:0 0 auto;color:var(--green);font-size:15px}
 .interest-chart{margin-top:14px}
 @media(max-width:700px){.interest-kpis{grid-template-columns:1fr 1fr}.interest-kpis .mini-card:last-child{grid-column:1/-1}.interest-row{gap:8px}.interest-row>strong{font-size:14px}}
+
+/* Interest page: compact, non-duplicated product and daily view */
+.interest-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.interest-active{overflow:hidden}
+.interest-table-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.interest-table{width:100%;min-width:560px;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+.interest-table th{padding:11px 9px;text-align:right;color:var(--muted);font-size:10px;font-weight:700;white-space:nowrap;border-bottom:1px solid var(--line)}
+.interest-table td{padding:13px 9px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+.interest-table th:first-child,.interest-table td:first-child{text-align:left}
+.interest-table td:first-child{font-weight:700;color:#edf4ff}
+.interest-table td:nth-child(2),.interest-table td:nth-child(3){color:var(--green);font-weight:700}
+.interest-footnote{margin:12px 0 0;color:var(--muted);font-size:11px;line-height:1.5}
+@media(max-width:700px){.interest-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.interest-kpis .mini-card{min-width:0}.interest-table{min-width:540px}}
