@@ -15,7 +15,7 @@ CROSS JOIN LATERAL jsonb_array_elements(COALESCE(s.payload->'holdings','[]'::jso
 WHERE s.source_key LIKE 'angelone-equity-holdings-%'
  AND trim(COALESCE(h->>'symbol',''))<>''
  AND COALESCE(h->>'status','active')<>'inactive'
- AND COALESCE(h->>'last_traded_price','') ~ '^[0-9]+(\\.[0-9]+)?$'
+ AND jsonb_typeof(h->'last_traded_price')='number'
  AND (h->>'last_traded_price')::numeric>0
 ON CONFLICT (user_id,symbol) WHERE position_id IS NULL
 DO UPDATE SET display_name=EXCLUDED.display_name,asset_class=EXCLUDED.asset_class,
@@ -48,7 +48,7 @@ JOIN wealth_investment_assets a
 WHERE s.source_key LIKE 'angelone-equity-holdings-%'
  AND trim(COALESCE(h->>'symbol',''))<>''
  AND COALESCE(h->>'status','active')<>'inactive'
- AND COALESCE(h->>'last_traded_price','') ~ '^[0-9]+(\\.[0-9]+)?$'
+ AND jsonb_typeof(h->'last_traded_price')='number'
  AND (h->>'last_traded_price')::numeric>0
  AND NOT EXISTS (
   SELECT 1 FROM wealth_price_history existing
