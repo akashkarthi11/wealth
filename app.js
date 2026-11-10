@@ -134,23 +134,31 @@ function usHoldingInrValue(position){
 }
 function calculateWealthTotals({accountRows=[],positionRows=[],latestEquitySummary=null,now=Date.now()}={}){
  const active=positionRows.filter(p=>!String(p.record_type||'').endsWith('_ARCHIVED'));
+ const isAggregatePosition=p=>p?.metadata?.archived===true||/portfolio aggregate|mutual funds aggregate|equity aggregate/i.test(String(p?.name||''));
+ const valuationRows=active.filter(p=>!isAggregatePosition(p));
  const verifiedAccounts=accountRows.filter(a=>a.balance_status==='verified'&&a.current_balance!=null&&String(a.currency||'INR').trim()==='INR'&&/^(savings|current)$/i.test(String(a.account_type||'')));
  const latestAccounts={};verifiedAccounts.forEach(a=>{const key=accountKey(a.bank_name+' '+a.account_name);latestAccounts[key]=(latestAccounts[key]||0)+Number(a.current_balance||0)});
  const cents=values=>Math.round(values.reduce((n,v)=>n+Math.round((Number(v)||0)*100),0))/100;
  const bank=cents(verifiedAccounts.map(a=>a.current_balance));
  const inrPositions=active.filter(p=>String(p.currency||'INR').trim()==='INR'&&p.current_value!=null);
- const eligible=inrPositions.filter(p=>!(p.record_type==='FIXED_DEPOSIT'&&p.metadata?.reconciliation_status==='pending_reconciliation'));
+ const eligible=valuationRows.filter(p=>String(p.currency||'INR').trim()==='INR'&&p.current_value!=null&&!(p.record_type==='FIXED_DEPOSIT'&&p.metadata?.reconciliation_status==='pending_reconciliation'));
  const sum=predicate=>cents(eligible.filter(predicate).map(p=>p.current_value));
  const fdRows=active.filter(p=>p.category==='INVESTMENT'&&p.record_type==='FIXED_DEPOSIT'&&p.current_value!=null);
  const fd=cents(fdRows.map(p=>p.current_value));
  const pendingFd=cents(fdRows.filter(p=>['pending_reconciliation','balance_reconciliation_required'].includes(p.metadata?.reconciliation_status)).map(p=>p.current_value));
- const ledgerEquity=sum(p=>p.category==='INVESTMENT'&&/^(EQUITY|STOCK|INDIAN_EQUITY|ETF)$/.test(p.record_type));
+ const equityPredicate=p=>p.category==='INVESTMENT'&&/^(EQUITY|STOCK|INDIAN_EQUITY|ETF)$/.test(p.record_type);
+ const equityIndividuals=eligible.filter(p=>equityPredicate(p)&&!isAggregatePosition(p));
+ const equityAggregates=active.filter(p=>String(p.currency||'INR').trim()==='INR'&&p.current_value!=null&&equityPredicate(p)&&isAggregatePosition(p));
+ const ledgerEquity=cents((equityIndividuals.length?equityIndividuals:equityAggregates).map(p=>p.current_value));
  const snapshotEquity=Number(latestEquitySummary?.current_value);
  const equity=ledgerEquity>0?ledgerEquity:(Number.isFinite(snapshotEquity)&&snapshotEquity>0?snapshotEquity:0);
- const mutualFunds=sum(p=>p.category==='INVESTMENT'&&/^(MUTUAL_FUND|MF)$/.test(p.record_type));
+ const mfPredicate=p=>p.category==='INVESTMENT'&&/^(MUTUAL_FUND|MF)$/.test(p.record_type);
+ const mfIndividuals=eligible.filter(p=>mfPredicate(p)&&!isAggregatePosition(p));
+ const mfAggregates=active.filter(p=>String(p.currency||'INR').trim()==='INR'&&p.current_value!=null&&mfPredicate(p)&&isAggregatePosition(p));
+ const mutualFunds=cents((mfIndividuals.length?mfIndividuals:mfAggregates).map(p=>p.current_value));
  const gold=sum(p=>p.category==='INVESTMENT'&&/^(GOLD|DIGITAL_GOLD)$/.test(p.record_type));
  const silver=sum(p=>p.category==='INVESTMENT'&&/^(SILVER|DIGITAL_SILVER)$/.test(p.record_type));
- const pfRows=eligible.filter(p=>p.category==='INVESTMENT'&&/^(EPF|EPS|PROVIDENT_FUND|PF|PPF)$/.test(p.record_type));
+ const pfRows=eligible.filter(p=>p.category==='INVESTMENT'&&!isAggregatePosition(p)&&/^(EPF|EPS|PROVIDENT_FUND|PF|PPF)$/.test(p.record_type));
  const pf=cents(pfRows.map(p=>p.current_value));
  const pfUnverified=cents(pfRows.filter(p=>{
   const displayed=String(p.metadata?.balance_date_displayed||'').slice(0,10);
@@ -158,24 +166,24 @@ function calculateWealthTotals({accountRows=[],positionRows=[],latestEquitySumma
   return !!p.metadata?.warning||!!futureDate;
  }).map(p=>p.current_value));
  const isUs=p=>/^(US_EQUITY|ETF)$/.test(String(p.record_type||''))&&String(p.currency||'').trim()==='USD';
- const usPositions=active.filter(isUs);
+ const usPositions=valuationRows.filter(isUs);
  const usStocks=cents(usPositions.map(p=>p.current_value));
  const usPortfolioInr=cents(usPositions.map(p=>usHoldingInrValue(p)));
  const usVerifiedPortfolioInr=cents(usPositions.filter(p=>p.market_value_inr!=null&&Number.isFinite(Number(p.market_value_inr))).map(p=>p.market_value_inr));
  const usReferenceValue=cents(usPositions.filter(p=>p.market_value_inr==null).map(p=>usHoldingInrValue(p)));
  const usAggregate=active.find(p=>p.record_type==='US_PORTFOLIO_INR'||p.record_type==='US_PORTFOLIO');
  const usCash=Number(usAggregate?.metadata?.cash_balance?.buying_power_inr||0);
- const liabilities=cents(active.filter(p=>p.category==='LIABILITY'&&String(p.currency||'INR').trim()==='INR'&&p.current_value!=null).map(p=>p.current_value));
+ const liabilities=cents(valuationRows.filter(p=>p.category==='LIABILITY'&&String(p.currency||'INR').trim()==='INR'&&p.current_value!=null).map(p=>p.current_value));
  const casa=bank,investments=cents([equity,mutualFunds,gold,silver,fd,pf,usPortfolioInr]);
  const totalAssets=cents([casa,investments,usCash]);
  const unverifiedAssets=cents([pfUnverified,pendingFd,usReferenceValue]);
  const reportedTotal=cents([totalAssets,-liabilities]);
  const total=cents([reportedTotal,-unverifiedAssets]);
  const staleAccounts=verifiedAccounts.filter(a=>{const t=Date.parse(a.balance_as_of||'');return !Number.isFinite(t)||now-t>48*3600*1000});
- const staleValuations=active.filter(p=>['GOLD','SILVER'].includes(p.record_type)&&p.current_value!=null&&(()=>{const t=Date.parse(p.balance_as_of||'');return !Number.isFinite(t)||now-t>48*3600*1000})()).length;
- const liabilitiesPosition=active.find(p=>p.category==='LIABILITY'&&p.record_type==='CREDIT_CARD');
+ const staleValuations=valuationRows.filter(p=>['GOLD','SILVER'].includes(p.record_type)&&p.current_value!=null&&(()=>{const t=Date.parse(p.balance_as_of||'');return !Number.isFinite(t)||now-t>48*3600*1000})()).length;
+ const liabilitiesPosition=valuationRows.find(p=>p.category==='LIABILITY'&&p.record_type==='CREDIT_CARD');
  const liabilitiesStale=!!liabilitiesPosition&&(()=>{const t=Date.parse(liabilitiesPosition.balance_as_of||'');return !Number.isFinite(t)||now-t>48*3600*1000})();
- return {bank,latestAccounts,roarbank:0,atom:latestAccounts.Atom||0,fd,pf,pfUnverified,pendingFd,casa,equity,mutualFunds,gold,silver,usStocks,usPortfolioInr,usVerifiedPortfolioInr,usReferenceValue,usCash,investments,liabilities,totalAssets,unverifiedAssets,reportedTotal,total,staleAccounts:staleAccounts.length,staleValuations,liabilitiesStale,unverifiedAccounts:accountRows.filter(a=>a.balance_status!=='verified'||a.current_balance==null).length,missingCategories:{equity:!inrPositions.some(p=>p.category==='INVESTMENT'&&/^(EQUITY|STOCK|INDIAN_EQUITY|ETF)$/.test(p.record_type)),mutualFunds:!inrPositions.some(p=>p.record_type==='MUTUAL_FUND'||p.record_type==='MF'),gold:!inrPositions.some(p=>p.record_type==='GOLD'||p.record_type==='DIGITAL_GOLD'),silver:!inrPositions.some(p=>p.record_type==='SILVER'||p.record_type==='DIGITAL_SILVER'),pf:!inrPositions.some(p=>/^(EPF|EPS|PROVIDENT_FUND|PF|PPF)$/.test(p.record_type))}};
+ return {bank,latestAccounts,roarbank:0,atom:latestAccounts.Atom||0,fd,pf,pfUnverified,pendingFd,casa,equity,mutualFunds,gold,silver,usStocks,usPortfolioInr,usVerifiedPortfolioInr,usReferenceValue,usCash,investments,liabilities,totalAssets,unverifiedAssets,reportedTotal,total,staleAccounts:staleAccounts.length,staleValuations,liabilitiesStale,unverifiedAccounts:accountRows.filter(a=>a.balance_status!=='verified'||a.current_balance==null).length,missingCategories:{equity:!valuationRows.some(p=>p.category==='INVESTMENT'&&/^(EQUITY|STOCK|INDIAN_EQUITY|ETF)$/.test(p.record_type))&&!equityAggregates.length,mutualFunds:!valuationRows.some(p=>p.record_type==='MUTUAL_FUND'||p.record_type==='MF')&&!mfAggregates.length,gold:!valuationRows.some(p=>p.record_type==='GOLD'||p.record_type==='DIGITAL_GOLD'),silver:!valuationRows.some(p=>p.record_type==='SILVER'||p.record_type==='DIGITAL_SILVER'),pf:!valuationRows.some(p=>/^(EPF|EPS|PROVIDENT_FUND|PF|PPF)$/.test(p.record_type))}};
 }
 function wealthPosition(){return calculateWealthTotals({accountRows:accounts,positionRows:positions,latestEquitySummary:latestAngelOneEquitySummary})}
 let wealthExpanded=null,showCategorySpend=false;
