@@ -98,7 +98,7 @@ async function refreshInstruments(price){
  let instruments;
  try{
   instruments=await sql.query(`SELECT i.id,i.asset_class,i.symbol,i.name,trim(i.currency) AS currency,i.price_source_symbol
-    FROM wealth_instruments i WHERE i.price_source_symbol IS NOT NULL AND EXISTS (SELECT 1 FROM wealth_holdings h WHERE h.instrument_id=i.id)`);
+    FROM wealth_instruments i WHERE i.price_source_symbol IS NOT NULL AND EXISTS (SELECT 1 FROM wealth_holdings h WHERE h.instrument_id=i.id AND h.status='active')`);
  }catch(e){
   if(e?.code==='42P01')return {results:[],skipped:'account hierarchy not migrated'};
   throw e;
