@@ -70,7 +70,7 @@ ON CONFLICT(asset_id) DO UPDATE SET
 
 -- Preserve the old aggregate for audit, but remove it from all live investment totals.
 UPDATE wealth_positions
-SET category='ARCHIVED',
+SET record_type='EQUITY_AGGREGATE_ARCHIVED',
     metadata=metadata||jsonb_build_object('archived_reason','Replaced by individual Angel One equity positions',
       'archived_at',now(),'replacement_snapshot_id',(
        SELECT id FROM wealth_snapshots WHERE source_key LIKE 'angelone-equity-holdings-%'
@@ -80,4 +80,4 @@ SET category='ARCHIVED',
 WHERE user_id=(SELECT id FROM wealth_users WHERE role='admin' ORDER BY created_at LIMIT 1)
   AND source_key LIKE 'angelone-equity-holdings-%'
   AND ticker IS NULL AND name='Angel One equity portfolio aggregate'
-  AND category<>'ARCHIVED';
+  AND record_type<>'EQUITY_AGGREGATE_ARCHIVED';
