@@ -47,6 +47,19 @@ export async function spendingRows(uid, db = sql) {
     GROUP BY 1,2,3 ORDER BY 1,2,3`, [uid]);
 }
 
+function holdingRows(uid, db, withStatus) {
+  return db.query(`SELECT h.account_id, h.instrument_id, i.symbol, i.name, i.asset_class, i.unit, trim(i.currency) AS currency,
+      h.quantity::float8 AS quantity, h.invested_value::float8 AS invested_value,
+      p.price::float8 AS price, p.as_of AS price_as_of, p.source AS price_source,
+      p.fx_to_inr::float8 AS fx_to_inr, p.fetched_at
+    FROM wealth_holdings h
+    JOIN wealth_accounts a ON a.id = h.account_id
+    JOIN wealth_instruments i ON i.id = h.instrument_id
+    LEFT JOIN wealth_v_latest_prices p ON p.instrument_id = h.instrument_id
+    WHERE a.user_id = $1 AND a.status = 'active'${withStatus ? " AND h.status = 'active'" : ''}
+    ORDER BY i.symbol`, [uid]);
+}
+
 // Account hierarchy read model (TSD Phase 5, TR-5.3). Returns raw rows for api/_valuation.js.
 export async function accountHierarchyRows(uid, db = sql) {
   const [accounts, balances, holdings, fx] = await Promise.all([
@@ -58,16 +71,11 @@ export async function accountHierarchyRows(uid, db = sql) {
     db.query(`SELECT b.account_id, b.balance::float8 AS balance, b.as_of, b.status, b.note
       FROM wealth_v_latest_balances b JOIN wealth_accounts a ON a.id = b.account_id
       WHERE a.user_id = $1`, [uid]),
-    db.query(`SELECT h.account_id, h.instrument_id, i.symbol, i.name, i.asset_class, i.unit, trim(i.currency) AS currency,
-        h.quantity::float8 AS quantity, h.invested_value::float8 AS invested_value,
-        p.price::float8 AS price, p.as_of AS price_as_of, p.source AS price_source,
-        p.fx_to_inr::float8 AS fx_to_inr, p.fetched_at
-      FROM wealth_holdings h
-      JOIN wealth_accounts a ON a.id = h.account_id
-      JOIN wealth_instruments i ON i.id = h.instrument_id
-      LEFT JOIN wealth_v_latest_prices p ON p.instrument_id = h.instrument_id
-      WHERE a.user_id = $1 AND a.status = 'active'
-      ORDER BY i.symbol`, [uid]),
+    holdingRows(uid, db, true).catch(e => {
+      // Database without migration 0006 (no holdings.status yet): every holding is still active.
+      if (e?.code === '42703') return holdingRows(uid, db, false);
+      throw e;
+    }),
     db.query(`SELECT fx_to_inr::float8 AS rate, fetched_at AS as_of FROM wealth_instrument_prices
       WHERE fx_to_inr > 0 ORDER BY fetched_at DESC LIMIT 1`),
   ]);

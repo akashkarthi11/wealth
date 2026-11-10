@@ -12,6 +12,9 @@ export default async function handler(req, res) {
         (SELECT count(*)::int FROM wealth_schema_migrations) AS migrations,
         (SELECT max(id) FROM wealth_schema_migrations) AS latest`);
       database = { reachable: true, migrationsApplied: row.migrations, latestMigration: row.latest };
+      // v2 sync problems in the last 24 h (table exists from migration 0006).
+      const issues = await sql.query(`SELECT count(*)::int AS n, max(occurred_at) AS last FROM wealth_sync_issues WHERE occurred_at > now() - interval '24 hours'`).catch(() => null);
+      if (issues) database.syncIssues24h = { count: issues[0].n, last: issues[0].last };
     } catch (e) {
       database = e?.code === '42P01' ? { reachable: true, migrationsApplied: 0 } : { reachable: false, error: 'query failed' };
     }
@@ -22,6 +25,7 @@ export default async function handler(req, res) {
   if (!status.sessionSecret) problems.push('WEALTH_SESSION_SECRET missing or shorter than 32 characters (login fails)');
   if (!status.accessKey) problems.push('WEALTH_ACCESS_KEY missing (registration disabled)');
   if (status.redis === 'invalid (ignored)') problems.push('REDIS_URL is not a redis:// URL (caching and rate limits off)');
+  if (database.syncIssues24h?.count) problems.push(`${database.syncIssues24h.count} legacy→v2 sync issue(s) in the last 24 h (see wealth_sync_issues)`);
   if (status.environment === 'production' && !status.cronSecret) problems.push('CRON_SECRET missing (daily price refresh is rejected)');
   return json(res, problems.some(p => /database|SESSION_SECRET/.test(p)) ? 503 : 200, { ok: problems.length === 0, problems, config: status, database });
 }
