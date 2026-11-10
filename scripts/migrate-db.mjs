@@ -62,6 +62,15 @@ async function migrate(){
   recorded_at timestamptz NOT NULL DEFAULT now(),
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb
  )`);
+ // Existing deployments may have these tables without their original unique constraints.
+ // Add the exact conflict-target indexes required by the idempotent upserts below.
+ await sql.query('CREATE UNIQUE INDEX IF NOT EXISTS wealth_investment_assets_position_id_uidx ON wealth_investment_assets(position_id)');
+ await sql.query('CREATE UNIQUE INDEX IF NOT EXISTS wealth_category_symbols_user_category_uidx ON wealth_category_symbols(user_id,category_key)');
+ // Backfill defaults on legacy versions of these tables that were created before defaults existed.
+ await sql.query('ALTER TABLE wealth_investment_assets ALTER COLUMN id SET DEFAULT gen_random_uuid()');
+ await sql.query("ALTER TABLE wealth_investment_assets ALTER COLUMN created_at SET DEFAULT now()");
+ await sql.query("ALTER TABLE wealth_investment_assets ALTER COLUMN updated_at SET DEFAULT now()");
+ await sql.query("ALTER TABLE wealth_category_symbols ALTER COLUMN updated_at SET DEFAULT now()");
  await sql.query('CREATE INDEX IF NOT EXISTS wealth_investment_assets_user_class_idx ON wealth_investment_assets(user_id,asset_class)');
  await sql.query('CREATE INDEX IF NOT EXISTS wealth_price_history_asset_time_idx ON wealth_price_history(asset_id,recorded_at DESC)');
 

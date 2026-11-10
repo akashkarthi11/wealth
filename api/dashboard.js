@@ -29,17 +29,19 @@ async function readPositions(uid){
  }
 }
 async function readDashboard(uid){
- const [users,transactions,templates,accounts,positions]=await Promise.all([
+ const [users,transactions,templates,accounts,positions,interest,interestStatements]=await Promise.all([
   sql.query('SELECT role FROM wealth_users WHERE id=$1',[uid]),
   sql.query("SELECT t.id,t.kind,t.category,t.description,t.amount,t.account_id,COALESCE(NULLIF(trim(a.account_name || ' ' || COALESCE(a.masked_identifier,'')),''),NULLIF(t.account,''),'Unassigned') AS account,t.occurred_on FROM wealth_transactions t LEFT JOIN wealth_accounts a ON a.user_id=t.user_id AND a.id=t.account_id WHERE t.user_id=$1 ORDER BY t.occurred_on DESC,t.created_at DESC LIMIT 500",[uid]),
   sql.query("SELECT config,version,updated_at FROM wealth_templates WHERE user_id=$1 AND template_key='wealth_classification' LIMIT 1",[uid]),
   sql.query("SELECT id,account_key,bank_name,account_name,account_type,masked_identifier,currency,current_balance,balance_as_of,balance_status FROM wealth_accounts WHERE user_id=$1 ORDER BY bank_name,account_name",[uid]),
-  readPositions(uid)
+  readPositions(uid),
+  sql.query('SELECT id,provider,product_key,account_key,partition_key,accrual_date,principal,annual_rate,day_count,interest_amount,entry_type,revision,source_url,calculation_status,transaction_id,notes FROM wealth_interest_ledger WHERE user_id=$1 ORDER BY accrual_date DESC,created_at DESC LIMIT 500',[uid]).catch(e=>{console.warn('[wealth-dashboard:interest]',e?.message||e);return []}),
+  sql.query('SELECT id,provider,product_key,period_start,period_end,statement_total,currency,statement_label,daily_breakdown,source_type,source_files,captured_at,notes FROM wealth_interest_statements WHERE user_id=$1 ORDER BY period_start DESC,product_key',[uid]).catch(e=>{console.warn('[wealth-dashboard:interest-statements]',e?.message||e);return []})
  ]);
  if(!users.length)return null;
  const role=users[0].role;
  const snapshots=role==='admin'?await sql.query('SELECT id,source_key,source_name,snapshot_date,payload,created_at FROM wealth_snapshots WHERE user_id=$1 ORDER BY snapshot_date DESC,created_at DESC',[uid]):[];
- return {role,transactions,snapshots,template:templates[0]?.config||null,accounts,positions};
+ return {role,transactions,snapshots,template:templates[0]?.config||null,accounts,positions,interest,interestStatements};
 }
 export default async function handler(req,res){
  try{
@@ -57,21 +59,21 @@ export default async function handler(req,res){
   )`);
   const symbolRows=await sql.query('SELECT category_key,display_symbol FROM wealth_category_symbols WHERE user_id=$1',[uid]).catch(e=>{console.warn('[wealth-dashboard:symbols]',e?.message||e);return []});
   const categorySymbols=Object.fromEntries(symbolRows.map(r=>[r.category_key,r.display_symbol]));
-  const key='wealth:dashboard:v2:'+uid;
+  const key='wealth:dashboard:v4:'+uid;
   const cached=await cacheGet(key);
   if(cached){
    try{
     const payload=typeof cached==='string'?JSON.parse(cached):cached;
-    if(payload&&Array.isArray(payload.transactions)&&Array.isArray(payload.accounts)&&Array.isArray(payload.positions)){
+    if(payload&&Array.isArray(payload.transactions)&&Array.isArray(payload.accounts)&&Array.isArray(payload.positions)&&Array.isArray(payload.interest)&&Array.isArray(payload.interestStatements)){
      // Return cached data immediately; refresh from Neon asynchronously via waitUntil().
      scheduleCacheRefresh(uid,'dashboard',async()=>{const fresh=await readDashboard(uid);if(fresh)await cacheSet(key,fresh,120)},120);
-     return json(res,200,{transactions:payload.transactions,snapshots:payload.snapshots||[],template:payload.template||null,accounts:payload.accounts,positions:payload.positions,categorySymbols});
+     return json(res,200,{transactions:payload.transactions,snapshots:payload.snapshots||[],template:payload.template||null,accounts:payload.accounts,positions:payload.positions,interest:payload.interest,interestStatements:payload.interestStatements,categorySymbols});
     }
    }catch(e){console.warn('[wealth-dashboard:cache-invalid]',e?.message||e)}
   }
   const payload=await readDashboard(uid);
   if(!payload)return json(res,401,{error:'Sign in required'});
   await cacheSet(key,payload,120);
-  return json(res,200,{transactions:payload.transactions,snapshots:payload.snapshots,template:payload.template,accounts:payload.accounts,positions:payload.positions,categorySymbols});
+  return json(res,200,{transactions:payload.transactions,snapshots:payload.snapshots,template:payload.template,accounts:payload.accounts,positions:payload.positions,interest:payload.interest,interestStatements:payload.interestStatements,categorySymbols});
  }catch(e){console.error('[wealth-dashboard]',e?.message||e);return json(res,500,{error:'Unable to load dashboard.'})}
 }
