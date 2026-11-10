@@ -1,4 +1,5 @@
 import { neon } from '@neondatabase/serverless';
+import { readFile } from 'node:fs/promises';
 
 if(process.env.VERCEL&&process.env.VERCEL_ENV!=='production'){
  console.log('[db-migrate] Preview deployment; production database migrations skipped.');
@@ -11,6 +12,22 @@ if(!databaseUrl){
  process.exit(0);
 }
 const sql=neon(databaseUrl);
+
+async function runRecurringObligationsMigration(){
+ const url=new URL('./migrations/2026-11-10-recurring-obligations.sql',import.meta.url);
+ const source=await readFile(url,'utf8');
+ // The migration contains only ordinary SQL statements; execute one statement per Neon request.
+ // It is additive and idempotent, so a partial deployment can safely retry it.
+ const statements=source
+  .replace(/^\s*--.*$/gm,'')
+  .replace(/^\s*BEGIN;\s*$/im,'')
+  .replace(/^\s*COMMIT;\s*$/im,'')
+  .split(';')
+  .map(statement=>statement.trim())
+  .filter(Boolean);
+ for(const statement of statements) await sql.query(statement);
+ console.log('[db-migrate] Recurring obligations migration applied:',statements.length,'statements');
+}
 
 async function migrate(){
  // Idempotent schema migration: safe to run on every deployment and on both preview/production DBs.
@@ -100,6 +117,9 @@ async function migrate(){
    quantity_unit=EXCLUDED.quantity_unit,price_currency=EXCLUDED.price_currency,
    price_source=EXCLUDED.price_source,price_source_symbol=EXCLUDED.price_source_symbol,
    updated_at=now()`);
+
+ // Provision the unified recurring-obligation model after the legacy source tables exist.
+ await runRecurringObligationsMigration();
 
  // Ensure each account has its default category icon. User-customized symbols are preserved.
  await sql.query(`INSERT INTO wealth_category_symbols(user_id,category_key,display_symbol)

@@ -525,3 +525,13 @@ button.dashboard-alert-banner:focus-visible{outline:2px solid #8bb5ff;outline-of
 .interest-source-name i{width:8px;height:8px;border-radius:50%;background:#70dfbd;flex:0 0 auto}
 .interest-source-name.atom i{background:#87aaff}.interest-source-name.fd i{background:#e6b86f}
 @media(max-width:520px){.interest-source{padding:14px;border-radius:16px}.interest-source-head h3{font-size:17px}.interest-source-total strong{font-size:18px}.interest-source-table th,.interest-source-table td{padding:11px 8px}.interest-source-table{font-size:10px}}
+
+
+/* Dashboard: daily interest chart */
+.interest-by-day .interest-source-head{align-items:center}
+.interest-day-chart-wrap{width:100%;overflow:hidden;margin:8px 0 4px;padding:10px 4px 0;border:1px solid #2a3e57;border-radius:14px;background:#0d1a2a}
+.interest-day-chart{display:block;width:100%;height:auto;min-height:190px}
+.interest-day-chart-legend{display:flex;flex-wrap:wrap;gap:12px 18px;margin:13px 2px 2px;color:#b7c7dc;font-size:11px}
+.interest-day-chart-legend span{display:inline-flex;align-items:center;gap:7px}
+.interest-day-chart-legend i{display:inline-block;width:8px;height:8px;border-radius:50%}
+@media(max-width:520px){.interest-day-chart-wrap{padding:7px 2px 0}.interest-day-chart{min-height:170px}.interest-day-chart-legend{font-size:10px;gap:8px 13px}}
