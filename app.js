@@ -123,7 +123,7 @@ function loadSourceSnapshotSections(snapshots){
 
 function latestCashAccountBalances(){const accounts={};historicalCashBalances().forEach(day=>Object.entries(day.accounts).forEach(([key,value])=>{accounts[key]=value}));delete accounts['Fixed deposits'];return accounts}
 function wealthPosition(){
- const verifiedAccounts=accounts.filter(a=>a.balance_status==='verified'&&a.current_balance!=null&&String(a.currency||'INR').trim()==='INR');
+ const verifiedAccounts=accounts.filter(a=>a.balance_status==='verified'&&a.current_balance!=null&&String(a.currency||'INR').trim()==='INR'&&/^(savings|current)$/i.test(String(a.account_type||'')));
  const latestAccounts={};verifiedAccounts.forEach(a=>{const key=accountKey(a.bank_name+' '+a.account_name);latestAccounts[key]=(latestAccounts[key]||0)+Number(a.current_balance||0)});
  const bank=verifiedAccounts.reduce((n,a)=>n+Number(a.current_balance||0),0);
  const inrPositions=positions.filter(p=>String(p.currency||'INR').trim()==='INR'&&p.current_value!=null);
