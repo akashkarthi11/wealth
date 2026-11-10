@@ -131,7 +131,7 @@ function wealthPosition(){
  const eligible=inrPositions.filter(p=>!(p.record_type==='FIXED_DEPOSIT'&&p.metadata?.reconciliation_status==='pending_reconciliation'));
  const sum=(predicate)=>eligible.filter(predicate).reduce((n,p)=>n+Number(p.current_value||0),0);
  const fd=sum(p=>p.record_type==='FIXED_DEPOSIT');
- const ledgerEquity=sum(p=>p.category==='INVESTMENT'&&/^(EQUITY|STOCK|INDIAN_EQUITY|ETF)$/.test(p.record_type));const snapshotEquity=Number(latestAngelOneEquitySummary?.current_value);const equity=Number.isFinite(snapshotEquity)&&snapshotEquity>0?snapshotEquity:ledgerEquity;
+ const ledgerEquity=sum(p=>p.category==='INVESTMENT'&&/^(EQUITY|STOCK|INDIAN_EQUITY|ETF)$/.test(p.record_type));const snapshotEquity=Number(latestAngelOneEquitySummary?.current_value);const equity=ledgerEquity>0?ledgerEquity:(Number.isFinite(snapshotEquity)&&snapshotEquity>0?snapshotEquity:0);
  const mutualFunds=sum(p=>p.category==='INVESTMENT'&&/^(MUTUAL_FUND|MF)$/.test(p.record_type));
  const gold=sum(p=>p.category==='INVESTMENT'&&/^(GOLD|DIGITAL_GOLD)$/.test(p.record_type));
  const silver=sum(p=>p.category==='INVESTMENT'&&/^(SILVER|DIGITAL_SILVER)$/.test(p.record_type));
