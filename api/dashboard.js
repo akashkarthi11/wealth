@@ -1,35 +1,7 @@
 import {sql,schema,json,sessionUser,dataModel} from './_lib.js';
-import {pageTransactions,spendingRows,accountHierarchyRows} from './_queries.js';
+import {pageTransactions,spendingRows,accountHierarchyRows,legacyPositionRows} from './_queries.js';
 import {valuePortfolio} from './_valuation.js';
 
-async function readPositions(uid){
- const enrichedQuery=`SELECT p.id,p.category,p.institution_name,p.platform_name,p.record_type,p.name,p.ticker,p.currency,p.quantity,
-  CASE WHEN mp.status='fresh' AND mp.fetched_at>now()-interval '36 hours' AND a.asset_class IN ('indian_equity','indian_mutual_fund','us_equity','us_etf') AND mp.currency=p.currency AND p.quantity IS NOT NULL THEN p.quantity*mp.unit_price ELSE p.current_value END AS current_value,
-  p.invested_value,p.balance_as_of,p.source_key,p.metadata,mp.unit_price AS market_unit_price,mp.currency AS market_price_currency,
-  mp.source AS market_price_source,mp.fetched_at AS market_price_updated_at,mp.status AS market_price_status,a.quantity_unit,
-  (mp.metadata->>'fx_to_inr')::numeric AS market_fx_to_inr,
-  CASE WHEN mp.status='fresh' AND mp.fetched_at>now()-interval '36 hours' AND p.quantity IS NOT NULL
-   THEN CASE WHEN mp.currency='USD' THEN p.quantity*mp.unit_price*NULLIF(CASE WHEN NULLIF(mp.metadata->>'fx_to_inr','')::numeric>0 AND NULLIF(mp.metadata->>'fx_as_of','')::timestamptz>now()-interval '36 hours' THEN NULLIF(mp.metadata->>'fx_to_inr','')::numeric ELSE NULL END,0)
-             WHEN mp.currency='INR' THEN p.quantity*mp.unit_price ELSE NULL END ELSE NULL END AS market_value_inr
-  FROM wealth_positions p
-  LEFT JOIN wealth_investment_assets a ON a.position_id=p.id
-  LEFT JOIN wealth_market_prices mp ON mp.asset_id=a.id
-  WHERE p.user_id=$1 AND p.record_type NOT LIKE '%_ARCHIVED' ORDER BY p.category,p.platform_name,p.record_type,p.name`;
- try{
-  return await sql.query(enrichedQuery,[uid]);
- }catch(error){
-  console.error('[wealth-dashboard:priced-positions]',error?.message||error);
-  // A missing pricing table must never hide the user's saved positions or turn totals into zero.
-  return await sql.query(`SELECT id,category,institution_name,platform_name,record_type,name,ticker,currency,quantity,
-   current_value,invested_value,balance_as_of,source_key,metadata,
-   NULL::numeric AS market_unit_price,NULL::char(3) AS market_price_currency,
-   NULL::text AS market_price_source,NULL::timestamptz AS market_price_updated_at,
-   NULL::text AS market_price_status,NULL::text AS quantity_unit,
-   NULL::numeric AS market_fx_to_inr,NULL::numeric AS market_value_inr
-   FROM wealth_positions WHERE user_id=$1 AND record_type NOT LIKE '%_ARCHIVED'
-   ORDER BY category,platform_name,record_type,name`,[uid]);
- }
-}
 async function readDashboard(uid){
  const [users,page,spending,templates,accounts,positions,interest,interestStatements]=await Promise.all([
   sql.query('SELECT role FROM wealth_users WHERE id=$1',[uid]),
@@ -37,7 +9,7 @@ async function readDashboard(uid){
   spendingRows(uid),
   sql.query("SELECT config,version,updated_at FROM wealth_templates WHERE user_id=$1 AND template_key='wealth_classification' LIMIT 1",[uid]),
   sql.query("SELECT id,account_key,bank_name,account_name,account_type,masked_identifier,currency,current_balance,balance_as_of,balance_status FROM wealth_accounts WHERE user_id=$1 ORDER BY bank_name,account_name",[uid]),
-  readPositions(uid),
+  legacyPositionRows(uid),
   sql.query('SELECT id,provider,product_key,account_key,partition_key,accrual_date,principal,annual_rate,day_count,interest_amount,entry_type,revision,source_url,calculation_status,transaction_id,notes FROM wealth_interest_ledger WHERE user_id=$1 ORDER BY accrual_date DESC,created_at DESC LIMIT 500',[uid]).catch(e=>{console.warn('[wealth-dashboard:interest]',e?.message||e);return []}),
   sql.query('SELECT id,provider,product_key,period_start,period_end,statement_total,currency,statement_label,daily_breakdown,source_type,source_files,captured_at,notes FROM wealth_interest_statements WHERE user_id=$1 ORDER BY period_start DESC,product_key',[uid]).catch(e=>{console.warn('[wealth-dashboard:interest-statements]',e?.message||e);return []})
  ]);

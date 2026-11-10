@@ -1,5 +1,6 @@
 import {sql,schema,json,sessionUser,body} from './_lib.js';
 import {timingSafeEqual} from 'node:crypto';
+import {startJob,finishJob} from './_jobs.js';
 
 function validIngestSecret(req){
  const expected=process.env.WEALTH_ADVISOR_INGEST_SECRET||'';
@@ -49,10 +50,14 @@ export default async function handler(req,res){
    if(runAt&&(!Number.isFinite(Date.parse(runAt))))return json(res,400,{error:'run_at must be a valid ISO date.'});
    const admins=await sql.query("SELECT id FROM wealth_users WHERE role='admin' LIMIT 1");
    if(!admins.length)return json(res,409,{error:'No admin account is configured for advisor reports.'});
+   // (user_id, run_at) is unique since migration 0002: posting the same run twice is not an error.
    const saved=await sql.query(
-    'INSERT INTO wealth_stock_advisor_reports (user_id,run_at,report_text,report_json) VALUES ($1,COALESCE($2::timestamptz,now()),$3,$4::jsonb) RETURNING id,run_at',
+    'INSERT INTO wealth_stock_advisor_reports (user_id,run_at,report_text,report_json) VALUES ($1,COALESCE($2::timestamptz,now()),$3,$4::jsonb) ON CONFLICT DO NOTHING RETURNING id,run_at',
     [admins[0].id,runAt,reportText,JSON.stringify(reportJson)]
    );
+   const run=await startJob('advisor-ingest');
+   await finishJob(run,'succeeded',{saved:saved.length===1,runAt:saved[0]?.run_at||runAt});
+   if(!saved.length)return json(res,200,{saved:false,alreadySaved:true});
    return json(res,201,{saved:true,report:saved[0]});
   }
   if(req.method!=='GET')return json(res,405,{error:'Method not allowed'});
