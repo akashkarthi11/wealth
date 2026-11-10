@@ -87,6 +87,6 @@ for (const i of indexes) {
 }
 out.push('\nCOMMIT;\n');
 
-const target = new URL('./schema.sql', import.meta.url);
+const target = process.argv[3] || new URL('./schema.sql', import.meta.url);
 writeFileSync(target, out.join('\n'));
 console.log(`schema.sql written: ${tables.length} tables, ${constraints.length} constraints, ${indexes.length} extra indexes, ${sequences.length} sequences.`);
