@@ -1,5 +1,9 @@
 import { neon } from '@neondatabase/serverless';
 
+if(process.env.VERCEL&&process.env.VERCEL_ENV!=='production'){
+ console.log('[db-migrate] Preview deployment; production database migrations skipped.');
+ process.exit(0);
+}
 const databaseUrl=process.env.POSTGRES_URL||process.env.WEALTH_DATABASE_URL||process.env.DATABASE_URL;
 if(!databaseUrl){
  if(process.env.VERCEL)throw new Error('Database URL is required to run production schema migrations');
