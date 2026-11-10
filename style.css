@@ -410,3 +410,13 @@ button.dashboard-alert-banner:focus-visible{outline:2px solid #8bb5ff;outline-of
 .investment-summary-expanded .investment-holdings small,.investment-summary-expanded .investment-us-row small{display:block;color:var(--muted);font-size:10px;margin-top:4px;line-height:1.4}
 .investment-summary-expanded .investment-note{font-size:10px;line-height:1.5}
 @media(max-width:390px){.investment-summary-expanded{padding-left:0}.investment-summary-expanded>.investment-category{padding:9px}.investment-summary-expanded .investment-category-head>strong{font-size:11px}}
+
+
+/* Interest ledger */
+.interest-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
+.interest-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 2px;border-top:1px solid var(--line)}
+.interest-row b{display:block;color:#edf4ff;font-size:13px}
+.interest-row small{display:block;margin-top:5px;color:var(--muted);font-size:10px;line-height:1.5}
+.interest-row>strong{flex:0 0 auto;color:var(--green);font-size:15px}
+.interest-chart{margin-top:14px}
+@media(max-width:700px){.interest-kpis{grid-template-columns:1fr 1fr}.interest-kpis .mini-card:last-child{grid-column:1/-1}.interest-row{gap:8px}.interest-row>strong{font-size:14px}}
