@@ -48,6 +48,7 @@ Each module fix note should include:
 | Date | Module | Issue | Canonical fix note | Status |
 |---|---|---|---|---|
 | 2026-11-10 | Dashboard / Investments | US holding INR totals and row values used different fallback rules; recurrence confirmed in Development screenshot | [US holdings total mismatch](modules/dashboard/2026-11-10-us-holdings-total-mismatch.md) | Unified valuation committed on fix branch; validation and Development deployment pending approval |
+| 2026-11-10 | Dashboard / Investments / Accounts / Liabilities | Future-dated EPF, pending FD, saved-FX US holdings and active portfolio aggregates distorted confirmed net worth | [Net worth valuation reconciliation](modules/dashboard/2026-11-10-net-worth-valuation-reconciliation.md) | Code and regression tests committed on feature branch; Development preview verification pending |
 
 ## Reliability project
 
