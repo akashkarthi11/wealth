@@ -21,15 +21,16 @@ export default async function handler(req,res){
   const assets=await sql.query(`SELECT a.id,a.user_id,a.price_currency,a.price_source_symbol,a.quantity_unit
     FROM wealth_investment_assets a WHERE a.pricing_status IN ('active','pending','stale')
     AND a.price_source_symbol IS NOT NULL`);
-  const results=[];
-  for(const a of assets){
+  const needsFx=assets.some(a=>a.price_source_symbol==='GC=F'||a.price_source_symbol==='SI=F');
+  const fxPromise=needsFx?quote('INR=X'):Promise.resolve(null);
+  const fx=await fxPromise;
+  const results=await Promise.all(assets.map(async a=>{
    try{
     const q=await quote(a.price_source_symbol);
     let unitPrice=q.price;
     let asOf=q.asOf;
-    // Gold and silver futures are quoted in USD per troy ounce; convert to INR per gram.
     if(a.price_source_symbol==='GC=F'||a.price_source_symbol==='SI=F'){
-     const fx=await quote('INR=X');
+     if(!fx)throw new Error('USD/INR reference rate unavailable');
      unitPrice=q.price*fx.price/TROY_OUNCE_GRAMS;
      if(fx.asOf<asOf)asOf=fx.asOf;
     }
@@ -43,12 +44,12 @@ export default async function handler(req,res){
       VALUES($1,$2,$3,$4,'Yahoo Finance',$5,$6::jsonb)`,
       [a.id,a.user_id,unitPrice,currency,asOf.toISOString(),JSON.stringify({provider_symbol:a.price_source_symbol,unit:a.quantity_unit})]);
     await sql.query("UPDATE wealth_investment_assets SET pricing_status='active',updated_at=now() WHERE id=$1",[a.id]);
-    results.push({asset_id:a.id,status:'updated',unit_price:unitPrice,currency});
+    return {asset_id:a.id,status:'updated',unit_price:unitPrice,currency};
    }catch(e){
     await sql.query("UPDATE wealth_market_prices SET status='stale' WHERE asset_id=$1",[a.id]).catch(()=>{});
-    results.push({asset_id:a.id,status:'error',message:String(e?.message||e)});
+    return {asset_id:a.id,status:'error',message:String(e?.message||e)};
    }
-  }
+  }));
   return json(res,200,{updated:results.filter(x=>x.status==='updated').length,failed:results.filter(x=>x.status==='error').length,results});
  }catch(e){console.error('[market-price-refresh]',e?.message||e);return json(res,500,{error:'Market price refresh failed'})}
 }
