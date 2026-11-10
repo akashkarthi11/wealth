@@ -10,7 +10,13 @@
 
 export const FRESH_PRICE_MS = 36 * 3600 * 1000;
 export const STALE_BALANCE_MS = 48 * 3600 * 1000;
-export const LIVE_SOURCES = new Set(['Yahoo Finance', 'MFAPI.in']);
+// Sources that publish market quotes (written by the daily refresh job and the hourly operations task).
+// Any other source (broker snapshots, screenshots, seeded values) is valued but flagged 'manual'.
+export const LIVE_SOURCES = new Set([
+  'Yahoo Finance', 'MFAPI.in', 'AMFI NAV',
+  'NSE', 'BSE', 'StockAnalysis.com real-time quote', 'ChartExchange real-time quote',
+  'IBJA AM benchmark 999', 'IBJA PM benchmark 999',
+]);
 
 const paise = n => Math.round(Number(n) * 100);
 const rupees = p => p / 100;

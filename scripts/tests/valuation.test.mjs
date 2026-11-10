@@ -81,3 +81,10 @@ test('November 10 regression: five US holdings, one without a price, one stale â
   assert.equal(r.totals.investments, included, 'category total equals the account total');
   assert.deepEqual(r.totals.excluded.map(e => e.symbol), ['BKSY']);
 });
+
+test('hourly-task quote sources count as live prices; broker snapshots stay manual', () => {
+  for (const source of ['StockAnalysis.com real-time quote', 'ChartExchange real-time quote', 'IBJA AM benchmark 999', 'NSE', 'AMFI NAV'])
+    assert.equal(valueHolding(hold('a', 'LT', 1, 10, { price_source: source }), { now: NOW }).valuationStatus, 'fresh', source);
+  for (const source of ['Angel One initial LTP', 'Angel One historical snapshot', 'Paytm redemption rate'])
+    assert.equal(valueHolding(hold('a', 'LT', 1, 10, { price_source: source }), { now: NOW }).valuationStatus, 'manual', source);
+});
