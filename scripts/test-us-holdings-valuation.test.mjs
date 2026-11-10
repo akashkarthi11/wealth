@@ -56,8 +56,10 @@ test('confirmed net worth excludes unverified retirement, pending FD and referen
       { bank_name: 'Slice', account_name: 'Card', account_type: 'credit_card', currency: 'INR', balance_status: 'unknown', current_balance: null }
     ],
     positionRows: [
-      { category: 'INVESTMENT', record_type: 'EQUITY', currency: 'INR', current_value: 1000 },
-      { category: 'INVESTMENT', record_type: 'MUTUAL_FUND', currency: 'INR', current_value: 100 },
+      { category: 'INVESTMENT', record_type: 'EQUITY', name: 'Reliance', currency: 'INR', current_value: 1000 },
+      { category: 'INVESTMENT', record_type: 'EQUITY', name: 'Angel One equity portfolio aggregate', currency: 'INR', current_value: 99000 },
+      { category: 'INVESTMENT', record_type: 'MUTUAL_FUND', name: 'Nippon India Large Cap Fund', currency: 'INR', current_value: 100 },
+      { category: 'INVESTMENT', record_type: 'MUTUAL_FUND', name: 'Angel One mutual funds aggregate', currency: 'INR', current_value: 88000 },
       { category: 'INVESTMENT', record_type: 'GOLD', currency: 'INR', current_value: 200 },
       { category: 'INVESTMENT', record_type: 'SILVER', currency: 'INR', current_value: 50 },
       { category: 'INVESTMENT', record_type: 'FIXED_DEPOSIT', currency: 'INR', current_value: 300, metadata: {} },
