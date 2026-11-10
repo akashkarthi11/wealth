@@ -8,6 +8,14 @@ import { join } from 'node:path';
 
 export const MIGRATION_FILE = /^(\d{4})_[a-z0-9_]+\.sql$/;
 const TOP_LEVEL_TX = /^\s*(BEGIN|COMMIT|ROLLBACK)\s*;\s*$/im;
+// Owner rule: migrations change structure and add or link data; they never delete data.
+// Dropping indexes, constraints or triggers is allowed (structure, not data).
+const DESTRUCTIVE = /\bDELETE\s+FROM\b|\bTRUNCATE\b|\bDROP\s+(TABLE|COLUMN|SCHEMA|VIEW|MATERIALIZED\s+VIEW|DATABASE|SEQUENCE)\b|\bALTER\s+TABLE\b[^;]*\bDROP\s+(COLUMN\s+)?(?!CONSTRAINT\b|DEFAULT\b|NOT\s+NULL\b|IDENTITY\b|EXPRESSION\b)[a-z_"]/i;
+export function findDestructiveSql(sql) {
+  const code = sql.replace(/--[^\n]*/g, '').replace(/'(?:[^']|'')*'/g, "''");
+  const m = code.match(DESTRUCTIVE);
+  return m ? m[0].replace(/\s+/g, ' ').slice(0, 60) : null;
+}
 const LOCK_KEY = 727274001; // pg advisory lock: one migration run at a time
 
 export function loadMigrations(dir) {
@@ -20,6 +28,8 @@ export function loadMigrations(dir) {
     seen.add(number);
     const sql = readFileSync(join(dir, file), 'utf8');
     if (TOP_LEVEL_TX.test(sql)) throw new Error(`${file} must not contain BEGIN/COMMIT/ROLLBACK; the runner wraps each file in a transaction`);
+    const destructive = findDestructiveSql(sql);
+    if (destructive) throw new Error(`${file} would delete data ("${destructive}"); migrations must never delete data`);
     const checksum = createHash('sha256').update(sql.replace(/\r\n/g, '\n')).digest('hex');
     return { id, file, sql, checksum };
   });

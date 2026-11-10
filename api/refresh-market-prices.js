@@ -127,7 +127,6 @@ export default async function handler(req,res){
   const price=makePricer(fx);
   const legacy=await refreshLegacy(price);
   const v2=await refreshInstruments(price);
-  const retention=await pruneAdvisorReports().catch(e=>({error:String(e?.message||e)}));
   // v2 prices are shared, so every user's cached views may change.
   const affected=new Set(legacy.users);
   if(v2.results.some(r=>r.status==='updated'))(await sql.query('SELECT id FROM wealth_users')).forEach(u=>affected.add(u.id));
@@ -137,20 +136,6 @@ export default async function handler(req,res){
    fx:fx?{rate:fx.price,asOf:fx.asOf.toISOString()}:null,
    updated:count(legacy.results,'updated'),failed:count(legacy.results,'error'),results:legacy.results,
    instruments:{updated:count(v2.results,'updated'),failed:count(v2.results,'error'),skipped:v2.skipped||null,results:v2.results},
-   retention,
   });
  }catch(e){console.error('[market-price-refresh]',e?.message||e);return json(res,500,{error:'Market price refresh failed'})}
-}
-
-// Stock Advisor retention (TSD TR-6.5): keep every report for N days, then the latest per day.
-// Disabled unless WEALTH_ADVISOR_RETENTION_DAYS is set (it deletes rows).
-async function pruneAdvisorReports(){
- const days=Number(process.env.WEALTH_ADVISOR_RETENTION_DAYS||0);
- if(!(days>=7))return {enabled:false};
- const rows=await sql.query(`DELETE FROM wealth_stock_advisor_reports r
-   WHERE r.run_at < now() - make_interval(days => $1)
-     AND EXISTS (SELECT 1 FROM wealth_stock_advisor_reports k
-                 WHERE k.user_id=r.user_id AND date_trunc('day',k.run_at)=date_trunc('day',r.run_at) AND k.run_at>r.run_at)
-   RETURNING r.id`,[days]);
- return {enabled:true,keepDays:days,deleted:rows.length};
 }

@@ -8,7 +8,7 @@
 |---|---|
 | Document | TSD — Claude Plan 1 |
 | Project | Wealth Ledger (`akashkarthi11/wealth`), Vercel project `wealth` |
-| Version | 1.1 |
+| Version | 1.2 |
 | Date | 2026-11-10 |
 | Author | Claude (Claude Code), prepared for the project owner |
 | Status | **Implemented on `claude-dev`** (see §19). Not deployed; no Neon database changed. Awaiting a Neon-branch run and approvals |
@@ -21,6 +21,7 @@
 |---|---|---|
 | 1.0 | 2026-11-10 | First draft from a full read of code, docs and the Preview Neon database |
 | 1.1 | 2026-11-10 | Implementation status added (§19); OpenAPI unchanged except `/api/auth` uses `action=reset` |
+| 1.2 | 2026-11-10 | Owner rule: no data deletion. TR-6.4/6.5/6.6 withdrawn; repair made non-destructive; runner guard added |
 
 ### Approvals
 
@@ -274,9 +275,11 @@ Requirement IDs (`TR-x.y`) are referenced by tests in §12.
 | TR-6.1 | Single obligations table; mandate details in `wealth_mandates (obligation_id PK/FK)`; legacy bill/subscription tables exposed as views during transition |
 | TR-6.2 | `PATCH /api/planned-bills` updates the matching payment occurrence in the same transaction |
 | TR-6.3 | `wealth_interest_products` linked to accounts; ledger, statements, rates reference `product_id` |
-| TR-6.4 | Drop `wealth_transactions.account` text after D5 |
-| TR-6.5 | Retention: Stock Advisor reports kept 30 days, then one per day |
-| TR-6.6 | Legacy tables dropped only after separate approval |
+| TR-6.4 | ~~Drop `wealth_transactions.account` text~~ — **withdrawn (v1.2): no data is deleted.** The column stays; the app reads the account through `account_id` |
+| TR-6.5 | ~~Retention: delete old Stock Advisor reports~~ — **withdrawn (v1.2): no data is deleted** |
+| TR-6.6 | ~~Drop legacy tables~~ — **withdrawn (v1.2): legacy tables are kept** read-only for audit; the app stops reading them after the v2 switch |
+
+> **Data-retention rule (owner, v1.2): migrations and repairs never delete data.** No `DELETE`, `TRUNCATE`, `DROP TABLE/COLUMN/VIEW`. Superseded rows are marked (e.g. `status = 'merged'`) and overwritten values are kept in notes. Enforced by `scripts/db/migrations-lib.mjs` (the runner refuses destructive files) and `scripts/tests/no-data-deletion.test.mjs` (also checks every repair script).
 
 ---
 
@@ -776,17 +779,18 @@ Branch `claude-dev`. Nothing deployed; no Neon database written. "Verified on co
 | 2 | TR-2.1 – 2.5 Versioned migrations | Done | `eae5131` | `migrations.test.mjs`; dry run on Preview |
 | 3 | TR-3.1 – 3.6 Correctness fixes | Done | `a7ed523` | `transactions.test.mjs`; read-only run on Preview (594/594) |
 | 4 | TR-4.1 – 4.3 Keys (0002) | Done | `83b00ff` | `keys.test.mjs`; verified on copy |
-| 4 | TR-4.4 Stage-2 data repair | Script ready (`scripts/db/repairs/`) — run after approval | `eae5131` | verified on copy |
-| 4 | TR-4.5 D3 / D4 decisions | **Open** — owner decision | — | — |
+| 4 | TR-4.4 Stage-2 data repair | Script ready (`scripts/db/repairs/`) — updates and links only, no deletes; old values kept in notes; run after approval | v1.2 | verified on copy: row counts unchanged |
+| 4 | TR-4.5 D3 / D4 decisions | **Resolved by rule (v1.2):** nothing deleted. FD account row is marked `merged`; identical transaction pairs stay | — | — |
 | 5 | TR-5.1 Schema + backfill (0003, 0004) | Done | `49f9704` | `hierarchy.test.mjs`; verified on copy |
 | 5 | TR-5.2 Totals vs v1 | Done on copy: all equal except US holdings (missing FX until refresh) | — | §19 note |
 | 5 | TR-5.3 – 5.7 API, refresh, UI, add FD, FX rule | Done, behind `WEALTH_DATA_MODEL` (default v1) and owner `?model=v2` | `49f9704` | `valuation`, `pricing`, `ui-v2` tests |
 | 6 | TR-6.1 Single obligations table | Partly: real FKs + triggers (0005). Views over legacy tables **not done** (external writers unknown) | `6d28265` | `obligations-interest.test.mjs` |
 | 6 | TR-6.2 Paid bill updates occurrence | Done | `6d28265` | same |
 | 6 | TR-6.3 Interest products | Done additively (product_id, account_id, triggers) | `6d28265` | same; verified on copy |
-| 6 | TR-6.4 Drop `transactions.account` | **Not done** — needs D5 and approval | — | — |
-| 6 | TR-6.5 Advisor retention | Done, off unless `WEALTH_ADVISOR_RETENTION_DAYS` is set | `49f9704` | — |
-| 6 | TR-6.6 Drop legacy tables | **Not done** — separate approval | — | — |
+| 6 | TR-6.4 Drop `transactions.account` | **Withdrawn** — no data deletion | — | — |
+| 6 | TR-6.5 Advisor retention | **Withdrawn and removed** from the refresh job — no data deletion | v1.2 | — |
+| 6 | TR-6.6 Drop legacy tables | **Withdrawn** — kept read-only for audit | — | — |
+| — | No-data-deletion guard | Done: runner refuses `DELETE`/`TRUNCATE`/`DROP TABLE·COLUMN·VIEW`; test covers migrations and repairs | v1.2 | `no-data-deletion.test.mjs` |
 | — | CI on PRs to main and development | **Ready, not active**: file at `scripts/ci/github-actions-ci.yml`; copy to `.github/workflows/ci.yml` with a GitHub login that has the `workflow` scope | `6d28265` | — |
 
 **v2 vs v1 on the copy of Preview data:** CASA ₹1,13,383.53 (equal), liabilities ₹30,634.21 (equal), investments ₹3,72,726.35 vs ₹3,78,072.85. The ₹5,346.50 difference is the US holdings, which v2 excludes as `missing_fx` because the stored US prices have no USD/INR rate; the next refresh run stores one. INDmoney cash ($10.02) is now recorded on its account.

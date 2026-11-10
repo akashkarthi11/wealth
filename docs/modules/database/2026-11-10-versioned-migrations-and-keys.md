@@ -24,7 +24,8 @@
 | `0003_account_hierarchy` | Subtypes (CASA / INVESTMENT / LIABILITY), shared instruments and prices, holdings, balances, views |
 | `0004_account_hierarchy_backfill` | Copies legacy data; aborts if anything is not carried over; card outstanding → card account; INDmoney cash → INDmoney account; duplicate FD account marked `merged` |
 | `0005_link_obligations_and_interest` | `planned_bills.obligation_id`, `payment_occurrences.planned_bill_id`, `wealth_interest_products` + `product_id`, `interest_ledger.account_id`; triggers keep external writers linked |
-| `scripts/db/repairs/` | Manual, approved data repairs: stage-2 clean-up, mark seeded prices `manual` |
+| `scripts/db/repairs/` | Manual, approved data repairs: stage-2 re-link (old values kept in notes), close duplicate rate, mark seeded prices `manual`. No deletes |
+| No-data-deletion guard | `migrations-lib.mjs` refuses any migration with `DELETE`, `TRUNCATE` or `DROP TABLE/COLUMN/VIEW`; `no-data-deletion.test.mjs` also checks the repairs |
 | `scripts/db/run-sql.mjs` | Read-only by default; `--apply --yes` to write |
 
 ## Verification
@@ -39,4 +40,6 @@
 
 - The first deploy that runs the new runner applies `0000`–`0005` in order. `0000` is idempotent on an existing database.
 - `WEALTH_DATA_MODEL` stays `v1` until the owner signs off; the owner can preview v2 with `?model=v2` or the "Preview account model" link in More.
-- Not done: converting bills/subscriptions to views (external writers unknown), dropping `transactions.account` (D5), dropping legacy tables (TR-6.6). Each needs approval.
+- **Owner rule: no data is deleted.** Legacy tables, the `transactions.account` column, copied metadata, the advisor snapshot copy, the merged FD account row and identical transaction pairs all stay. The new model reads only canonical rows, so the copies no longer affect totals.
+- Not done: converting bills/subscriptions to views (external writers unknown).
+- Repair run on the in-memory copy: every table's row count is identical before and after.
