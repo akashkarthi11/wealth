@@ -145,7 +145,7 @@ FROM wealth_subscriptions s
 WHERE NOT EXISTS (
   SELECT 1 FROM wealth_planned_bills b
   WHERE b.user_id=s.user_id
-    AND (b.bill_key=s.provider_key OR left(b.bill_key,length(s.provider_key)+1)=s.provider_key || '_'
+    AND (b.bill_key=s.provider_key OR left(b.bill_key,length(s.provider_key)+1)=s.provider_key || '_')
 )
 ON CONFLICT (user_id, obligation_key) DO NOTHING;
 
