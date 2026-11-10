@@ -8,7 +8,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS wealth_investment_assets_history_symbol_uidx
 
 INSERT INTO wealth_investment_assets
  (user_id,position_id,asset_class,symbol,display_name,quantity_unit,price_currency,price_source,price_source_symbol,pricing_status)
-SELECT DISTINCT s.user_id,NULL,'indian_equity',trim(h->>'symbol'),trim(h->>'symbol'),'share','INR',
+SELECT DISTINCT s.user_id,NULL::uuid,'indian_equity',trim(h->>'symbol'),trim(h->>'symbol'),'share','INR',
  'Angel One historical snapshot','', 'manual'
 FROM wealth_snapshots s
 CROSS JOIN LATERAL jsonb_array_elements(COALESCE(s.payload->'holdings','[]'::jsonb)) h
