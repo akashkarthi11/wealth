@@ -388,3 +388,10 @@ Development database first, then Production, each with backup → dry run → ap
 | 6 | 5 Obligations read model | 1 d | OP-5 |
 
 About 6 working days plus owner input. Phase 1 needs decisions DV3-1 … DV3-3 and DV3-6 before it can run.
+
+## 14. Implementation status
+
+| Phase | Status | Evidence |
+|---|---|---|
+| 4 — Data-quality report | **Done**: `GET/POST /api/data-quality`, owner page "Data quality" (More), acceptances stored (0007, applied to Development). Read-only run on Production: 0 high, 13 medium, 26 low open issues | `reconcile-dq.test.mjs` |
+| 1, 2, 3, 5, 6 | Not started (Phase 1 needs owner decisions DV3-1 … DV3-6) | — |
