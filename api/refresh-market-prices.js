@@ -1,4 +1,5 @@
 import {sql,json,invalidateUserCaches} from './_lib.js';
+import {startJob,finishJob} from './_jobs.js';
 
 // Daily price refresh (Vercel Cron). Writes:
 //   v1: wealth_market_prices / wealth_price_history per legacy asset (kept while v1 is live)
@@ -118,11 +119,13 @@ async function refreshInstruments(price){
 }
 
 export default async function handler(req,res){
+ let run=null;
  try{
   if(req.method!=='GET'&&req.method!=='POST')return json(res,405,{error:'Method not allowed'});
   const secret=process.env.CRON_SECRET;
   if(!secret||req.headers.authorization!=='Bearer '+secret)return json(res,401,{error:'Unauthorized'});
   if(!sql)throw new Error('Database is not configured');
+  run=await startJob('price-refresh');
   const fx=await yahooQuote('INR=X').catch(e=>{console.warn('[market-price-refresh:fx]',e?.message||e);return null});
   const price=makePricer(fx);
   const legacy=await refreshLegacy(price);
@@ -132,10 +135,12 @@ export default async function handler(req,res){
   if(v2.results.some(r=>r.status==='updated'))(await sql.query('SELECT id FROM wealth_users')).forEach(u=>affected.add(u.id));
   await Promise.all([...affected].map(uid=>invalidateUserCaches(uid)));
   const count=(rs,s)=>rs.filter(x=>x.status===s).length;
+  const failed=count(legacy.results,'error')+count(v2.results,'error'),updated=count(legacy.results,'updated')+count(v2.results,'updated');
+  await finishJob(run,!fx||failed?(updated?'partial':'failed'):'succeeded',{fx:fx?.price||null,updated,failed,instrumentsUpdated:count(v2.results,'updated')});
   return json(res,200,{
    fx:fx?{rate:fx.price,asOf:fx.asOf.toISOString()}:null,
    updated:count(legacy.results,'updated'),failed:count(legacy.results,'error'),results:legacy.results,
    instruments:{updated:count(v2.results,'updated'),failed:count(v2.results,'error'),skipped:v2.skipped||null,results:v2.results},
   });
- }catch(e){console.error('[market-price-refresh]',e?.message||e);return json(res,500,{error:'Market price refresh failed'})}
+ }catch(e){console.error('[market-price-refresh]',e?.message||e);await finishJob(run,'failed',{error:String(e?.message||e).slice(0,300)});return json(res,500,{error:'Market price refresh failed'})}
 }
