@@ -74,6 +74,18 @@ async function runAngelOneLivePositionsMigration(){
  console.log('[db-migrate] Angel One equity positions converted:',JSON.stringify(counts[0]||{}));
 }
 
+async function runInvestmentPositionNormalizationMigration(){
+ const url=new URL('./migrations/2026-11-10-investment-position-normalization.sql',import.meta.url);
+ const source=await readFile(url,'utf8');
+ const statements=source.replace(/^\\s*--.*$/gm,'').split(';').map(s=>s.trim()).filter(Boolean);
+ for(const statement of statements) await sql.query(statement);
+ const counts=await sql.query(`SELECT
+  (SELECT count(*)::int FROM wealth_positions WHERE source_key LIKE 'angelone-mf-holding-%') AS mutual_fund_positions,
+  (SELECT count(*)::int FROM wealth_investment_assets WHERE asset_class='indian_mutual_fund') AS mutual_fund_price_assets,
+  (SELECT count(*)::int FROM wealth_positions WHERE record_type IN ('MUTUAL_FUND_AGGREGATE_ARCHIVED','US_PORTFOLIO_AGGREGATE_ARCHIVED')) AS archived_aggregates`);
+ console.log('[db-migrate] Investment positions normalized:',JSON.stringify(counts[0]||{}));
+}
+
 async function migrate(){
  // Idempotent schema migration: safe to run on every deployment and on both preview/production DBs.
  await sql.query(`CREATE TABLE IF NOT EXISTS wealth_category_symbols (
@@ -167,6 +179,7 @@ async function migrate(){
  await runRecurringObligationsMigration();
  await runAngelOnePriceHistoryMigration();
  await runAngelOneLivePositionsMigration();
+ await runInvestmentPositionNormalizationMigration();
 
  // Reconcile duplicate planned-bill reminders against active bank mandates.
  await runMandateDuplicateCleanupMigration();
