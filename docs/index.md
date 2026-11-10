@@ -25,7 +25,30 @@ Create module-specific folders as needed:
 - `modules/database/` — schema, migrations, integrity constraints and reconciliation.
 - `modules/infra/` — deployment, CI/CD, environment configuration and observability.
 
+- `modules/interest/` — savings and FD interest ledger, statements, rates and sources.
+- `modules/obligations/` — planned bills, mandates, recurring commitments and payment alerts.
+- `modules/auth/` — login, sessions, roles and access control.
+- `modules/integrations/` — Angel One SmartAPI, Exa, Massive and Stock Advisor ingestion.
+
 A fix that spans modules should have one canonical record in the primary/root-cause module and cross-links from other relevant module indexes or records where useful.
+
+## Module reference
+
+Each module folder has a `README.md` describing its files, APIs, tables, rules and known issues. Read it before changing that module.
+
+| Module | Reference |
+|---|---|
+| Dashboard | [modules/dashboard/README.md](modules/dashboard/README.md) |
+| Investments | [modules/investments/README.md](modules/investments/README.md) |
+| Market data | [modules/market-data/README.md](modules/market-data/README.md) |
+| Accounts & transactions | [modules/accounts/README.md](modules/accounts/README.md) |
+| Liabilities | [modules/liabilities/README.md](modules/liabilities/README.md) |
+| Interest | [modules/interest/README.md](modules/interest/README.md) |
+| Obligations & alerts | [modules/obligations/README.md](modules/obligations/README.md) |
+| Auth & security | [modules/auth/README.md](modules/auth/README.md) |
+| Integrations | [modules/integrations/README.md](modules/integrations/README.md) |
+| Database | [modules/database/README.md](modules/database/README.md) |
+| Infrastructure | [modules/infra/README.md](modules/infra/README.md) |
 
 ## Fix record template
 
@@ -48,6 +71,18 @@ Each module fix note should include:
 | Date | Module | Issue | Canonical fix note | Status |
 |---|---|---|---|---|
 | 2026-11-10 | Dashboard / Investments | US holding INR totals and row values used different fallback rules; recurrence confirmed in Development screenshot | [US holdings total mismatch](modules/dashboard/2026-11-10-us-holdings-total-mismatch.md) | Unified valuation committed on fix branch; validation and Development deployment pending approval |
+| 2026-11-10 | Auth | Password reset with only the shared key; no password policy, rate limit or session revocation | [Auth hardening](modules/auth/2026-11-10-auth-hardening.md) | Code + tests on `claude-dev`; migration 0001 not applied; not deployed |
+| 2026-11-10 | Database / Market data / Investments | Deploys reset live prices; no baseline schema; duplicated facts; cross-user references possible; unlinked obligations and interest | [Versioned migrations, keys, account hierarchy](modules/database/2026-11-10-versioned-migrations-and-keys.md) | Migrations 0000–0005 **applied to Development and Production** (backups first, no rows lost); app code not deployed |
+| 2026-11-10 | Dashboard / Accounts | Spending stats ignored transactions beyond 500; broken regexes, tooltips and entry form | [Spending stats and UI fixes](modules/dashboard/2026-11-10-spending-stats-and-ui-fixes.md) | Code + tests on `claude-dev`; verified read-only on Preview; not deployed |
+
+## Plans
+
+| Date | Plan | Status |
+|---|---|---|
+| 2026-11-10 | **[TSD — Claude Plan 1: stabilisation, security and account hierarchy](plans/claude-plan-1.md)** (master technical specification; links the plans below) | Implemented on `claude-dev` (phases 1–6, additive parts); awaiting Neon-branch run and deploy approval |
+| 2026-11-10 | [Database optimization](plans/2026-11-10-database-optimization-plan.md) | Superseded by the TSD |
+| 2026-11-10 | [Data normalization — no duplicates, PK/FK](plans/2026-11-10-data-normalization-design.md) | Implemented as migrations 0002 and repairs |
+| 2026-11-10 | [Account hierarchy model — user → account (CASA/Investment/Liability) → subtype → data](plans/2026-11-10-account-hierarchy-model.md) | Implemented as migrations 0003–0004 and the v2 dashboard |
 
 ## Reliability project
 

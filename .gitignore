@@ -1,0 +1,6 @@
+.vercel
+.env*
+node_modules/
+.claude/settings.local.json
+public/
+.db-backups/

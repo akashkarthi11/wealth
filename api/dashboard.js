@@ -1,4 +1,6 @@
-import {sql,schema,json,userFrom} from './_lib.js';
+import {sql,schema,json,sessionUser,dataModel} from './_lib.js';
+import {pageTransactions,spendingRows,accountHierarchyRows} from './_queries.js';
+import {valuePortfolio} from './_valuation.js';
 
 async function readPositions(uid){
  const enrichedQuery=`SELECT p.id,p.category,p.institution_name,p.platform_name,p.record_type,p.name,p.ticker,p.currency,p.quantity,
@@ -29,9 +31,10 @@ async function readPositions(uid){
  }
 }
 async function readDashboard(uid){
- const [users,transactions,templates,accounts,positions,interest,interestStatements]=await Promise.all([
+ const [users,page,spending,templates,accounts,positions,interest,interestStatements]=await Promise.all([
   sql.query('SELECT role FROM wealth_users WHERE id=$1',[uid]),
-  sql.query("SELECT t.id,t.kind,t.category,t.description,t.amount,t.account_id,COALESCE(NULLIF(trim(a.account_name || ' ' || COALESCE(a.masked_identifier,'')),''),NULLIF(t.account,''),'Unassigned') AS account,t.occurred_on FROM wealth_transactions t LEFT JOIN wealth_accounts a ON a.user_id=t.user_id AND a.id=t.account_id WHERE t.user_id=$1 ORDER BY t.occurred_on DESC,t.created_at DESC LIMIT 500",[uid]),
+  pageTransactions(uid),
+  spendingRows(uid),
   sql.query("SELECT config,version,updated_at FROM wealth_templates WHERE user_id=$1 AND template_key='wealth_classification' LIMIT 1",[uid]),
   sql.query("SELECT id,account_key,bank_name,account_name,account_type,masked_identifier,currency,current_balance,balance_as_of,balance_status FROM wealth_accounts WHERE user_id=$1 ORDER BY bank_name,account_name",[uid]),
   readPositions(uid),
@@ -41,22 +44,14 @@ async function readDashboard(uid){
  if(!users.length)return null;
  const role=users[0].role;
  const snapshots=role==='admin'?await sql.query('SELECT id,source_key,source_name,snapshot_date,payload,created_at FROM wealth_snapshots WHERE user_id=$1 ORDER BY snapshot_date DESC,created_at DESC',[uid]):[];
- return {role,transactions,snapshots,template:templates[0]?.config||null,accounts,positions,interest,interestStatements};
+ return {role,transactions:page.transactions,nextCursor:page.nextCursor,spending,snapshots,template:templates[0]?.config||null,accounts,positions,interest,interestStatements};
 }
 export default async function handler(req,res){
  try{
   if(req.method!=='GET')return json(res,405,{error:'Method not allowed'});
-  const uid=userFrom(req);if(!uid)return json(res,401,{error:'Sign in required'});
+  const uid=await sessionUser(req);if(!uid)return json(res,401,{error:'Sign in required'});
   await schema();
-  // Self-heal the category-symbol table on databases where the app code was deployed before its DB migration.
-  await sql.query(`CREATE TABLE IF NOT EXISTS wealth_category_symbols (
-    user_id uuid NOT NULL REFERENCES wealth_users(id) ON DELETE CASCADE,
-    category_key text NOT NULL,
-    display_symbol text NOT NULL,
-    updated_at timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY(user_id,category_key),
-    CONSTRAINT wealth_category_symbols_nonempty CHECK (length(trim(display_symbol)) BETWEEN 1 AND 16)
-  )`);
+  // Schema is created by scripts/migrate-db.mjs (0000_baseline); request handlers never run DDL (TR-2.5).
   const symbolRows=await sql.query('SELECT category_key,display_symbol FROM wealth_category_symbols WHERE user_id=$1',[uid]).catch(e=>{console.warn('[wealth-dashboard:symbols]',e?.message||e);return []});
   const categorySymbols=Object.fromEntries(symbolRows.map(r=>[r.category_key,r.display_symbol]));
   // Financial balances must never be served stale from Redis. A stale-while-revalidate
@@ -65,6 +60,13 @@ export default async function handler(req,res){
   // for every dashboard request; keep cache invalidation for other resources separate.
   const payload=await readDashboard(uid);
   if(!payload)return json(res,401,{error:'Sign in required'});
-  return json(res,200,{transactions:payload.transactions,snapshots:payload.snapshots,template:payload.template,accounts:payload.accounts,positions:payload.positions,interest:payload.interest,interestStatements:payload.interestStatements,categorySymbols});
+  // Account hierarchy (v2): on when WEALTH_DATA_MODEL=v2, or for the owner with ?model=v2 to compare before switching.
+  const wantV2=dataModel()==='v2'||(payload.role==='admin'&&new URL(req.url,'https://local').searchParams.get('model')==='v2');
+  let model=null;
+  if(wantV2){
+   try{model={version:'v2',generatedAt:new Date().toISOString(),...valuePortfolio(await accountHierarchyRows(uid))}}
+   catch(e){console.error('[wealth-dashboard:v2]',e?.message||e);model={version:'v2',error:'Account model is not available yet.'}}
+  }
+  return json(res,200,{transactions:payload.transactions,nextCursor:payload.nextCursor,spending:payload.spending,snapshots:payload.snapshots,template:payload.template,accounts:payload.accounts,positions:payload.positions,interest:payload.interest,interestStatements:payload.interestStatements,categorySymbols,model});
  }catch(e){console.error('[wealth-dashboard]',e?.message||e);return json(res,500,{error:'Unable to load dashboard.'})}
 }
