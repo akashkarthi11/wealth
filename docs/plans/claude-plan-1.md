@@ -8,10 +8,10 @@
 |---|---|
 | Document | TSD — Claude Plan 1 |
 | Project | Wealth Ledger (`akashkarthi11/wealth`), Vercel project `wealth` |
-| Version | 1.0 (draft) |
+| Version | 1.1 |
 | Date | 2026-11-10 |
 | Author | Claude (Claude Code), prepared for the project owner |
-| Status | **Proposed — for review.** Nothing implemented, deployed or written to any database |
+| Status | **Implemented on `claude-dev`** (see §19). Not deployed; no Neon database changed. Awaiting a Neon-branch run and approvals |
 | Companion PSD / FSD | Not yet created. This TSD covers technical changes only; no new business functionality is introduced |
 | Format note | **Assumption:** no existing GrowX TSD template was found in the repository or workspace, so this follows a standard TSD structure. Re-format if a GrowX template exists |
 
@@ -20,6 +20,7 @@
 | Version | Date | Change |
 |---|---|---|
 | 1.0 | 2026-11-10 | First draft from a full read of code, docs and the Preview Neon database |
+| 1.1 | 2026-11-10 | Implementation status added (§19); OpenAPI unchanged except `/api/auth` uses `action=reset` |
 
 ### Approvals
 
@@ -760,3 +761,34 @@ Total ≈ 7–9 working days excluding review. Every phase: Neon branch → Deve
 | DEF-09, DEF-10 | TR-3.3 – TR-3.5 |
 | DEF-11 | TR-3.6, TR-5.4, TR-5.7 |
 | DEF-12 | TR-4.1 – TR-4.5, TR-5.x, TR-6.x |
+
+## 19. Implementation status (v1.1)
+
+Branch `claude-dev`. Nothing deployed; no Neon database written. "Verified on copy" = applied to an in-memory PGlite copy of the Preview data.
+
+| Phase | Requirement | Status | Commit | Evidence |
+|---|---|---|---|---|
+| 0 | TR-0.1 Preview vs Production host | **Open** — needs Production env access (blocked by permission) | — | — |
+| 0 | TR-0.2 Neon branch | **Open** — needs a Neon API key / console | — | — |
+| 0 | TR-0.3 Baseline rebuilds empty DB | Done (PGlite, Postgres 16) | `eae5131` | `migrations.test.mjs` |
+| 0 | TR-0.4 Docs and drafts on a branch | Done | `910df31` | — |
+| 1 | TR-1.1 – 1.5 Auth hardening | Done | `e6b0fd3` | `auth.test.mjs` |
+| 2 | TR-2.1 – 2.5 Versioned migrations | Done | `eae5131` | `migrations.test.mjs`; dry run on Preview |
+| 3 | TR-3.1 – 3.6 Correctness fixes | Done | `a7ed523` | `transactions.test.mjs`; read-only run on Preview (594/594) |
+| 4 | TR-4.1 – 4.3 Keys (0002) | Done | `83b00ff` | `keys.test.mjs`; verified on copy |
+| 4 | TR-4.4 Stage-2 data repair | Script ready (`scripts/db/repairs/`) — run after approval | `eae5131` | verified on copy |
+| 4 | TR-4.5 D3 / D4 decisions | **Open** — owner decision | — | — |
+| 5 | TR-5.1 Schema + backfill (0003, 0004) | Done | `49f9704` | `hierarchy.test.mjs`; verified on copy |
+| 5 | TR-5.2 Totals vs v1 | Done on copy: all equal except US holdings (missing FX until refresh) | — | §19 note |
+| 5 | TR-5.3 – 5.7 API, refresh, UI, add FD, FX rule | Done, behind `WEALTH_DATA_MODEL` (default v1) and owner `?model=v2` | `49f9704` | `valuation`, `pricing`, `ui-v2` tests |
+| 6 | TR-6.1 Single obligations table | Partly: real FKs + triggers (0005). Views over legacy tables **not done** (external writers unknown) | `6d28265` | `obligations-interest.test.mjs` |
+| 6 | TR-6.2 Paid bill updates occurrence | Done | `6d28265` | same |
+| 6 | TR-6.3 Interest products | Done additively (product_id, account_id, triggers) | `6d28265` | same; verified on copy |
+| 6 | TR-6.4 Drop `transactions.account` | **Not done** — needs D5 and approval | — | — |
+| 6 | TR-6.5 Advisor retention | Done, off unless `WEALTH_ADVISOR_RETENTION_DAYS` is set | `49f9704` | — |
+| 6 | TR-6.6 Drop legacy tables | **Not done** — separate approval | — | — |
+| — | CI on PRs to main and development | **Ready, not active**: file at `scripts/ci/github-actions-ci.yml`; copy to `.github/workflows/ci.yml` with a GitHub login that has the `workflow` scope | `6d28265` | — |
+
+**v2 vs v1 on the copy of Preview data:** CASA ₹1,13,383.53 (equal), liabilities ₹30,634.21 (equal), investments ₹3,72,726.35 vs ₹3,78,072.85. The ₹5,346.50 difference is the US holdings, which v2 excludes as `missing_fx` because the stored US prices have no USD/INR rate; the next refresh run stores one. INDmoney cash ($10.02) is now recorded on its account.
+
+**Next steps (each needs approval):** create a Neon branch → `npm run db:migrate:dry` then run migrations there → compare `?model=v2` with v1 → apply repairs → Development deploy → Production deploy → set `WEALTH_DATA_MODEL=v2`.

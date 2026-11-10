@@ -71,15 +71,18 @@ Each module fix note should include:
 | Date | Module | Issue | Canonical fix note | Status |
 |---|---|---|---|---|
 | 2026-11-10 | Dashboard / Investments | US holding INR totals and row values used different fallback rules; recurrence confirmed in Development screenshot | [US holdings total mismatch](modules/dashboard/2026-11-10-us-holdings-total-mismatch.md) | Unified valuation committed on fix branch; validation and Development deployment pending approval |
+| 2026-11-10 | Auth | Password reset with only the shared key; no password policy, rate limit or session revocation | [Auth hardening](modules/auth/2026-11-10-auth-hardening.md) | Code + tests on `claude-dev`; migration 0001 not applied; not deployed |
+| 2026-11-10 | Database / Market data / Investments | Deploys reset live prices; no baseline schema; duplicated facts; cross-user references possible; unlinked obligations and interest | [Versioned migrations, keys, account hierarchy](modules/database/2026-11-10-versioned-migrations-and-keys.md) | Code + migrations 0000–0005 on `claude-dev`; tested on PGlite and a copy of Preview data; not applied; not deployed |
+| 2026-11-10 | Dashboard / Accounts | Spending stats ignored transactions beyond 500; broken regexes, tooltips and entry form | [Spending stats and UI fixes](modules/dashboard/2026-11-10-spending-stats-and-ui-fixes.md) | Code + tests on `claude-dev`; verified read-only on Preview; not deployed |
 
 ## Plans
 
 | Date | Plan | Status |
 |---|---|---|
-| 2026-11-10 | **[TSD — Claude Plan 1: stabilisation, security and account hierarchy](plans/claude-plan-1.md)** (master technical specification; links the plans below) | Draft v1.0 — for review |
-| 2026-11-10 | [Database optimization](plans/2026-11-10-database-optimization-plan.md) | Proposed |
-| 2026-11-10 | [Data normalization — no duplicates, PK/FK](plans/2026-11-10-data-normalization-design.md) | Proposed; stage 1–2 SQL drafted |
-| 2026-11-10 | [Account hierarchy model — user → account (CASA/Investment/Liability) → subtype → data](plans/2026-11-10-account-hierarchy-model.md) | Proposed; schema + backfill drafted |
+| 2026-11-10 | **[TSD — Claude Plan 1: stabilisation, security and account hierarchy](plans/claude-plan-1.md)** (master technical specification; links the plans below) | Implemented on `claude-dev` (phases 1–6, additive parts); awaiting Neon-branch run and deploy approval |
+| 2026-11-10 | [Database optimization](plans/2026-11-10-database-optimization-plan.md) | Superseded by the TSD |
+| 2026-11-10 | [Data normalization — no duplicates, PK/FK](plans/2026-11-10-data-normalization-design.md) | Implemented as migrations 0002 and repairs |
+| 2026-11-10 | [Account hierarchy model — user → account (CASA/Investment/Liability) → subtype → data](plans/2026-11-10-account-hierarchy-model.md) | Implemented as migrations 0003–0004 and the v2 dashboard |
 
 ## Reliability project
 

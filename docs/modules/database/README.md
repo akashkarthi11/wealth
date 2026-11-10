@@ -33,30 +33,24 @@ The core tables (`wealth_users`, `wealth_accounts`, `wealth_transactions`, `weal
 
 ## Migrations — [`scripts/migrate-db.mjs`](../../../scripts/migrate-db.mjs)
 
-Runs during `npm run build` on **Production builds only** (skipped on Vercel Preview and when no DB URL is set locally). Order:
+> Updated 2026-11-10 on `claude-dev`: versioned runner. See [fix note](2026-11-10-versioned-migrations-and-keys.md).
 
-1. Create/patch `wealth_category_symbols`, `wealth_investment_assets`, `wealth_market_prices`, `wealth_price_history` + indexes.
-2. Backfill metal quantities; upsert investment assets for GOLD/SILVER/ETF/US_EQUITY.
-3. `2026-11-10-recurring-obligations.sql`
-4. `2026-11-10-angelone-ltp-price-history.sql`
-5. `2026-11-10-convert-angelone-equity-to-live-positions.sql`
-6. `2026-11-10-investment-position-normalization.sql`
-7. `2026-11-10-reconcile-mandate-bill-duplicates.sql`
-8. Seed default category symbols.
+Runs during `npm run build` on **Production builds only** (skipped on Vercel Preview and when no DB URL is set locally).
 
-**Not run automatically:** `2026-11-10-interest-source-registry.sql`, `20261110_stock_advisor_reports.sql`.
-
-SQL files are split on `;` and executed one statement per HTTP request (no real transaction).
+- Applies each `scripts/migrations/NNNN_name.sql` **once**, in order, inside one transaction (Neon `Pool` over WebSocket), recorded in `wealth_schema_migrations` with a SHA-256 checksum. An edited, already-applied file fails the build. Files must not contain `BEGIN`/`COMMIT`.
+- `npm run db:migrate:dry` lists pending files and writes nothing.
+- Current files: `0000_baseline`, `0001_session_version`, `0002_owner_keys`, `0003_account_hierarchy`, `0004_account_hierarchy_backfill`, `0005_link_obligations_and_interest`.
+- The old data migrations are archived in `scripts/migrations/legacy/` and no longer run.
+- **Data repairs** live in `scripts/db/repairs/` and run manually with owner approval: `node scripts/db/run-sql.mjs <env-file> <file> --apply --yes` (read-only without `--apply`).
+- Tests run every migration on in-memory Postgres (PGlite): `npm test`.
 
 ## Redis cache
 
-- Optional (`REDIS_URL`). Keys: `wealth:ledger:v1:<uid>` (20 s), `wealth:snapshots:v2:<uid>` (60 s), Exa/Massive provider caches.
+- Optional (`REDIS_URL`). Keys: `wealth:ledger:v2:<uid>` (first page, 20 s), `wealth:snapshots:v2:<uid>` (60 s), `wealth:rl:*` (login rate limits), Exa/Massive provider caches.
 - Stale-while-revalidate via `waitUntil()` with a per-user refresh lock.
 - Dashboard responses are deliberately **not** cached.
 
 ## Known issues
 
-- Migrations re-run on every Production deploy; two of them are not safely idempotent (they reset live prices and MF scheme codes — see [Market data](../market-data/README.md)).
-- Several migrations hard-code user/position UUIDs.
-- Comment/`BEGIN`/`COMMIT` stripping regexes in `migrate-db.mjs` (lines 36–38, 50, 66) are double-escaped and never match.
-- The naive `;` split would break on any future SQL containing `;` inside strings or function bodies.
+- Production is PostgreSQL 18 on Neon; migration tests run on PGlite (PostgreSQL 16). Features used are available in both.
+- Legacy tables (`wealth_positions`, `wealth_investment_assets`, `wealth_market_prices`, `wealth_price_history`) remain until the v2 model is signed off and their removal approved.
