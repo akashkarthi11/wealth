@@ -77,7 +77,7 @@ async function runAngelOneLivePositionsMigration(){
 async function runInvestmentPositionNormalizationMigration(){
  const url=new URL('./migrations/2026-11-10-investment-position-normalization.sql',import.meta.url);
  const source=await readFile(url,'utf8');
- const statements=source.replace(/^\\s*--.*$/gm,'').split(';').map(s=>s.trim()).filter(Boolean);
+ const statements=source.replace(/^\s*--.*$/gm,'').split(';').map(s=>s.trim()).filter(Boolean);
  for(const statement of statements) await sql.query(statement);
  const counts=await sql.query(`SELECT
   (SELECT count(*)::int FROM wealth_positions WHERE source_key LIKE 'angelone-mf-holding-%') AS mutual_fund_positions,
