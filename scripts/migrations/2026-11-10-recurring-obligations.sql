@@ -96,6 +96,7 @@ SELECT DISTINCT ON (b.user_id, COALESCE(NULLIF(b.bill_key,''), b.id::text))
        b.created_at,
        b.updated_at
 FROM wealth_planned_bills b
+WHERE true
 ORDER BY b.user_id, COALESCE(NULLIF(b.bill_key,''), b.id::text), CASE WHEN b.status='planned' THEN 0 ELSE 1 END, b.due_date ASC
 ON CONFLICT (user_id, obligation_key) DO NOTHING;
 
@@ -171,6 +172,7 @@ JOIN wealth_recurring_obligations o
   ON o.user_id=b.user_id
  AND o.source_type='planned_bill'
  AND o.obligation_key='bill:' || COALESCE(NULLIF(b.bill_key,''),b.id::text)
+WHERE true
 ON CONFLICT (obligation_id, due_date) DO NOTHING;
 
 -- Backfill the next known due date for mandate-only recurring obligations.
