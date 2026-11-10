@@ -29,6 +29,20 @@ async function runRecurringObligationsMigration(){
  console.log('[db-migrate] Recurring obligations migration applied:',statements.length,'statements');
 }
 
+async function runMandateDuplicateCleanupMigration(){
+ const url=new URL('./migrations/2026-11-10-reconcile-mandate-bill-duplicates.sql',import.meta.url);
+ const source=await readFile(url,'utf8');
+ const statements=source
+  .replace(/^\\s*--.*$/gm,'')
+  .replace(/^\\s*BEGIN;\\s*$/im,'')
+  .replace(/^\\s*COMMIT;\\s*$/im,'')
+  .split(';')
+  .map(statement=>statement.trim())
+  .filter(Boolean);
+ for(const statement of statements) await sql.query(statement);
+ console.log('[db-migrate] Mandate/planned-bill duplicate cleanup applied:',statements.length,'statements');
+}
+
 async function migrate(){
  // Idempotent schema migration: safe to run on every deployment and on both preview/production DBs.
  await sql.query(`CREATE TABLE IF NOT EXISTS wealth_category_symbols (
@@ -120,6 +134,9 @@ async function migrate(){
 
  // Provision the unified recurring-obligation model after the legacy source tables exist.
  await runRecurringObligationsMigration();
+
+ // Reconcile duplicate planned-bill reminders against active bank mandates.
+ await runMandateDuplicateCleanupMigration();
 
  // Ensure each account has its default category icon. User-customized symbols are preserved.
  await sql.query(`INSERT INTO wealth_category_symbols(user_id,category_key,display_symbol)
