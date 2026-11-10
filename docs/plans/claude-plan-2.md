@@ -466,3 +466,12 @@ paths:
 | 7 | F Retire legacy reads/writes in code | 0.5 d after 14 days | — |
 
 About 5.5 working days plus observation time. Phases A, B and G are the minimum before switching (D); C and E can follow the switch.
+
+## 15. Implementation status
+
+| Phase | Status | Commit | Evidence |
+|---|---|---|---|
+| A — configuration | **Open (owner)**: `CRON_SECRET` (Production), dev-team settings | — | `/api/health` |
+| A.3 — fresh US prices with FX | Done once on Production (5 USD prices, v2 table only); Development fully refreshed | — | v2 INDmoney ₹5,311.06, nothing excluded |
+| B — sync legacy → v2 (0006) | **Done**: applied to Development; Production gets it from the next deploy (direct apply needs owner approval) | `68cfe07` | 8 sync tests; on Development 0 issues, 26/26 holdings linked, no rows lost |
+| C, D, E, F, G | Not started (C is extended in [Claude Plan 3](claude-plan-3.md) Phase 2) | — | — |
