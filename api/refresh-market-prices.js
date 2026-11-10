@@ -1,4 +1,4 @@
-import {sql,json} from './_lib.js';
+import {sql,json,invalidateUserCaches} from './_lib.js';
 
 const YAHOO='https://query1.finance.yahoo.com/v8/finance/chart/';
 const TROY_OUNCE_GRAMS=31.1034768;
@@ -49,8 +49,8 @@ export default async function handler(req,res){
     FROM wealth_investment_assets a WHERE a.pricing_status IN ('active','pending','stale')
     AND a.price_source_symbol IS NOT NULL`);
   const needsFx=assets.some(a=>a.price_currency==='USD'||a.price_source_symbol==='GC=F'||a.price_source_symbol==='SI=F');
-  const fxPromise=needsFx?quote('INR=X'):Promise.resolve(null);
-  const fx=await fxPromise;
+  const fx=needsFx?await quote('INR=X').catch(e=>{console.warn('[market-price-refresh:fx]',e?.message||e);return null}):null;
+  const updatedUsers=new Set();
   const results=await Promise.all(assets.map(async a=>{
    try{
     const q=a.asset_class==='indian_mutual_fund'?await mutualFundNav(a):await quote(a.price_source_symbol);
@@ -61,22 +61,25 @@ export default async function handler(req,res){
      unitPrice=q.price*fx.price/TROY_OUNCE_GRAMS;
      if(fx.asOf<asOf)asOf=fx.asOf;
     }
+    if(a.price_currency==='USD'&&!fx)throw new Error('USD/INR reference rate unavailable; USD valuation was not refreshed');
     const currency=a.price_currency||q.currency||'INR';
     await sql.query(`INSERT INTO wealth_market_prices(asset_id,user_id,unit_price,currency,source,source_timestamp,fetched_at,status,metadata)
       VALUES($1,$2,$3,$4,$7,$5,now(),'fresh',$6::jsonb)
       ON CONFLICT(asset_id) DO UPDATE SET unit_price=EXCLUDED.unit_price,currency=EXCLUDED.currency,
       source=EXCLUDED.source,source_timestamp=EXCLUDED.source_timestamp,fetched_at=now(),status='fresh',metadata=EXCLUDED.metadata`,
-      [a.id,a.user_id,unitPrice,currency,asOf.toISOString(),JSON.stringify({provider_symbol:q.provider_symbol||a.price_source_symbol,provider_currency:q.currency,unit:a.quantity_unit,pricing_basis:(a.price_source_symbol==='GC=F'||a.price_source_symbol==='SI=F')?'global futures parity converted from USD/oz to INR/g':a.asset_class==='indian_mutual_fund'?'AMFI mutual fund NAV':'exchange quote',fx_to_inr:fx?.price||null}),a.asset_class==='indian_mutual_fund'?'MFAPI.in':'Yahoo Finance']);
+      [a.id,a.user_id,unitPrice,currency,asOf.toISOString(),JSON.stringify({provider_symbol:q.provider_symbol||a.price_source_symbol,provider_currency:q.currency,unit:a.quantity_unit,pricing_basis:(a.price_source_symbol==='GC=F'||a.price_source_symbol==='SI=F')?'global futures parity converted from USD/oz to INR/g':a.asset_class==='indian_mutual_fund'?'AMFI mutual fund NAV':'exchange quote',fx_to_inr:fx?.price||null,fx_as_of:fx?.asOf?.toISOString()||null}),a.asset_class==='indian_mutual_fund'?'MFAPI.in':'Yahoo Finance']);
     await sql.query(`INSERT INTO wealth_price_history(asset_id,user_id,unit_price,currency,source,source_timestamp,metadata)
       VALUES($1,$2,$3,$4,$7,$5,$6::jsonb)`,
       [a.id,a.user_id,unitPrice,currency,asOf.toISOString(),JSON.stringify({provider_symbol:q.provider_symbol||a.price_source_symbol,unit:a.quantity_unit}),a.asset_class==='indian_mutual_fund'?'MFAPI.in':'Yahoo Finance']);
     await sql.query("UPDATE wealth_investment_assets SET pricing_status='active',updated_at=now() WHERE id=$1",[a.id]);
+    updatedUsers.add(a.user_id);
     return {asset_id:a.id,status:'updated',unit_price:unitPrice,currency};
    }catch(e){
     await sql.query("UPDATE wealth_market_prices SET status='stale' WHERE asset_id=$1",[a.id]).catch(()=>{});
     return {asset_id:a.id,status:'error',message:String(e?.message||e)};
    }
   }));
+  await Promise.all([...updatedUsers].map(uid=>invalidateUserCaches(uid)));
   return json(res,200,{updated:results.filter(x=>x.status==='updated').length,failed:results.filter(x=>x.status==='error').length,results});
  }catch(e){console.error('[market-price-refresh]',e?.message||e);return json(res,500,{error:'Market price refresh failed'})}
 }
