@@ -3,7 +3,7 @@
 - **Date:** 2026-11-10
 - **Primary module:** Dashboard
 - **Related modules:** Investments, Market Data, Database
-- **Status:** Code committed on feature branch; database mappings repaired in Development and Production; not deployed; end-to-end verification pending
+- **Status:** Initial fix merged and deployed to Development; recurrence confirmed by user screenshot; unified valuation follow-up committed on `fix/us-holdings-inr-consistency`; tests/deployment pending
 - **Branch:** `fix/market-price-wealth-total`
 - **Related PR:** [#33](https://github.com/akashkarthi11/wealth/pull/33)
 
@@ -81,3 +81,14 @@ If the same symptom appears again:
 ## Recurrence log
 
 _No recurrence recorded after the initial incident._
+
+
+## Recurrence — 2026-11-10: summary and detail INR valuation still diverged
+
+**Observed evidence:** The user supplied a Development screenshot showing the INDmoney US Stocks header/subtotal at ₹4,404.38 while individual holding rows displayed their own INR current values. The earlier implementation had three separate valuation expressions: the wealth summary only accepted `market_value_inr` or saved `current_value_inr`; the provider detail subtotal additionally fell back to USD × FX; and each holding row repeated that detail fallback inline. This meant the summary and detail could diverge when only a saved USD/INR rate was available.
+
+**Decision:** Keep this as a recurrence in this canonical dashboard incident note. Replace all three current-value paths with one `usHoldingInrValue(position)` helper, using the same precedence: valid `market_value_inr`, then saved `metadata.inr_conversion.current_value_inr`, then USD current value × saved/market FX when a positive rate exists. If no rate exists, return zero as an explicit unavailable valuation fallback rather than inventing an INR conversion. The helper is used by the wealth summary, INDmoney provider subtotal, and each displayed holding row.
+
+**Code:** Commit `ff8f1953db22c7d2469581d2028a817fd06de760` on `fix/us-holdings-inr-consistency`; build marker `20261110-us-holdings-valuation-unified-1`.
+
+**Verification:** Source-level replacement checks passed (all three calculation sites now call the shared helper). Full app syntax/build validation, numerical fixture tests, and post-deployment reconciliation remain pending. No deployment has been performed for this recurrence.

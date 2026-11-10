@@ -47,7 +47,7 @@ Each module fix note should include:
 
 | Date | Module | Issue | Canonical fix note | Status |
 |---|---|---|---|---|
-| 2026-11-10 | Dashboard / Investments | US holding totals disagreed; NVIDIA was omitted from the INDmoney INR detail subtotal while another total included it; stale dashboard data could also be served | [US holdings total mismatch](modules/dashboard/2026-11-10-us-holdings-total-mismatch.md) | Code committed on feature branch; database mappings repaired in Development and Production; not deployed |
+| 2026-11-10 | Dashboard / Investments | US holding INR totals and row values used different fallback rules; recurrence confirmed in Development screenshot | [US holdings total mismatch](modules/dashboard/2026-11-10-us-holdings-total-mismatch.md) | Unified valuation committed on fix branch; validation and Development deployment pending approval |
 
 ## Reliability project
 
