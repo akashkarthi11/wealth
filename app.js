@@ -1,4 +1,4 @@
-const APP_BUILD_ID='20261110-alerts-mandates-1';
+const APP_BUILD_ID='20261110-alerts-deduped-1';
 (function promptForUpdatedApp(){
   try {
     const key='wealth-ledger:app-build';
@@ -36,43 +36,46 @@ async function loadDashboard(){const d=await api('/api/dashboard');applyLedgerDa
 
 function subscriptionsHtml(){if(!subscriptions.length&&!commitments.length)return '';const mandateRows=subscriptions.map(s=>{const dueDate=s.next_due_date?new Date(String(s.next_due_date).slice(0,10)+'T12:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'Date not set';return '<article class="planned-bill-row"><div class="planned-bill-main"><b>'+esc(s.provider_name)+'</b><small>Bank mandate · '+esc(s.bank_name||'Source account')+' · '+esc(s.masked_identifier||'')+'</small><small>Due date: '+esc(dueDate)+'</small><small>'+esc(s.frequency==='as_presented'?'As presented':s.frequency==='frequency_not_confirmed'?'Frequency not confirmed':s.frequency)+(s.merchant_id?' · '+esc(s.merchant_id):'')+'</small></div><div class="planned-bill-actions"><strong>'+(s.amount==null?'Variable':money(s.amount)+(s.amount_type==='up_to'?' max':''))+'</strong><span class="pill">Active mandate</span></div></article>'}).join('');const commitmentRows=commitments.map(o=>{const dueDate=o.next_due_date?new Date(String(o.next_due_date).slice(0,10)+'T12:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'Date not set';const amount=o.expected_amount==null?'Variable':money(o.expected_amount);return '<article class="planned-bill-row"><div class="planned-bill-main"><b>'+esc(o.title)+'</b><small>Recurring commitment · '+esc(o.obligation_type||'other')+'</small><small>'+esc(o.bank_name||'Account not linked')+' · Due: '+esc(dueDate)+'</small><small>'+esc(o.frequency==='frequency_not_confirmed'?'Frequency not confirmed':o.frequency||'Frequency not set')+'</small></div><div class="planned-bill-actions"><strong>'+amount+'</strong><span class="pill">Commitment</span></div></article>'}).join('');return '<section class="chart-card planned-bills"><div class="chart-head"><div><h4>Active subscriptions & mandates</h4><p>Bank authorisations and recurring commitments · not recorded as paid expenses</p></div><span class="pill">'+(subscriptions.length+commitments.length)+' active</span></div>'+(subscriptions.length?'<h5 class="commitment-group-title">Bank subscriptions & mandates</h5><div class="planned-bill-list">'+mandateRows+'</div>':'')+(commitments.length?'<h5 class="commitment-group-title">Recurring commitments</h5><div class="planned-bill-list">'+commitmentRows+'</div>':'')+'</section>'}
 function alertsBannerHtml(){
- const today=new Date();today.setHours(0,0,0,0);
- const dueSoon=date=>{if(!date)return false;const d=new Date(String(date).slice(0,10)+'T00:00:00');return Number.isFinite(d.getTime())&&Math.round((d-today)/86400000)<=5};
- const dueBills=plannedBills.filter(b=>b.status==='planned'&&dueSoon(b.due_date));
- const dueMandates=subscriptions.filter(s=>s.status==='active'&&dueSoon(s.next_due_date));
- const dueCommitments=commitments.filter(o=>o.status==='active'&&dueSoon(o.next_due_date));
- const count=dueBills.length+dueMandates.length+dueCommitments.length;
- const total=dueBills.reduce((n,b)=>n+Number(b.amount||0),0)+dueMandates.reduce((n,s)=>n+Number(s.amount||0),0)+dueCommitments.reduce((n,o)=>n+Number(o.expected_amount||0),0);
+ const items=alertPaymentItems();
+ const count=items.length;
+ const total=items.reduce((n,row)=>n+(row.amount==null?0:Number(row.amount)||0),0);
  if(!count)return '<button type="button" class="dashboard-alert-banner quiet" data-view="alerts"><span class="dashboard-alert-icon">✓</span><span class="dashboard-alert-copy"><b>No payments due soon</b><small>Alerts · planned bills, mandates and recurring commitments</small></span><span class="dashboard-alert-arrow">View</span></button>';
- const names=[...dueBills.map(b=>b.title),...dueMandates.map(s=>s.provider_name),...dueCommitments.map(o=>o.title)].slice(0,2).map(esc).join(' · ');
+ const names=items.slice(0,2).map(row=>esc(row.name)).join(' · ');
  return '<button type="button" class="dashboard-alert-banner" data-view="alerts"><span class="dashboard-alert-icon">!</span><span class="dashboard-alert-copy"><b>'+count+' payment alert'+(count===1?'':'s')+' · '+money(total)+'</b><small>'+names+(count>2?' + '+(count-2)+' more':'')+'</small><small>Due within 5 days or overdue · Tap to view all alerts</small></span><span class="dashboard-alert-arrow">View</span></button>';
 }
 function plannedBillsHtml(){const today=new Date();today.setHours(0,0,0,0);const upcoming=plannedBills.filter(b=>{if(b.status!=='planned')return false;const due=new Date(String(b.due_date).slice(0,10)+'T00:00:00');return Math.round((due-today)/86400000)<=5});if(!upcoming.length)return '<section class="chart-card planned-bills"><div class="chart-head"><div><h4>Planned bills</h4><p>No upcoming bills</p></div></div></section>';return '<section class="chart-card planned-bills"><div class="chart-head"><div><h4>Planned bills</h4><p>Due within 5 days · overdue unpaid bills included · not counted as spending</p></div><span class="pill">'+upcoming.length+' planned</span></div><div class="planned-bill-list">'+upcoming.map(b=>{const due=new Date(String(b.due_date).slice(0,10)+'T00:00:00');const days=Math.round((due-today)/86400000);const label=days<0?Math.abs(days)+' days overdue':days===0?'Due today':'Due in '+days+' days';const balance=Number(b.current_balance),fresh=!!b.current_balance&&b.balance_status==='verified';const after=balance-Number(b.amount);const low=fresh&&(balance<Number(b.amount)||after<500);const balanceHtml=fresh?'<small class="planned-bill-balance '+(low?'low':'')+'">Bank balance: '+money(balance)+' · After premium: '+money(after)+(low?' · LOW BALANCE — add funds':'')+'</small>':'<small class="planned-bill-balance uncertain">Bank balance needs verification ('+esc(b.balance_status||'unknown')+')</small>';return '<article class="planned-bill-row"><div class="planned-bill-main"><b>'+esc(b.title)+'</b><small>'+esc(b.payee||b.category)+' · '+esc(b.bank_name||'Bank account')+' '+esc(b.masked_identifier||'')+' · '+esc(String(b.due_date).slice(0,10))+'</small><small>'+esc(label)+' · '+esc(b.recurrence==='one_time'?'One-time reminder':b.recurrence==='monthly'?'Monthly recurring commitment':b.recurrence==='weekly'?'Weekly recurring commitment':b.recurrence==='quarterly'?'Quarterly recurring commitment':b.recurrence==='yearly'?'Yearly recurring commitment':'Recurring commitment')+'</small>'+balanceHtml+'</div><div class="planned-bill-actions"><strong>'+money(b.amount)+'</strong>'+(low?'<span class="pill warning">Low balance</span>':'')+'<button type="button" class="ghost" data-bill-paid="'+esc(b.id)+'">Mark paid</button></div></article>'}).join('')+'</div></section>'}
-function alertsHtml(){
+function alertPaymentItems(){
  const today=new Date();today.setHours(0,0,0,0);
- const dueSoon=date=>{if(!date)return false;const d=new Date(String(date).slice(0,10)+'T00:00:00');return Number.isFinite(d.getTime())&&Math.round((d-today)/86400000)<=5};
- const dueSubscriptions=subscriptions.filter(s=>s.status==='active'&&dueSoon(s.next_due_date));
- const undatedSubscriptions=subscriptions.filter(s=>s.status==='active'&&!s.next_due_date);
- const dueCommitments=commitments.filter(o=>o.status==='active'&&dueSoon(o.next_due_date));
- const undatedCommitments=commitments.filter(o=>o.status==='active'&&!o.next_due_date);
- const rows=(list,kind)=>list.map(item=>{
-  const isMandate=kind==='mandate',name=isMandate?item.provider_name:item.title;
-  const date=isMandate?item.next_due_date:item.next_due_date;
-  const dueLabel=date?new Date(String(date).slice(0,10)+'T12:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'Next due date not set';
-  const amount=isMandate?(item.amount==null?'Variable':money(item.amount)+(item.amount_type==='up_to'?' max':'')):(item.expected_amount==null?'Variable':money(item.expected_amount));
-  const bank=[item.bank_name,item.masked_identifier].filter(Boolean).join(' · ')||(isMandate?'Source account':'Account not linked');
-  const frequency=item.frequency==='as_presented'?'As presented':item.frequency==='frequency_not_confirmed'?'Frequency not confirmed':item.frequency||'Frequency not set';
-  return '<article class="planned-bill-row"><div class="planned-bill-main"><b>'+esc(name)+'</b><small>'+(isMandate?'Bank mandate':'Recurring commitment')+' · '+esc(bank)+'</small><small>Due: '+esc(dueLabel)+' · '+esc(frequency)+'</small></div><div class="planned-bill-actions"><strong>'+amount+'</strong><span class="pill">'+(isMandate?'Active mandate':'Commitment')+'</span></div></article>';
+ const isDue=date=>{if(!date)return false;const d=new Date(String(date).slice(0,10)+'T00:00:00');return Number.isFinite(d.getTime())&&Math.round((d-today)/86400000)<=5};
+ const items=[
+  ...plannedBills.filter(b=>b.status==='planned'&&isDue(b.due_date)).map(b=>({kind:'bill',item:b,name:b.title,date:String(b.due_date).slice(0,10),amount:Number(b.amount||0)})),
+  ...subscriptions.filter(s=>s.status==='active'&&isDue(s.next_due_date)).map(s=>({kind:'mandate',item:s,name:s.provider_name,date:String(s.next_due_date).slice(0,10),amount:s.amount==null?null:Number(s.amount)})),
+  ...commitments.filter(o=>o.status==='active'&&isDue(o.next_due_date)).map(o=>({kind:'commitment',item:o,name:o.title,date:String(o.next_due_date).slice(0,10),amount:o.expected_amount==null?null:Number(o.expected_amount)}))
+ ];
+ const seen=new Set();
+ return items.filter(row=>{
+  const normalized=String(row.name||'').toLowerCase().replace(/&/g,' and ').replace(/\b(policy|premium|payment|bill|subscription|mandate|monthly|recurring|commitment)\b/g,' ').replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
+  const key=normalized+'|'+row.date;
+  if(seen.has(key))return false;
+  seen.add(key);return true;
+ });
+}
+function alertsHtml(){
+ const items=alertPaymentItems();
+ if(!items.length)return '<section class="chart-card planned-bills"><div class="chart-head"><div><h4>Upcoming payments</h4><p>No planned bills, mandates or recurring commitments are due within 5 days</p></div></div></section>';
+ const rows=items.map(row=>{
+  const item=row.item,isBill=row.kind==='bill',isMandate=row.kind==='mandate';
+  const name=row.name,dateLabel=new Date(row.date+'T12:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  const amount=row.amount==null?'Variable':money(row.amount)+(isMandate&&item.amount_type==='up_to'?' max':'');
+  const bank=[item.bank_name,item.masked_identifier].filter(Boolean).join(' · ')||(isMandate?'Source account':isBill?'Bank account':'Account not linked');
+  const frequency=item.frequency==='as_presented'?'As presented':item.frequency==='frequency_not_confirmed'?'Frequency not confirmed':item.frequency|| (isBill?(item.recurrence==='one_time'?'One-time reminder':item.recurrence==='monthly'?'Monthly':'Recurring'):'Frequency not set');
+  const label=isBill?'Planned bill':isMandate?'Bank mandate':'Recurring commitment';
+  const action=isBill?'<button type="button" class="ghost" data-bill-paid="'+esc(item.id)+'">Mark paid</button>':'<span class="pill">'+(isMandate?'Active mandate':'Commitment')+'</span>';
+  const balance=Number(item.current_balance),fresh=isBill&&!!item.current_balance&&item.balance_status==='verified';
+  const balanceHtml=fresh?'<small class="planned-bill-balance">Bank balance: '+money(balance)+' · After payment: '+money(balance-row.amount)+'</small>':'';
+  return '<article class="planned-bill-row"><div class="planned-bill-main"><b>'+esc(name)+'</b><small>'+esc(label)+' · '+esc(bank)+'</small><small>Due: '+esc(dateLabel)+' · '+esc(frequency)+'</small>'+balanceHtml+'</div><div class="planned-bill-actions"><strong>'+amount+'</strong>'+action+'</div></article>';
  }).join('');
- const section=(title,description,list,kind)=>list.length?'<section class="chart-card planned-bills"><div class="chart-head"><div><h4>'+title+'</h4><p>'+description+'</p></div><span class="pill">'+list.length+' active</span></div><div class="planned-bill-list">'+rows(list,kind)+'</div></section>':'';
- const noDate=(title,list,kind)=>section(title,'Active records retained even though the next due date is not available',list,kind);
- const dueBills=plannedBills.filter(b=>b.status==='planned'&&dueSoon(b.due_date));
- const hasDue=dueBills.length||dueSubscriptions.length||dueCommitments.length;
- return (hasDue?plannedBillsHtml():'<section class="chart-card planned-bills"><div class="chart-head"><div><h4>Upcoming payments</h4><p>No planned bills, mandates or recurring commitments are due within 5 days</p></div></div></section>')+
-  section('Bank subscriptions & mandates','Active mandates due within 5 days · not recorded as paid expenses',dueSubscriptions,'mandate')+
-  section('Recurring commitments','Active commitments due within 5 days · not recorded as paid expenses',dueCommitments,'commitment')+
-  noDate('Active mandates · due date not set',undatedSubscriptions,'mandate')+
-  noDate('Active commitments · due date not set',undatedCommitments,'commitment');
+ return '<section class="chart-card planned-bills"><div class="chart-head"><div><h4>Upcoming payments</h4><p>Due within 5 days · overdue unpaid bills included · duplicate records consolidated</p></div><span class="pill">'+items.length+' payments</span></div><div class="planned-bill-list">'+rows+'</div></section>';
 }
 function monthKey(d){return String(d||'').slice(0,7)}
 function monthlySpendStats(){const expenses=items.filter(x=>x.kind==='expense');if(!expenses.length)return {average:0,months:0};const keys=expenses.map(x=>monthKey(x.occurred_on)).filter(x=>/^\d{4}-\d{2}$/.test(x));if(!keys.length)return {average:0,months:0};const first=keys.sort()[0],last=keys.sort().slice(-1)[0],start=new Date(first+'-01T00:00:00'),end=new Date(last+'-01T00:00:00');const months=(end.getFullYear()-start.getFullYear())*12+end.getMonth()-start.getMonth()+1;const total=expenses.reduce((n,x)=>n+Number(x.amount||0),0);return {average:total/months,months,total}}
