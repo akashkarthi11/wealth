@@ -89,3 +89,25 @@ export async function createFixedDepositAccount(uid, { key, institution, name, b
     [uid, key, institution, name, balance, note]);
   return rows[0];
 }
+
+// Mark a planned bill paid / cancelled / planned and keep its payment occurrence in step,
+// in one statement (TSD TR-6.2). Returns null when the bill does not belong to the user.
+export async function setBillStatus(uid, id, status, db = sql) {
+  const rows = await db.query(
+    `WITH b AS (
+        UPDATE wealth_planned_bills SET status=$3, updated_at=now()
+        WHERE id=$1 AND user_id=$2 RETURNING id, status, amount
+      ), o AS (
+        UPDATE wealth_payment_occurrences p
+        SET status = b.status,
+            actual_amount = CASE WHEN b.status='paid' THEN coalesce(p.actual_amount, b.amount) ELSE NULL END,
+            paid_at = CASE WHEN b.status='paid' THEN coalesce(p.paid_at, now()) ELSE NULL END,
+            updated_at = now()
+        FROM b WHERE p.user_id = $2
+          AND (p.planned_bill_id = b.id OR (p.planned_bill_id IS NULL AND p.source_record_id = b.id))
+        RETURNING p.id
+      )
+      SELECT b.id, b.status, (SELECT count(*) FROM o)::int AS occurrences_updated FROM b`,
+    [id, uid, status]);
+  return rows[0] || null;
+}
