@@ -9,13 +9,18 @@ import { Pool, neonConfig } from '@neondatabase/serverless';
 import ws from 'ws';
 import { fileURLToPath } from 'node:url';
 import { loadMigrations, applyMigrations } from './db/migrations-lib.mjs';
+import { firstUrl, DB_URL_VARS } from '../api/_lib.js';
 
 const dryRun = process.argv.includes('--dry-run');
-if (process.env.VERCEL && process.env.VERCEL_ENV !== 'production') {
-  console.log('[db-migrate] Preview deployment; migrations skipped.');
+// Production builds migrate. Preview builds do not by default, because the main team's Preview shares the
+// Production database. A Vercel team/project with its own database (e.g. the development team) opts in
+// with WEALTH_MIGRATIONS=on in its Preview environment.
+const optIn = String(process.env.WEALTH_MIGRATIONS || '').trim().toLowerCase() === 'on';
+if (process.env.VERCEL && process.env.VERCEL_ENV !== 'production' && !optIn) {
+  console.log('[db-migrate] Preview deployment; migrations skipped (set WEALTH_MIGRATIONS=on for a project with its own database).');
   process.exit(0);
 }
-const databaseUrl = process.env.POSTGRES_URL || process.env.WEALTH_DATABASE_URL || process.env.DATABASE_URL;
+const databaseUrl = firstUrl(DB_URL_VARS, ['postgres', 'postgresql'])?.value;
 if (!databaseUrl) {
   if (process.env.VERCEL) throw new Error('Database URL is required to run production schema migrations');
   console.log('[db-migrate] No database URL; skipped outside Vercel.');

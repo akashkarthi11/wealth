@@ -3,13 +3,23 @@ import { createClient } from 'redis';
 import { waitUntil } from '@vercel/functions';
 import { randomBytes, scryptSync, timingSafeEqual, createHmac } from 'node:crypto';
 
-const dbUrl=process.env.POSTGRES_URL || process.env.WEALTH_DATABASE_URL || process.env.DATABASE_URL;
-export const sql=dbUrl ? neon(dbUrl) : null;
+// Environment handling works the same on every deployment (Production, Preview, and other Vercel teams):
+// take the first variable that holds a real URL; empty values and "[SENSITIVE]"-style placeholders are skipped.
+export const DB_URL_VARS=['POSTGRES_URL','WEALTH_DATABASE_URL','DATABASE_URL'];
+export function firstUrl(names,schemes,env=process.env){
+ for(const name of names){
+  const v=String(env[name]??'').trim().replace(/^["']|["']$/g,'');
+  if(schemes.some(s=>v.startsWith(s+'://')))return {name,value:v};
+ }
+ return null;
+}
+const dbConfig=firstUrl(DB_URL_VARS,['postgres','postgresql']);
+export const sql=dbConfig ? neon(dbConfig.value) : null;
 
 // Vercel Redis integration provides REDIS_URL. Keep caching optional so Neon remains the source of truth.
 // Redis must never block a request: every operation has a hard time limit, a connection that cannot be
 // made stops retrying, and after a failure Redis is skipped for a cool-down period (fail open).
-const redisUrl=process.env.REDIS_URL;
+const redisUrl=firstUrl(['REDIS_URL'],['redis','rediss'])?.value||null;
 const REDIS_OP_MS=Number(process.env.REDIS_OP_TIMEOUT_MS||1000);
 const REDIS_COOLDOWN_MS=30000;
 let redisClient=null,redisConnectPromise=null,redisDownUntil=0;
@@ -52,12 +62,29 @@ export async function cacheDel(...keys){if(keys.length)await redisOp(c=>c.del(ke
 export async function invalidateUserCaches(uid){
  await cacheDel('wealth:ledger:v1:'+uid,'wealth:ledger:v2:'+uid,'wealth:dashboard:v1:'+uid,'wealth:dashboard:v2:'+uid,'wealth:dashboard:v3:'+uid,'wealth:dashboard:v4:'+uid,'wealth:dashboard:v5:'+uid,'wealth:snapshots:v2:'+uid);
 }
+// Which settings this deployment has (yes/no only — never values). Used by /api/health and clear errors.
+export function configStatus(env=process.env){
+ const secret=String(env.WEALTH_SESSION_SECRET??'').trim();
+ const db=firstUrl(DB_URL_VARS,['postgres','postgresql'],env);
+ const redisRaw=String(env.REDIS_URL??'').trim();
+ return {
+  environment:env.VERCEL_ENV||'local',
+  database:db?{configured:true,variable:db.name}:{configured:false},
+  sessionSecret:secret.length>=32&&!/^\[.*\]$/.test(secret),
+  accessKey:String(env.WEALTH_ACCESS_KEY??'').trim().length>0,
+  redis:firstUrl(['REDIS_URL'],['redis','rediss'],env)?'configured':redisRaw?'invalid (ignored)':'not set (optional)',
+  cronSecret:String(env.CRON_SECRET??'').trim().length>=16,
+  dataModel:String(env.WEALTH_DATA_MODEL||'v1').trim().toLowerCase()==='v2'?'v2':'v1',
+ };
+}
 // Data model switch (TSD §13): 'v1' legacy positions (default) or 'v2' account hierarchy.
 export function dataModel(){return String(process.env.WEALTH_DATA_MODEL||'v1').trim().toLowerCase()==='v2'?'v2':'v1'}
 // Database schema is provisioned by migrations, never by request handlers.
 // Avoid running DDL and role UPDATE statements on every serverless cold start.
+// A missing or invalid deployment setting. Handlers report it as 503 with the message (no secret values).
+export function configError(message){const e=new Error(message);e.code='CONFIG';return e}
 export async function schema(){
- if(!sql) throw new Error('WEALTH_DATABASE_URL is not configured');
+ if(!sql) throw configError('No database URL is configured (set POSTGRES_URL, WEALTH_DATABASE_URL or DATABASE_URL to a postgres:// URL)');
 }
 export function hash(p){const s=randomBytes(16);return 's1$'+s.toString('base64url')+'$'+scryptSync(p,s,64).toString('base64url')}
 export function check(p,h){try{const [v,s,x]=h.split('$');if(v!=='s1')return false;const a=Buffer.from(x,'base64url'),b=scryptSync(p,Buffer.from(s,'base64url'),a.length);return a.length===b.length&&timingSafeEqual(a,b)}catch{return false}}
@@ -81,7 +108,7 @@ export function safeEqual(a,b){
 const secret=()=>process.env.WEALTH_SESSION_SECRET||'';
 // Session token = base64url({uid, exp, sv}) + '.' + HMAC. `sv` is the user's session_version (TR-1.4);
 // bumping it in the database invalidates every cookie issued before.
-export function token(uid,sv=1){if(secret().length<32)throw new Error('WEALTH_SESSION_SECRET must be at least 32 characters');const body=Buffer.from(JSON.stringify({uid,exp:Date.now()+7*864e5,sv:Number(sv)||1})).toString('base64url');return body+'.'+createHmac('sha256',secret()).update(body).digest('base64url')}
+export function token(uid,sv=1){if(secret().trim().length<32||/^\[.*\]$/.test(secret().trim()))throw configError('WEALTH_SESSION_SECRET must be set to at least 32 characters');const body=Buffer.from(JSON.stringify({uid,exp:Date.now()+7*864e5,sv:Number(sv)||1})).toString('base64url');return body+'.'+createHmac('sha256',secret()).update(body).digest('base64url')}
 export function sessionFrom(req){try{const c=String(req.headers.cookie||'').split(';').map(x=>x.trim()).find(x=>x.startsWith('wealth_session='));if(!c)return null;const [b,s]=c.slice(15).split('.');const sig=createHmac('sha256',secret()).update(b).digest();const got=Buffer.from(s||'','base64url');if(sig.length!==got.length||!timingSafeEqual(sig,got))return null;const p=JSON.parse(Buffer.from(b,'base64url'));return p.exp>Date.now()&&p.uid?{uid:p.uid,sv:Number(p.sv)||1}:null}catch{return null}}
 // Signature + expiry only. Use sessionUser() wherever a revoked session must be rejected.
 export function userFrom(req){return sessionFrom(req)?.uid||null}

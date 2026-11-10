@@ -79,7 +79,9 @@ export default async function handler(req,res){
   }
   return json(res,400,{error:'Unknown action'});
  } catch(e) {
-  console.error('Wealth auth failure:', e?.message || 'unknown error');
+  console.error('Wealth auth failure:', e?.code || '', e?.message || 'unknown error');
+  // A deployment setting is missing: say which one (never its value) so each environment can be fixed.
+  if(e?.code==='CONFIG')return json(res,503,{error:'This deployment is not configured: '+e.message+'. See /api/health.'});
   return json(res,500,{error:'Server configuration or database error.'});
  }
 }
