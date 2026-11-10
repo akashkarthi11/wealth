@@ -17,6 +17,8 @@ export default async function handler(req,res){
   if(req.method!=='GET')return json(res,405,{error:'Method not allowed'});
   const uid=userFrom(req);if(!uid)return json(res,401,{error:'Sign in required'});
   await schema();
+  const symbolRows=await sql.query('SELECT category_key,display_symbol FROM wealth_category_symbols WHERE user_id=$1',[uid]);
+  const categorySymbols=Object.fromEntries(symbolRows.map(r=>[r.category_key,r.display_symbol]));
   const key='wealth:dashboard:v2:'+uid;
   const cached=await cacheGet(key);
   if(cached){
@@ -25,13 +27,13 @@ export default async function handler(req,res){
     if(payload&&Array.isArray(payload.transactions)&&Array.isArray(payload.accounts)&&Array.isArray(payload.positions)){
      // Return cached data immediately; refresh from Neon asynchronously via waitUntil().
      scheduleCacheRefresh(uid,'dashboard',async()=>{const fresh=await readDashboard(uid);if(fresh)await cacheSet(key,fresh,120)},120);
-     return json(res,200,{transactions:payload.transactions,snapshots:payload.snapshots||[],template:payload.template||null,accounts:payload.accounts,positions:payload.positions});
+     return json(res,200,{transactions:payload.transactions,snapshots:payload.snapshots||[],template:payload.template||null,accounts:payload.accounts,positions:payload.positions,categorySymbols});
     }
    }catch(e){console.warn('[wealth-dashboard:cache-invalid]',e?.message||e)}
   }
   const payload=await readDashboard(uid);
   if(!payload)return json(res,401,{error:'Sign in required'});
   await cacheSet(key,payload,120);
-  return json(res,200,{transactions:payload.transactions,snapshots:payload.snapshots,template:payload.template,accounts:payload.accounts,positions:payload.positions});
+  return json(res,200,{transactions:payload.transactions,snapshots:payload.snapshots,template:payload.template,accounts:payload.accounts,positions:payload.positions,categorySymbols});
  }catch(e){console.error('[wealth-dashboard]',e?.message||e);return json(res,500,{error:'Unable to load dashboard.'})}
 }
