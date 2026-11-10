@@ -1,4 +1,4 @@
-import {sql,schema,json,userFrom,body} from './_lib.js';
+import {sql,schema,json,sessionUser,body} from './_lib.js';
 import {timingSafeEqual} from 'node:crypto';
 
 function validIngestSecret(req){
@@ -56,7 +56,7 @@ export default async function handler(req,res){
    return json(res,201,{saved:true,report:saved[0]});
   }
   if(req.method!=='GET')return json(res,405,{error:'Method not allowed'});
-  const uid=userFrom(req);if(!uid)return json(res,401,{error:'Sign in required'});
+  const uid=await sessionUser(req);if(!uid)return json(res,401,{error:'Sign in required'});
   const [report,holdings]=await Promise.all([
    latestSavedReport(uid),
    sql.query("SELECT name,ticker,quantity,current_value,balance_as_of FROM wealth_positions WHERE user_id=$1 AND category='INVESTMENT' AND record_type='EQUITY' AND currency='INR' ORDER BY name",[uid])
