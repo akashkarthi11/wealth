@@ -1,4 +1,4 @@
-const APP_BUILD_ID='20261110-investment-aggregate-filter-4';
+const APP_BUILD_ID='20261110-market-valuation-fix-1';
 (function promptForUpdatedApp(){
   try {
     const key='wealth-ledger:app-build';
