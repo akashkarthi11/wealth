@@ -1,4 +1,4 @@
-import {sql,schema,json,sessionUser,cacheGet,cacheSet,scheduleCacheRefresh} from './_lib.js';
+import {sql,schema,json,sessionUser,cacheGet,cacheSet,scheduleCacheRefresh} from '../_lib.js';
 export default async function handler(req,res){
  try{
   const uid=await sessionUser(req);if(!uid)return json(res,401,{error:'Sign in required'});await schema();

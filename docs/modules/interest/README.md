@@ -6,7 +6,7 @@ Daily interest earned on Slice Savings and Slice Atom, plus fixed-deposit intere
 
 | File | Responsibility |
 |---|---|
-| [`api/dashboard.js`](../../../api/dashboard.js) | Returns `interest` (latest 500 ledger rows) and `interestStatements` |
+| [`api/_routes/dashboard.js`](../../../api/_routes/dashboard.js) | Returns `interest` (latest 500 ledger rows) and `interestStatements` |
 | [`app.js`](../../../app.js) | `interestSummaryHtml`, `interestDailySeries`, `activeInterestListHtml`, `interestViewHtml` |
 | [`scripts/migrations/2026-11-10-interest-source-registry.sql`](../../../scripts/migrations/2026-11-10-interest-source-registry.sql) | Interest source registry and rate seeds (**manual — not run by `migrate-db.mjs`**) |
 

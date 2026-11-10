@@ -6,8 +6,8 @@ Accounts, sessions, roles and access control.
 
 | File | Responsibility |
 |---|---|
-| [`api/auth.js`](../../../api/auth.js) | `GET` current user; `POST ?action=login|register|forgot|logout` |
-| [`api/clear-session.js`](../../../api/clear-session.js) | `GET` clears the session cookie and redirects to `/` |
+| [`api/_routes/auth.js`](../../../api/_routes/auth.js) | `GET` current user; `POST ?action=login|register|forgot|logout` |
+| [`api/_routes/clear-session.js`](../../../api/_routes/clear-session.js) | `GET` clears the session cookie and redirects to `/` |
 | [`api/_lib.js`](../../../api/_lib.js) | `hash`/`check` (scrypt), `token`/`userFrom` (HMAC session), `cookie` |
 
 ## Design
@@ -19,7 +19,7 @@ Accounts, sessions, roles and access control.
 
 ## Known issues (security)
 
-- **Account takeover:** `forgot` resets any account's password given only the email and the shared access key — no email/token verification ([`api/auth.js:32-36`](../../../api/auth.js#L32-L36)).
+- **Account takeover:** `forgot` resets any account's password given only the email and the shared access key — no email/token verification ([`api/_routes/auth.js:32-36`](../../../api/_routes/auth.js#L32-L36)).
 - No server-side minimum password length; an empty password is accepted (UI says 10+).
 - No login rate limiting or lockout.
 - Sessions cannot be revoked before expiry (stateless tokens; password reset does not invalidate them).

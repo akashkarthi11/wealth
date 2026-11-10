@@ -1,7 +1,7 @@
-import { sql, schema, json, sessionUser } from './_lib.js';
-import { legacyAccountRows, legacyPositionRows, accountHierarchyRows } from './_queries.js';
-import { valuePortfolio } from './_valuation.js';
-import { v1Totals, reconcile } from './_reconcile.js';
+import { sql, schema, json, sessionUser } from '../_lib.js';
+import { legacyAccountRows, legacyPositionRows, accountHierarchyRows } from '../_queries.js';
+import { valuePortfolio } from '../_valuation.js';
+import { v1Totals, reconcile } from '../_reconcile.js';
 
 // GET /api/reconcile — owner only. v1 (live dashboard rules) vs v2 (account model), per category,
 // each difference with a reason. `acceptable` is the switch gate (TSD Claude Plan 2, TR2-D.2).

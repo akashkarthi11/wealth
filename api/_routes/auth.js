@@ -1,4 +1,4 @@
-import {sql,schema,hash,check,token,cookie,json,body,sessionUser,passwordProblem,PASSWORD_MAX,safeEqual,rateLimit,rateCount,rateReset,clientIp} from './_lib.js';
+import {sql,schema,hash,check,token,cookie,json,body,sessionUser,passwordProblem,PASSWORD_MAX,safeEqual,rateLimit,rateCount,rateReset,clientIp} from '../_lib.js';
 
 const validEmail = e => e.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 const accessAllowed = supplied => safeEqual(supplied, process.env.WEALTH_ACCESS_KEY || '');

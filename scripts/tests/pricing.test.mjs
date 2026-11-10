@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { makePricer } = await import('../../api/refresh-market-prices.js');
+const { makePricer } = await import('../../api/_routes/refresh-market-prices.js');
 const T = Date.parse('2026-11-10T09:00:00Z') / 1000;
 
 function fakeFetch(map) {

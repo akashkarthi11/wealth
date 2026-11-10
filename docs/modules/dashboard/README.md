@@ -6,7 +6,7 @@ The Home dashboard: wealth hero total, CASA / Investments / Liabilities cards, t
 
 | File | Responsibility |
 |---|---|
-| [`api/dashboard.js`](../../../api/dashboard.js) | `GET /api/dashboard` — single read of transactions, template, accounts, priced positions, interest ledger/statements, category symbols, and (admin only) snapshots |
+| [`api/_routes/dashboard.js`](../../../api/_routes/dashboard.js) | `GET /api/dashboard` — single read of transactions, template, accounts, priced positions, interest ledger/statements, category symbols, and (admin only) snapshots |
 | [`app.js`](../../../app.js) | `loadDashboard`, `wealthPosition`, `usHoldingInrValue`, `investmentBreakdownHtml`, `renderTopWealth`, `analyticsHtml`, `renderView` |
 | [`index.html`](../../../index.html) | Shell markup; inline script hides `#stats` when the active view is not Overview |
 | [`style.css`](../../../style.css) | All styling |
@@ -32,7 +32,7 @@ The Home dashboard: wealth hero total, CASA / Investments / Liabilities cards, t
 - Equity and mutual-fund **detail rows** still read from snapshot `sourceSections`, while headline totals read live positions — rows may not sum to the header.
 - INDmoney buying power is read from the `US_PORTFOLIO_INR` row, which is archived by migration in Production → shows ₹0.
 - Chart tooltip click handler looks for `[data-chart-point]`, which the SVG markup never sets ([`app.js:278`](../../../app.js#L278)).
-- `api/dashboard.js` runs `CREATE TABLE IF NOT EXISTS wealth_category_symbols` on every request.
+- `api/_routes/dashboard.js` runs `CREATE TABLE IF NOT EXISTS wealth_category_symbols` on every request.
 - Retirement card hard-codes "₹93,726" and "31 Mar 2027".
 - Branch `fix/net-worth-valuation-reconciliation` (unmerged) replaces `wealthPosition` with `calculateWealthTotals` and a confirmed-vs-reported net worth.
 

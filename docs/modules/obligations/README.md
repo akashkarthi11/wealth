@@ -6,7 +6,7 @@ Planned bills, bank mandates/subscriptions, recurring commitments and the paymen
 
 | File | Responsibility |
 |---|---|
-| [`api/planned-bills.js`](../../../api/planned-bills.js) | `GET` planned bills + active subscriptions + active commitments; `PATCH` bill status (`paid`/`cancelled`/`planned`) |
+| [`api/_routes/planned-bills.js`](../../../api/_routes/planned-bills.js) | `GET` planned bills + active subscriptions + active commitments; `PATCH` bill status (`paid`/`cancelled`/`planned`) |
 | [`app.js`](../../../app.js) | `alertPaymentItems`, `alertsHtml`, `alertsBannerHtml`, `plannedBillsHtml`, `subscriptionsHtml` |
 | [`scripts/migrations/2026-11-10-recurring-obligations.sql`](../../../scripts/migrations/2026-11-10-recurring-obligations.sql) | Unified obligations + payment occurrences (additive) |
 | [`scripts/migrations/2026-11-10-reconcile-mandate-bill-duplicates.sql`](../../../scripts/migrations/2026-11-10-reconcile-mandate-bill-duplicates.sql) | Cancels planned bills duplicated by an active mandate |

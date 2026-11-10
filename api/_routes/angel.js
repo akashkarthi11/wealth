@@ -1,5 +1,5 @@
 import { createHmac, createHash } from 'node:crypto';
-import { sql, schema, json, sessionUser } from './_lib.js';
+import { sql, schema, json, sessionUser } from '../_lib.js';
 
 const BASE='https://apiconnect.angelone.in';
 const b32=s=>{const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';let bits='';for(const c of String(s||'').toUpperCase().replace(/=|\s/g,'')){const n=alphabet.indexOf(c);if(n<0)throw new Error('Invalid ANGEL_TOTP_SECRET');bits+=n.toString(2).padStart(5,'0')}const out=[];for(let i=0;i+8<=bits.length;i+=8)out.push(parseInt(bits.slice(i,i+8),2));return Buffer.from(out)};
