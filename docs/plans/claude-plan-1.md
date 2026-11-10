@@ -799,3 +799,18 @@ Branch `claude-dev`. Nothing deployed; no Neon database written. "Verified on co
 **Next steps (each needs approval):** ~~migrations~~ (done on both databases) → deploy the application code → compare `?model=v2` with v1 → optional repairs → set `WEALTH_DATA_MODEL=v2`.
 
 **Note:** because Preview deployments share the Production database, testing `claude-dev` in a Vercel Preview reads and writes live data. Point Preview at the Development database (`ep-noisy-bread…`) in Vercel's environment settings before using Preview for testing.
+
+### Production deployment — 2026-11-10 18:16 UTC
+
+Deployed by the owner from `main` (PR #37 `claude-dev` → `development`, PR #38 `development` → `main`), deployment `wealth-m2i6lhomw`.
+
+| Check | Result |
+|---|---|
+| Build | 71 tests passed; `[db-migrate] applied: 0, already applied: 6` (checksums matched the migrations applied earlier) |
+| `/api/health` | database reachable, 6 migrations, session secret, access key and Redis configured; only problem: `CRON_SECRET` missing |
+| Login with a wrong password | 401 in 0.44 s (no hang) |
+| Anonymous password reset | 403 (owner-only reset in effect) |
+| Homepage | serves build `20261110-claude-plan-1` |
+| Data model | `v1` (v2 available to the owner via `?model=v2` / More → "Preview account model") |
+
+Remaining: add `CRON_SECRET` to Production (daily price refresh); set `WEALTH_SESSION_SECRET`, `WEALTH_ACCESS_KEY` and `WEALTH_MIGRATIONS=on` for the development team's Preview; compare v2 with v1, then set `WEALTH_DATA_MODEL=v2`.
