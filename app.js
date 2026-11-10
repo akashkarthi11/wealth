@@ -54,7 +54,7 @@ function alertPaymentItems(){
  ];
  const seen=new Set();
  return items.filter(row=>{
-  const normalized=String(row.name||'').toLowerCase().replace(/&/g,' and ').replace(/\\b(policy|premium|payment|bill|subscription|mandate|monthly|recurring|commitment)\\b/g,' ').replace(/[^a-z0-9]+/g,' ').trim().replace(/\\s+/g,' ');
+  const normalized=String(row.name||'').toLowerCase().replace(/&/g,' and ').replace(/\b(policy|premium|payment|bill|subscription|mandate|monthly|recurring|commitment)\b/g,' ').replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
   const key=normalized+'|'+row.date;
   if(seen.has(key))return false;
   seen.add(key);return true;
