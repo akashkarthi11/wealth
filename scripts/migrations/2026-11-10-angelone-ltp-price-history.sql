@@ -9,7 +9,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS wealth_investment_assets_history_symbol_uidx
 INSERT INTO wealth_investment_assets
  (user_id,position_id,asset_class,symbol,display_name,quantity_unit,price_currency,price_source,price_source_symbol,pricing_status)
 SELECT DISTINCT s.user_id,NULL::uuid,'indian_equity',trim(h->>'symbol'),trim(h->>'symbol'),'share','INR',
- 'Angel One historical snapshot','', 'manual'
+ 'Yahoo Finance',trim(h->>'symbol')||'.NS', 'active'
 FROM wealth_snapshots s
 CROSS JOIN LATERAL jsonb_array_elements(COALESCE(s.payload->'holdings','[]'::jsonb)) h
 WHERE s.source_key LIKE 'angelone-equity-holdings-%'
@@ -20,7 +20,7 @@ WHERE s.source_key LIKE 'angelone-equity-holdings-%'
 ON CONFLICT (user_id,symbol) WHERE position_id IS NULL
 DO UPDATE SET display_name=EXCLUDED.display_name,asset_class=EXCLUDED.asset_class,
  quantity_unit=EXCLUDED.quantity_unit,price_currency=EXCLUDED.price_currency,
- price_source=EXCLUDED.price_source,pricing_status='manual',updated_at=now();
+ price_source=EXCLUDED.price_source,price_source_symbol=EXCLUDED.price_source_symbol,pricing_status='active',updated_at=now();
 
 INSERT INTO wealth_price_history
  (asset_id,user_id,unit_price,currency,source,source_timestamp,metadata)
