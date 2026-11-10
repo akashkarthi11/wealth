@@ -12,6 +12,7 @@
     "@vercel/functions": "^2.2.12"
   },
   "scripts": {
-    "build": "node scripts/validate-homepage.mjs && node scripts/migrate-db.mjs"
+    "build": "node scripts/validate-homepage.mjs && node scripts/migrate-db.mjs",
+    "test:us-valuation": "node --test scripts/test-us-holdings-valuation.test.mjs"
   }
 }

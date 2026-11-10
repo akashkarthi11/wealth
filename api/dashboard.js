@@ -1,13 +1,13 @@
-import {sql,schema,json,userFrom,cacheGet,cacheSet,scheduleCacheRefresh} from './_lib.js';
+import {sql,schema,json,userFrom} from './_lib.js';
 
 async function readPositions(uid){
  const enrichedQuery=`SELECT p.id,p.category,p.institution_name,p.platform_name,p.record_type,p.name,p.ticker,p.currency,p.quantity,
-  CASE WHEN mp.status='fresh' AND mp.fetched_at>now()-interval '36 hours' AND a.id IS NOT NULL AND p.quantity IS NOT NULL THEN p.quantity*mp.unit_price ELSE p.current_value END AS current_value,
+  CASE WHEN mp.status='fresh' AND mp.fetched_at>now()-interval '36 hours' AND a.asset_class IN ('indian_equity','indian_mutual_fund','us_equity','us_etf') AND mp.currency=p.currency AND p.quantity IS NOT NULL THEN p.quantity*mp.unit_price ELSE p.current_value END AS current_value,
   p.invested_value,p.balance_as_of,p.source_key,p.metadata,mp.unit_price AS market_unit_price,mp.currency AS market_price_currency,
   mp.source AS market_price_source,mp.fetched_at AS market_price_updated_at,mp.status AS market_price_status,a.quantity_unit,
   (mp.metadata->>'fx_to_inr')::numeric AS market_fx_to_inr,
   CASE WHEN mp.status='fresh' AND mp.fetched_at>now()-interval '36 hours' AND p.quantity IS NOT NULL
-   THEN CASE WHEN mp.currency='USD' THEN p.quantity*mp.unit_price*NULLIF((mp.metadata->>'fx_to_inr')::numeric,0)
+   THEN CASE WHEN mp.currency='USD' THEN p.quantity*mp.unit_price*NULLIF(CASE WHEN NULLIF(mp.metadata->>'fx_to_inr','')::numeric>0 AND NULLIF(mp.metadata->>'fx_as_of','')::timestamptz>now()-interval '36 hours' THEN NULLIF(mp.metadata->>'fx_to_inr','')::numeric ELSE NULL END,0)
              WHEN mp.currency='INR' THEN p.quantity*mp.unit_price ELSE NULL END ELSE NULL END AS market_value_inr
   FROM wealth_positions p
   LEFT JOIN wealth_investment_assets a ON a.position_id=p.id
@@ -59,21 +59,12 @@ export default async function handler(req,res){
   )`);
   const symbolRows=await sql.query('SELECT category_key,display_symbol FROM wealth_category_symbols WHERE user_id=$1',[uid]).catch(e=>{console.warn('[wealth-dashboard:symbols]',e?.message||e);return []});
   const categorySymbols=Object.fromEntries(symbolRows.map(r=>[r.category_key,r.display_symbol]));
-  const key='wealth:dashboard:v5:'+uid;
-  const cached=await cacheGet(key);
-  if(cached){
-   try{
-    const payload=typeof cached==='string'?JSON.parse(cached):cached;
-    if(payload&&Array.isArray(payload.transactions)&&Array.isArray(payload.accounts)&&Array.isArray(payload.positions)&&Array.isArray(payload.interest)&&Array.isArray(payload.interestStatements)){
-     // Return cached data immediately; refresh from Neon asynchronously via waitUntil().
-     scheduleCacheRefresh(uid,'dashboard',async()=>{const fresh=await readDashboard(uid);if(fresh)await cacheSet(key,fresh,120)},120);
-     return json(res,200,{transactions:payload.transactions,snapshots:payload.snapshots||[],template:payload.template||null,accounts:payload.accounts,positions:payload.positions,interest:payload.interest,interestStatements:payload.interestStatements,categorySymbols});
-    }
-   }catch(e){console.warn('[wealth-dashboard:cache-invalid]',e?.message||e)}
-  }
+  // Financial balances must never be served stale from Redis. A stale-while-revalidate
+  // response can temporarily omit a newly added holding (or retain a deleted one),
+  // making category totals disagree with the holdings list. Read the current DB rows
+  // for every dashboard request; keep cache invalidation for other resources separate.
   const payload=await readDashboard(uid);
   if(!payload)return json(res,401,{error:'Sign in required'});
-  await cacheSet(key,payload,120);
   return json(res,200,{transactions:payload.transactions,snapshots:payload.snapshots,template:payload.template,accounts:payload.accounts,positions:payload.positions,interest:payload.interest,interestStatements:payload.interestStatements,categorySymbols});
  }catch(e){console.error('[wealth-dashboard]',e?.message||e);return json(res,500,{error:'Unable to load dashboard.'})}
 }
