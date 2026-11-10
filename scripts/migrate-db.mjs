@@ -53,7 +53,7 @@ async function runAngelOnePriceHistoryMigration(){
   .filter(Boolean);
  for(const statement of statements) await sql.query(statement);
  const counts=await sql.query(`SELECT
-  (SELECT count(*)::int FROM wealth_investment_assets WHERE user_id=(SELECT id FROM wealth_users WHERE role='admin' ORDER BY created_at LIMIT 1) AND position_id IS NULL) AS history_only_assets,
+  (SELECT count(*)::int FROM wealth_investment_assets WHERE asset_class='indian_equity' AND position_id IS NULL) AS history_only_assets,
   (SELECT count(*)::int FROM wealth_price_history WHERE source='Angel One historical snapshot') AS angelone_history_rows`);
  console.log('[db-migrate] Angel One historical LTP backfill ready:',JSON.stringify(counts[0]||{}));
 }
