@@ -1,8 +1,8 @@
-import {sql,schema,json,body,userFrom,invalidateUserCaches} from './_lib.js';
+import {sql,schema,json,body,sessionUser,invalidateUserCaches} from './_lib.js';
 
 export default async function handler(req,res){
  try{
-  const uid=userFrom(req);if(!uid)return json(res,401,{error:'Sign in required'});
+  const uid=await sessionUser(req);if(!uid)return json(res,401,{error:'Sign in required'});
   await schema();
   if(req.method!=='POST')return json(res,405,{error:'Method not allowed'});
   const b=await body(req);

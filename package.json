@@ -8,12 +8,16 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.0",
+    "@vercel/functions": "^2.2.12",
     "redis": "^4.7.0",
-    "@vercel/functions": "^2.2.12"
+    "ws": "^8.22.2"
   },
   "scripts": {
     "build": "node scripts/validate-homepage.mjs && node scripts/migrate-db.mjs",
     "test:us-valuation": "node --test scripts/test-us-holdings-valuation.test.mjs",
     "db:schema": "node scripts/db/generate-schema.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.2.17"
   }
 }

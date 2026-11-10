@@ -1,4 +1,4 @@
-import { sql, schema, json, userFrom, cacheGet, cacheSet } from './_lib.js';
+import { sql, schema, json, sessionUser, cacheGet, cacheSet } from './_lib.js';
 
 const EXA_URL = 'https://api.exa.ai/search';
 const MASSIVE_BASE = 'https://api.massive.com';
@@ -15,7 +15,7 @@ async function providerJson(url, options = {}) {
 }
 
 async function owner(req) {
-  const uid = userFrom(req);
+  const uid = await sessionUser(req);
   if (!uid) return { error: [401, 'Sign in required'] };
   await schema();
   const rows = await sql.query('SELECT role FROM wealth_users WHERE id=$1', [uid]);

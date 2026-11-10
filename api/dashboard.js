@@ -1,4 +1,4 @@
-import {sql,schema,json,userFrom} from './_lib.js';
+import {sql,schema,json,sessionUser} from './_lib.js';
 
 async function readPositions(uid){
  const enrichedQuery=`SELECT p.id,p.category,p.institution_name,p.platform_name,p.record_type,p.name,p.ticker,p.currency,p.quantity,
@@ -46,7 +46,7 @@ async function readDashboard(uid){
 export default async function handler(req,res){
  try{
   if(req.method!=='GET')return json(res,405,{error:'Method not allowed'});
-  const uid=userFrom(req);if(!uid)return json(res,401,{error:'Sign in required'});
+  const uid=await sessionUser(req);if(!uid)return json(res,401,{error:'Sign in required'});
   await schema();
   // Self-heal the category-symbol table on databases where the app code was deployed before its DB migration.
   await sql.query(`CREATE TABLE IF NOT EXISTS wealth_category_symbols (
