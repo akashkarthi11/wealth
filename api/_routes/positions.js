@@ -1,5 +1,5 @@
-import {sql,schema,json,body,sessionUser,invalidateUserCaches,dataModel} from './_lib.js';
-import {createFixedDepositAccount} from './_queries.js';
+import {sql,schema,json,body,sessionUser,invalidateUserCaches,dataModel} from '../_lib.js';
+import {createFixedDepositAccount} from '../_queries.js';
 
 // Add a fixed deposit.
 //   v1: a FIXED_DEPOSIT row in wealth_positions (legacy model).

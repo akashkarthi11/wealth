@@ -5,7 +5,7 @@ Neon PostgreSQL schema, migrations and the optional Redis cache.
 ## Connection
 
 - [`api/_lib.js`](../../../api/_lib.js) uses `POSTGRES_URL` → `WEALTH_DATABASE_URL` → `DATABASE_URL`.
-- Request handlers do not run DDL (`schema()` only checks configuration) — except `api/dashboard.js`, which still creates `wealth_category_symbols` on every request.
+- Request handlers do not run DDL (`schema()` only checks configuration) — except `api/_routes/dashboard.js`, which still creates `wealth_category_symbols` on every request.
 
 ## Tables by module
 

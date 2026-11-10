@@ -74,6 +74,9 @@ export function configStatus(env=process.env){
   accessKey:String(env.WEALTH_ACCESS_KEY??'').trim().length>0,
   redis:firstUrl(['REDIS_URL'],['redis','rediss'],env)?'configured':redisRaw?'invalid (ignored)':'not set (optional)',
   cronSecret:String(env.CRON_SECRET??'').trim().length>=16,
+  ingestSecret:String(env.WEALTH_INGEST_SECRET??'').trim().length>=32,
+  backup:String(env.WEALTH_BACKUP_KEY??'').trim().length>=32&&String(env.BLOB_READ_WRITE_TOKEN??'').trim().length>0,
+  metalPriceSource:String(env.WEALTH_METAL_PRICE_SOURCE||'').trim().toLowerCase()==='futures'?'futures':'india benchmark (agent)',
   dataModel:String(env.WEALTH_DATA_MODEL||'v1').trim().toLowerCase()==='v2'?'v2':'v1',
  };
 }
@@ -146,6 +149,67 @@ export function cookie(res,v){res.setHeader('Set-Cookie',v?'wealth_session='+v+'
 export function json(res,status,data){res.statusCode=status;res.setHeader('Content-Type','application/json; charset=utf-8');res.setHeader('Cache-Control','no-store');res.end(JSON.stringify(data))}
 export async function body(req){let s='';for await(const c of req)s+=c;if(s.length>20000)throw new Error('Request too large');return JSON.parse(s||'{}')}
 
+
+// ── Write APIs (TSD Claude Plan 3, TR3-2.5) ─────────────────────────────────────────────────────────────────
+// Who is calling: the owner (session, role admin), a scheduled agent (Bearer WEALTH_INGEST_SECRET) or Vercel Cron
+// (Bearer CRON_SECRET). Agents and cron act for the owner account, resolved server-side — never from the request.
+export function bearer(req){const h=String(req.headers.authorization||'');return h.startsWith('Bearer ')?h.slice(7).trim():''}
+export async function ownerId(db=sql){const r=await db.query("SELECT id FROM wealth_users WHERE role='admin' ORDER BY created_at LIMIT 1");return r[0]?.id||null}
+export async function authorize(req,{ingest=true,cron=false,session=true}={},env=process.env){
+ const t=bearer(req);
+ if(t){
+  const ingestSecret=String(env.WEALTH_INGEST_SECRET||'').trim(),cronSecret=String(env.CRON_SECRET||'').trim();
+  let actor=null;
+  if(ingest&&ingestSecret.length>=32&&safeEqual(t,ingestSecret))actor='agent';
+  else if(cron&&cronSecret.length>=16&&safeEqual(t,cronSecret))actor='cron';
+  if(!actor)return {status:401,error:'Bad or missing token'};
+  if(!sql)throw configError('No database URL is configured');
+  const uid=await ownerId();
+  return uid?{uid,actor}:{status:503,error:'No owner account exists yet'};
+ }
+ if(!session)return {status:401,error:'Bad or missing token'};
+ const uid=await sessionUser(req);if(!uid)return {status:401,error:'Sign in required'};
+ const [u]=await sql.query('SELECT role FROM wealth_users WHERE id=$1',[uid]);
+ return u?.role==='admin'?{uid,actor:'owner'}:{status:403,error:'Owner only'};
+}
+// Run statements in one database transaction. `stmts` = [[text, params], …]; returns one row array per statement.
+// Neon's HTTP driver runs the batch as a single transaction; test adapters may provide txBatch themselves.
+export async function txBatch(db,stmts){
+ if(typeof db.txBatch==='function')return db.txBatch(stmts);
+ if(db===sql&&typeof db.transaction==='function')return db.transaction(stmts.map(([t,p])=>db.query(t,p||[])));
+ const out=[];for(const [t,p] of stmts)out.push(await db.query(t,p||[]));return out;
+}
+// Same, with the audit actor set for the transaction (read by the wealth_audit_log triggers, migration 0008).
+export async function withActor(db,actor,stmts){
+ const r=await txBatch(db,[["SELECT set_config('wealth.actor',$1,true)",[String(actor||'external')]],...stmts]);
+ return r.slice(1);
+}
+export const isUuid=v=>/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v||''));
+export const isDay=v=>/^\d{4}-\d{2}-\d{2}$/.test(String(v||''))&&Number.isFinite(Date.parse(v+'T00:00:00Z'))&&new Date(v+'T00:00:00Z').toISOString().slice(0,10)===v;
+// A request error with an HTTP status (400 validation, 404 not this user's, 409 conflict).
+export function httpError(status,message){const e=new Error(message);e.status=status;return e}
+export function sendError(res,e,label){
+ if(e?.status)return json(res,e.status,{error:e.message});
+ if(e?.code==='CONFIG')return json(res,503,{error:e.message});
+ console.error('['+label+']',e?.message||e);
+ return json(res,500,{error:'Request failed.'});
+}
+
+// Handler wrapper for the write APIs: authorize, check configuration, map errors. `methods` lists allowed verbs.
+export function handle(label,{methods,auth={}},fn){
+ return async(req,res)=>{
+  try{
+   if(methods&&!methods.includes(req.method))return json(res,405,{error:'Method not allowed'});
+   const who=await authorize(req,typeof auth==='function'?auth(req):auth);
+   if(who.error)return json(res,who.status,{error:who.error});
+   await schema();
+   const q=new URL(req.url,'https://local').searchParams;
+   let b={};
+   if(['POST','PUT','PATCH'].includes(req.method)){try{b=await body(req)}catch{return json(res,400,{error:'Body must be JSON (max 20 kB)'})}}
+   return await fn({req,res,who,q,body:b,dryRun:q.get('dryRun')==='1'||q.get('dryRun')==='true'});
+  }catch(e){return sendError(res,e,label)}
+ };
+}
 
 // Schedule stale-while-revalidate work within the current Vercel Function lifetime.
 // The Redis lock is a cooldown (not released on success), preventing refresh storms.

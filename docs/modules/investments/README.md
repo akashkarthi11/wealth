@@ -6,8 +6,8 @@ Holdings and their valuation: Indian equity (Angel One), mutual funds, US stocks
 
 | File | Responsibility |
 |---|---|
-| [`api/dashboard.js`](../../../api/dashboard.js) | `readPositions()` — joins positions → investment assets → market prices and computes live value |
-| [`api/positions.js`](../../../api/positions.js) | `POST /api/positions` — create a manual Angel One fixed deposit |
+| [`api/_routes/dashboard.js`](../../../api/_routes/dashboard.js) | `readPositions()` — joins positions → investment assets → market prices and computes live value |
+| [`api/_routes/positions.js`](../../../api/_routes/positions.js) | `POST /api/positions` — create a manual Angel One fixed deposit |
 | [`app.js`](../../../app.js) | `wealthPosition`, `usHoldingInrValue`, `investmentBreakdownDetailsHtml`, Investments view |
 | [`scripts/migrations/`](../../../scripts/migrations/) | Position normalization and Angel One conversion migrations |
 
@@ -40,7 +40,7 @@ Covered by [`scripts/test-us-holdings-valuation.test.mjs`](../../../scripts/test
 
 ## Known issues
 
-- `POST /api/positions` rejects every maturity date: the regex is written `\\d` inside a regex literal ([`api/positions.js:16`](../../../api/positions.js#L16)).
+- `POST /api/positions` rejects every maturity date: the regex is written `\\d` inside a regex literal ([`api/_routes/positions.js:16`](../../../api/_routes/positions.js#L16)).
 - The FD creation endpoint is not called from the UI.
 - Mutual-fund invested value and gain mix the snapshot "invested" figure with live NAV totals.
 

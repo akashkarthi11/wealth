@@ -6,8 +6,8 @@ Quotes, mutual-fund NAVs, FX and price freshness.
 
 | File | Responsibility |
 |---|---|
-| [`api/refresh-market-prices.js`](../../../api/refresh-market-prices.js) | Cron job: refreshes every asset with `pricing_status IN ('active','pending','stale')` |
-| [`api/dashboard.js`](../../../api/dashboard.js) | Applies fresh prices when reading positions |
+| [`api/_routes/refresh-market-prices.js`](../../../api/_routes/refresh-market-prices.js) | Cron job: refreshes every asset with `pricing_status IN ('active','pending','stale')` |
+| [`api/_routes/dashboard.js`](../../../api/_routes/dashboard.js) | Applies fresh prices when reading positions |
 | [`vercel.json`](../../../vercel.json) | Cron schedule `0 23 * * *` (23:00 UTC = 04:30 IST) |
 
 ## Sources

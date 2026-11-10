@@ -1,5 +1,5 @@
-import {sql,json,invalidateUserCaches} from './_lib.js';
-import {startJob,finishJob} from './_jobs.js';
+import {sql,json,invalidateUserCaches} from '../_lib.js';
+import {startJob,finishJob} from '../_jobs.js';
 
 // Daily price refresh (Vercel Cron). Writes:
 //   v1: wealth_market_prices / wealth_price_history per legacy asset (kept while v1 is live)
@@ -68,11 +68,26 @@ export function makePricer(fx){
  };
 }
 
+// Metal price policy (TSD Claude Plan 3, TR3-1.2 / DV3-2): the India benchmark (IBJA 999, per gram) is supplied by
+// the hourly agent through /api/prices. Futures parity (GC=F / SI=F) is used only when the owner chooses it.
+export const useMetalFutures=(env=process.env)=>String(env.WEALTH_METAL_PRICE_SOURCE||'').trim().toLowerCase()==='futures';
+// Why the daily refresh leaves a quote alone: a price hold (DQ-1) or the metal policy. null = refresh it.
+export function refreshSkipReason({symbol,holdReason},env=process.env){
+ if(holdReason)return 'on hold: '+holdReason;
+ if(METAL_FUTURES.has(symbol)&&!useMetalFutures(env))return 'metal price comes from the India benchmark (set WEALTH_METAL_PRICE_SOURCE=futures to use futures parity)';
+ return null;
+}
+
 async function refreshLegacy(price){
- const assets=await sql.query(`SELECT a.id,a.user_id,a.price_currency,a.price_source_symbol,a.quantity_unit,a.asset_class,a.display_name
-   FROM wealth_investment_assets a WHERE a.pricing_status IN ('active','pending','stale') AND a.price_source_symbol IS NOT NULL`);
+ const base=`SELECT a.id,a.user_id,a.price_currency,a.price_source_symbol,a.quantity_unit,a.asset_class,a.display_name,%HOLD% AS hold_reason
+   FROM wealth_investment_assets a %JOIN% WHERE a.pricing_status IN ('active','pending','stale') AND a.price_source_symbol IS NOT NULL`;
+ const assets=await sql.query(base.replace('%HOLD%','i.price_hold_reason').replace('%JOIN%',`LEFT JOIN wealth_positions p ON p.id=a.position_id
+   LEFT JOIN wealth_instruments i ON i.asset_class=a.asset_class AND i.symbol=coalesce(p.ticker,CASE WHEN a.asset_class='precious_metal' THEN upper(p.record_type) ELSE p.name END)`))
+  .catch(e=>{if(e?.code==='42703'||e?.code==='42P01')return sql.query(base.replace('%HOLD%','NULL::text').replace('%JOIN%',''));throw e});
  const users=new Set();
  const results=await Promise.all(assets.map(async a=>{
+  const skip=refreshSkipReason({symbol:a.price_source_symbol,holdReason:a.hold_reason});
+  if(skip)return {asset_id:a.id,status:'skipped',message:skip};
   try{
    const q=await price({assetClass:a.asset_class,symbol:a.price_source_symbol,name:a.display_name,currency:String(a.price_currency||'').trim()||null});
    if(q.resolvedSymbol)await sql.query('UPDATE wealth_investment_assets SET price_source_symbol=$2,updated_at=now() WHERE id=$1',[a.id,q.resolvedSymbol]);
@@ -98,13 +113,16 @@ async function refreshLegacy(price){
 async function refreshInstruments(price){
  let instruments;
  try{
-  instruments=await sql.query(`SELECT i.id,i.asset_class,i.symbol,i.name,trim(i.currency) AS currency,i.price_source_symbol
+  const q=hold=>sql.query(`SELECT i.id,i.asset_class,i.symbol,i.name,trim(i.currency) AS currency,i.price_source_symbol,${hold} AS hold_reason
     FROM wealth_instruments i WHERE i.price_source_symbol IS NOT NULL AND EXISTS (SELECT 1 FROM wealth_holdings h WHERE h.instrument_id=i.id AND h.status='active')`);
+  instruments=await q('i.price_hold_reason').catch(e=>{if(e?.code==='42703')return q('NULL::text');throw e});
  }catch(e){
   if(e?.code==='42P01')return {results:[],skipped:'account hierarchy not migrated'};
   throw e;
  }
  const results=await Promise.all(instruments.map(async i=>{
+  const skip=refreshSkipReason({symbol:i.price_source_symbol,holdReason:i.hold_reason});
+  if(skip)return {instrument_id:i.id,symbol:i.symbol,status:'skipped',message:skip};
   try{
    const q=await price({assetClass:i.asset_class,symbol:i.price_source_symbol,name:i.name,currency:i.currency});
    if(q.resolvedSymbol)await sql.query('UPDATE wealth_instruments SET price_source_symbol=$2 WHERE id=$1',[i.id,q.resolvedSymbol]);

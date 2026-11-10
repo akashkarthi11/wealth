@@ -1,4 +1,4 @@
-import {cookie} from './_lib.js';
+import {cookie} from '../_lib.js';
 
 export default function handler(req,res){
  if(req.method!=='GET'){

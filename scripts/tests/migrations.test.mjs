@@ -79,7 +79,8 @@ test('dry run lists pending migrations without applying them', async () => {
 });
 
 test('the baseline restores keys and checks on tables that were copied without them', async () => {
-  const baseline = readFileSync(join(MIGRATIONS_DIR, '0000_baseline.sql'), 'utf8');
+  // Normalise line endings: a Windows checkout (core.autocrlf) has CRLF, and the drift regexes below expect LF.
+  const baseline = readFileSync(join(MIGRATIONS_DIR, '0000_baseline.sql'), 'utf8').replace(/\r\n/g, '\n');
   const constraintCount = async a => (await a.query(`SELECT count(*)::int n FROM pg_constraint WHERE connamespace='public'::regnamespace AND contype IN ('p','u','c','f')`))[0].n;
 
   const { a: reference } = await freshDb();

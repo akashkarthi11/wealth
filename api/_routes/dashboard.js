@@ -1,6 +1,6 @@
-import {sql,schema,json,sessionUser,dataModel} from './_lib.js';
-import {pageTransactions,spendingRows,accountHierarchyRows,legacyPositionRows} from './_queries.js';
-import {valuePortfolio} from './_valuation.js';
+import {sql,schema,json,sessionUser,dataModel} from '../_lib.js';
+import {pageTransactions,spendingRows,accountHierarchyRows,legacyPositionRows} from '../_queries.js';
+import {valuePortfolio} from '../_valuation.js';
 
 async function readDashboard(uid){
  const [users,page,spending,templates,accounts,positions,interest,interestStatements]=await Promise.all([
