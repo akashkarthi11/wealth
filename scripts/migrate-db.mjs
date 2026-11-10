@@ -70,7 +70,7 @@ async function runAngelOneLivePositionsMigration(){
  for(const statement of statements) await sql.query(statement);
  const counts=await sql.query(`SELECT
   (SELECT count(*)::int FROM wealth_positions WHERE source_key LIKE 'angelone-equity-holding-%' AND category='INVESTMENT') AS individual_equity_positions,
-  (SELECT count(*)::int FROM wealth_positions WHERE name='Angel One equity portfolio aggregate' AND category='ARCHIVED') AS archived_aggregates`);
+  (SELECT count(*)::int FROM wealth_positions WHERE name='Angel One equity portfolio aggregate' AND record_type='EQUITY_AGGREGATE_ARCHIVED') AS archived_aggregates`);
  console.log('[db-migrate] Angel One equity positions converted:',JSON.stringify(counts[0]||{}));
 }
 
