@@ -106,7 +106,7 @@
   "crons": [
     {
       "path": "/api/refresh-market-prices",
-      "schedule": "0 * * * *"
+      "schedule": "0 23 * * *"
     }
   ]
 }
