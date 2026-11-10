@@ -1,4 +1,4 @@
-const APP_BUILD_ID='20261110-interest-by-day-chart-1';
+const APP_BUILD_ID='20261110-alerts-mandates-1';
 (function promptForUpdatedApp(){
   try {
     const key='wealth-ledger:app-build';
