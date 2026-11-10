@@ -143,3 +143,14 @@ This project is complete only when:
 - Updated the feature branch `fix/market-price-wealth-total` with dashboard valuation fallback and fresh-read changes.
 - **Not deployed.** Deployment requires explicit approval.
 - Next: validate the complete branch diff, add automated reconciliation/regression tests, and verify database totals against a single canonical valuation calculation before requesting Development deployment approval.
+
+
+### 2026-11-10 — Full net-worth reconciliation follow-up
+
+- Read-only Development audit found a future-dated/unverified ₹93,726 EPF/EPS record, a ₹3,001 Slice FD pending reconciliation, reference-FX US holdings, and active equity/MF aggregate records alongside underlying rows.
+- The two positions without pricing mappings are aggregate rows; no price assets should be created for those aggregate records.
+- Added a single dashboard totals calculator. It excludes unverified retirement, pending FD and reference-FX US values from confirmed net worth while keeping them visible in the reported investment total.
+- Active equity and mutual-fund aggregates are fallback-only when individual rows are absent; archived rows remain excluded.
+- Added regression tests and wired them into the build.
+- Development-only feature branch: `fix/net-worth-valuation-reconciliation`.
+- No database rows changed. Production untouched. Development preview/build verification is pending.
