@@ -17,6 +17,11 @@ WHERE s.source_key LIKE 'angelone-equity-holdings-%'
  AND COALESCE(h->>'status','active')<>'inactive'
  AND jsonb_typeof(h->'last_traded_price')='number'
  AND (h->>'last_traded_price')::numeric>0
+ AND NOT EXISTS (
+  SELECT 1 FROM wealth_investment_assets existing
+  WHERE existing.user_id=s.user_id AND existing.symbol=trim(h->>'symbol')
+    AND existing.position_id IS NOT NULL
+ )
 ON CONFLICT (user_id,symbol) WHERE position_id IS NULL
 DO UPDATE SET display_name=EXCLUDED.display_name,asset_class=EXCLUDED.asset_class,
  quantity_unit=EXCLUDED.quantity_unit,price_currency=EXCLUDED.price_currency,
