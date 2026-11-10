@@ -1,5 +1,5 @@
 -- Convert Angel One mutual-fund screenshot aggregate into four unit-based positions.
--- Units come from the 31-Oct-2026 DP statement; values are from the 10-Nov-2026 holdings snapshot.
+-- Units come from the 31-Oct-2026 DP statement, while values are from the 10-Nov-2026 holdings snapshot.
 INSERT INTO wealth_positions
  (user_id,category,institution_name,platform_name,record_type,name,ticker,currency,quantity,current_value,invested_value,balance_as_of,source_snapshot_id,source_key,metadata)
 SELECT 'ddb0cf5a-8583-40c2-a5a7-4213a236ae1a'::uuid,'INVESTMENT','Angel One','Angel One','MUTUAL_FUND',v.name,NULL,'INR',v.units,v.current_value,v.invested_value,'2026-11-10T00:00:00Z',
