@@ -78,5 +78,6 @@ SET category='ARCHIVED',
       )),
     updated_at=now()
 WHERE user_id=(SELECT id FROM wealth_users WHERE role='admin' ORDER BY created_at LIMIT 1)
-  AND id='ab2f7b47-5237-4050-be10-528dd590c963'
+  AND source_key LIKE 'angelone-equity-holdings-%'
+  AND ticker IS NULL AND name='Angel One equity portfolio aggregate'
   AND category<>'ARCHIVED';
