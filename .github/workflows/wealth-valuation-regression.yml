@@ -1,0 +1,27 @@
+name: Wealth valuation regression checks
+
+on:
+  pull_request:
+    branches: [development]
+    paths:
+      - 'app.js'
+      - 'index.html'
+      - 'style.css'
+      - 'scripts/**'
+      - 'package.json'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Validate homepage and JavaScript syntax
+        run: node scripts/validate-homepage.mjs
+      - name: Run wealth valuation regression tests
+        run: node --test scripts/test-us-holdings-valuation.test.mjs
