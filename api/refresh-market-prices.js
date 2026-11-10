@@ -68,8 +68,8 @@ export default async function handler(req,res){
       source=EXCLUDED.source,source_timestamp=EXCLUDED.source_timestamp,fetched_at=now(),status='fresh',metadata=EXCLUDED.metadata`,
       [a.id,a.user_id,unitPrice,currency,asOf.toISOString(),JSON.stringify({provider_symbol:q.provider_symbol||a.price_source_symbol,provider_currency:q.currency,unit:a.quantity_unit,pricing_basis:(a.price_source_symbol==='GC=F'||a.price_source_symbol==='SI=F')?'global futures parity converted from USD/oz to INR/g':a.asset_class==='indian_mutual_fund'?'AMFI mutual fund NAV':'exchange quote',fx_to_inr:fx?.price||null}),a.asset_class==='indian_mutual_fund'?'MFAPI.in':'Yahoo Finance']);
     await sql.query(`INSERT INTO wealth_price_history(asset_id,user_id,unit_price,currency,source,source_timestamp,metadata)
-      VALUES($1,$2,$3,$4,'Yahoo Finance',$5,$6::jsonb)`,
-      [a.id,a.user_id,unitPrice,currency,asOf.toISOString(),JSON.stringify({provider_symbol:q.provider_symbol||a.price_source_symbol,unit:a.quantity_unit})]);
+      VALUES($1,$2,$3,$4,$7,$5,$6::jsonb)`,
+      [a.id,a.user_id,unitPrice,currency,asOf.toISOString(),JSON.stringify({provider_symbol:q.provider_symbol||a.price_source_symbol,unit:a.quantity_unit}),a.asset_class==='indian_mutual_fund'?'MFAPI.in':'Yahoo Finance']);
     await sql.query("UPDATE wealth_investment_assets SET pricing_status='active',updated_at=now() WHERE id=$1",[a.id]);
     return {asset_id:a.id,status:'updated',unit_price:unitPrice,currency};
    }catch(e){
