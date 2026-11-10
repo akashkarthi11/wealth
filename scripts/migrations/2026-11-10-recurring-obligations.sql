@@ -126,7 +126,7 @@ SELECT s.user_id,
          WHEN lower(s.provider_name) LIKE '%loan%' OR lower(s.provider_name) LIKE '%emi%' THEN 'loan'
          ELSE 'subscription'
        END,
-       s.amount,
+       NULLIF(s.amount,0),
        CASE WHEN s.amount_type IN ('fixed','variable','up_to') THEN s.amount_type ELSE 'fixed' END,
        CASE WHEN s.frequency IN ('one_time','daily','weekly','monthly','quarterly','half_yearly','yearly','as_presented','frequency_not_confirmed') THEN s.frequency ELSE 'frequency_not_confirmed' END,
        s.next_due_date,
@@ -178,7 +178,7 @@ SELECT o.user_id, o.id, s.next_due_date, s.amount, 'planned', s.created_at, s.up
 FROM wealth_subscriptions s
 JOIN wealth_recurring_obligations o ON o.id=s.obligation_id AND o.user_id=s.user_id
 WHERE s.next_due_date IS NOT NULL
-  AND s.amount IS NOT NULL
+  AND s.amount > 0
   AND NOT EXISTS (
     SELECT 1 FROM wealth_payment_occurrences p
     WHERE p.obligation_id=o.id AND p.due_date=s.next_due_date
