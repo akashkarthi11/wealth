@@ -3,7 +3,7 @@
 - **Date:** 2026-11-10
 - **Primary module:** Database
 - **Related modules:** Market data, Investments, Dashboard, Obligations, Interest
-- **Status:** Code and migrations committed on `claude-dev` (`eae5131`, `83b00ff`, `49f9704`, `6d28265`); tested on PGlite and on an in-memory copy of the Preview data; **not applied to any Neon database**; not deployed
+- **Status:** Code and migrations committed on `claude-dev` (`eae5131`, `83b00ff`, `49f9704`, `6d28265`, `177dd01`). **Migrations 0000–0005 applied to Development and Production on 2026-11-10** at the owner's request (backups taken first). Application code not deployed; `WEALTH_DATA_MODEL` still `v1`
 - **TSD:** [Claude Plan 1](../../plans/claude-plan-1.md) Phases 2, 4, 5, 6 — defects DEF-03, DEF-04, DEF-06, DEF-07, DEF-08, DEF-11, DEF-12, DEF-13
 
 ## Symptoms
@@ -33,8 +33,11 @@
 - [x] PGlite: fresh build, idempotent re-run, checksum guard, rollback on failure, owner FKs, unique keys, duplicate indexes gone, backfill idempotent and aborting, obligation/interest linking and triggers (`scripts/tests/*.test.mjs`, 58 tests).
 - [x] In-memory copy of the Preview data: 0002–0005 apply cleanly; v2 totals reproduce every v1 figure except US holdings, which are excluded as missing FX until the refresh job stores a USD/INR rate.
 - [x] Dry run against the Preview database lists pending migrations and changes nothing.
-- [ ] Apply on a Neon branch; compare `wealth_v_account_values` with the v1 dashboard.
-- [ ] Development (approval), then Production (separate approval).
+- [x] **Development** (`ep-noisy-bread…`, `.env.devteam.local`), 2026-11-10 ~17:55 UTC. Backup: `.db-backups/claude-development-before-migrations-20261110T175351Z`. First attempt of 0000 failed and rolled back: the database had lost 58 constraints (no primary keys on 10 tables). 0000 was extended to restore missing PK/UNIQUE/CHECK constraints (`177dd01`), then 0000–0005 applied. Verified read-only: no rows lost, every table has a primary key, v2 net worth ₹4,55,475.67.
+- [x] **Production** (`ep-solitary-quee…`; also used by Preview deployments), 2026-11-10 ~17:58 UTC. Backup: `.db-backups/claude-production-before-migrations-20261110T175731Z`. 0000–0005 applied. Verified read-only: no rows lost, every table has a primary key, 15 accounts / 26 holdings / 10 balances, v2 net worth ₹4,55,475.67 (US holdings excluded as missing FX until the refresh job stores a USD/INR rate).
+- [x] Compatible with the code currently deployed (v1): migrations only add tables, columns, keys and triggers.
+- [ ] Deploy the application code (separate approval), then switch `WEALTH_DATA_MODEL=v2` after comparing `?model=v2`.
+- [ ] Optional repairs in `scripts/db/repairs/` (separate approval).
 
 ## Rollout notes
 

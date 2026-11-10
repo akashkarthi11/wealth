@@ -771,8 +771,9 @@ Branch `claude-dev`. Nothing deployed; no Neon database written. "Verified on co
 
 | Phase | Requirement | Status | Commit | Evidence |
 |---|---|---|---|---|
-| 0 | TR-0.1 Preview vs Production host | **Open** — needs Production env access (blocked by permission) | — | — |
-| 0 | TR-0.2 Neon branch | **Open** — needs a Neon API key / console | — | — |
+| 0 | TR-0.1 Preview vs Production host | **Answered (D1): the same database.** Preview deployments of `development` use the Production database (`ep-solitary-quee…`) | — | host comparison |
+| 0 | TR-0.2 Trial database | Used the separate Development database (`ep-noisy-bread…`) instead of a new Neon branch | — | — |
+| 2–6 | **Migrations applied to Development and Production** | Done 2026-11-10 at the owner's request, backups first; no rows lost; all tables have primary keys | `177dd01` | fix note |
 | 0 | TR-0.3 Baseline rebuilds empty DB | Done (PGlite, Postgres 16) | `eae5131` | `migrations.test.mjs` |
 | 0 | TR-0.4 Docs and drafts on a branch | Done | `910df31` | — |
 | 1 | TR-1.1 – 1.5 Auth hardening | Done | `e6b0fd3` | `auth.test.mjs` |
@@ -795,4 +796,6 @@ Branch `claude-dev`. Nothing deployed; no Neon database written. "Verified on co
 
 **v2 vs v1 on the copy of Preview data:** CASA ₹1,13,383.53 (equal), liabilities ₹30,634.21 (equal), investments ₹3,72,726.35 vs ₹3,78,072.85. The ₹5,346.50 difference is the US holdings, which v2 excludes as `missing_fx` because the stored US prices have no USD/INR rate; the next refresh run stores one. INDmoney cash ($10.02) is now recorded on its account.
 
-**Next steps (each needs approval):** create a Neon branch → `npm run db:migrate:dry` then run migrations there → compare `?model=v2` with v1 → apply repairs → Development deploy → Production deploy → set `WEALTH_DATA_MODEL=v2`.
+**Next steps (each needs approval):** ~~migrations~~ (done on both databases) → deploy the application code → compare `?model=v2` with v1 → optional repairs → set `WEALTH_DATA_MODEL=v2`.
+
+**Note:** because Preview deployments share the Production database, testing `claude-dev` in a Vercel Preview reads and writes live data. Point Preview at the Development database (`ep-noisy-bread…`) in Vercel's environment settings before using Preview for testing.
