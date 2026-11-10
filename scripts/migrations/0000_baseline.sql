@@ -338,6 +338,457 @@ CREATE TABLE IF NOT EXISTS wealth_users (
   CONSTRAINT wealth_users_email_key UNIQUE (email)
 );
 
+-- Converge databases whose existing tables lost constraints
+-- (e.g. tables copied without keys). Adds each PRIMARY KEY / UNIQUE / CHECK only if missing;
+-- a no-op where the schema is already complete. Fails, and rolls back, if existing data violates one.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_accounts_balance_status_check' AND conrelid = 'public.wealth_accounts'::regclass) THEN
+    ALTER TABLE wealth_accounts ADD CONSTRAINT wealth_accounts_balance_status_check CHECK ((balance_status = ANY (ARRAY['verified'::text, 'stale'::text, 'pending_reconciliation'::text, 'unknown'::text])));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_accounts_pkey' AND conrelid = 'public.wealth_accounts'::regclass) AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.wealth_accounts'::regclass AND contype = 'p') THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_accounts_pkey' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_accounts ADD CONSTRAINT wealth_accounts_pkey PRIMARY KEY USING INDEX wealth_accounts_pkey;
+    ELSE
+      ALTER TABLE wealth_accounts ADD CONSTRAINT wealth_accounts_pkey PRIMARY KEY (id);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_accounts_user_account_key' AND conrelid = 'public.wealth_accounts'::regclass) THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_accounts_user_account_key' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_accounts ADD CONSTRAINT wealth_accounts_user_account_key UNIQUE USING INDEX wealth_accounts_user_account_key;
+    ELSE
+      ALTER TABLE wealth_accounts ADD CONSTRAINT wealth_accounts_user_account_key UNIQUE (user_id, account_key);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_accounts_user_id_id_key' AND conrelid = 'public.wealth_accounts'::regclass) THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_accounts_user_id_id_key' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_accounts ADD CONSTRAINT wealth_accounts_user_id_id_key UNIQUE USING INDEX wealth_accounts_user_id_id_key;
+    ELSE
+      ALTER TABLE wealth_accounts ADD CONSTRAINT wealth_accounts_user_id_id_key UNIQUE (user_id, id);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_category_symbols_nonempty' AND conrelid = 'public.wealth_category_symbols'::regclass) THEN
+    ALTER TABLE wealth_category_symbols ADD CONSTRAINT wealth_category_symbols_nonempty CHECK (((length(TRIM(BOTH FROM display_symbol)) >= 1) AND (length(TRIM(BOTH FROM display_symbol)) <= 16)));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_category_symbols_pkey' AND conrelid = 'public.wealth_category_symbols'::regclass) AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.wealth_category_symbols'::regclass AND contype = 'p') THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_category_symbols_pkey' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_category_symbols ADD CONSTRAINT wealth_category_symbols_pkey PRIMARY KEY USING INDEX wealth_category_symbols_pkey;
+    ELSE
+      ALTER TABLE wealth_category_symbols ADD CONSTRAINT wealth_category_symbols_pkey PRIMARY KEY (user_id, category_key);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_email_imports_pkey' AND conrelid = 'public.wealth_email_imports'::regclass) AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.wealth_email_imports'::regclass AND contype = 'p') THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_email_imports_pkey' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_email_imports ADD CONSTRAINT wealth_email_imports_pkey PRIMARY KEY USING INDEX wealth_email_imports_pkey;
+    ELSE
+      ALTER TABLE wealth_email_imports ADD CONSTRAINT wealth_email_imports_pkey PRIMARY KEY (id);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_email_imports_user_id_provider_message_id_key' AND conrelid = 'public.wealth_email_imports'::regclass) THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_email_imports_user_id_provider_message_id_key' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_email_imports ADD CONSTRAINT wealth_email_imports_user_id_provider_message_id_key UNIQUE USING INDEX wealth_email_imports_user_id_provider_message_id_key;
+    ELSE
+      ALTER TABLE wealth_email_imports ADD CONSTRAINT wealth_email_imports_user_id_provider_message_id_key UNIQUE (user_id, provider, message_id);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_interest_ledger_annual_rate_check' AND conrelid = 'public.wealth_interest_ledger'::regclass) THEN
+    ALTER TABLE wealth_interest_ledger ADD CONSTRAINT wealth_interest_ledger_annual_rate_check CHECK (((annual_rate >= (0)::numeric) AND (annual_rate <= (1)::numeric)));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_interest_ledger_calculation_status_check' AND conrelid = 'public.wealth_interest_ledger'::regclass) THEN
+    ALTER TABLE wealth_interest_ledger ADD CONSTRAINT wealth_interest_ledger_calculation_status_check CHECK ((calculation_status = ANY (ARRAY['estimated'::text, 'confirmed'::text, 'corrected'::text, 'reversed'::text])));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_interest_ledger_day_count_check' AND conrelid = 'public.wealth_interest_ledger'::regclass) THEN
+    ALTER TABLE wealth_interest_ledger ADD CONSTRAINT wealth_interest_ledger_day_count_check CHECK ((day_count = ANY (ARRAY[365, 366])));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_interest_ledger_entry_type_check' AND conrelid = 'public.wealth_interest_ledger'::regclass) THEN
+    ALTER TABLE wealth_interest_ledger ADD CONSTRAINT wealth_interest_ledger_entry_type_check CHECK ((entry_type = ANY (ARRAY['accrual'::text, 'correction'::text, 'reversal'::text])));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_interest_ledger_principal_check' AND conrelid = 'public.wealth_interest_ledger'::regclass) THEN
+    ALTER TABLE wealth_interest_ledger ADD CONSTRAINT wealth_interest_ledger_principal_check CHECK ((principal >= (0)::numeric));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_interest_ledger_revision_check' AND conrelid = 'public.wealth_interest_ledger'::regclass) THEN
+    ALTER TABLE wealth_interest_ledger ADD CONSTRAINT wealth_interest_ledger_revision_check CHECK ((revision >= 1));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_interest_ledger_pkey' AND conrelid = 'public.wealth_interest_ledger'::regclass) AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.wealth_interest_ledger'::regclass AND contype = 'p') THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_interest_ledger_pkey' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_interest_ledger ADD CONSTRAINT wealth_interest_ledger_pkey PRIMARY KEY USING INDEX wealth_interest_ledger_pkey;
+    ELSE
+      ALTER TABLE wealth_interest_ledger ADD CONSTRAINT wealth_interest_ledger_pkey PRIMARY KEY (id);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_interest_ledger_user_id_provider_product_key_account_key' AND conrelid = 'public.wealth_interest_ledger'::regclass) THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_interest_ledger_user_id_provider_product_key_account_key' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_interest_ledger ADD CONSTRAINT wealth_interest_ledger_user_id_provider_product_key_account_key UNIQUE USING INDEX wealth_interest_ledger_user_id_provider_product_key_account_key;
+    ELSE
+      ALTER TABLE wealth_interest_ledger ADD CONSTRAINT wealth_interest_ledger_user_id_provider_product_key_account_key UNIQUE (user_id, provider, product_key, account_key, partition_key, accrual_date, revision);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_interest_rates_annual_rate_check' AND conrelid = 'public.wealth_interest_rates'::regclass) THEN
+    ALTER TABLE wealth_interest_rates ADD CONSTRAINT wealth_interest_rates_annual_rate_check CHECK (((annual_rate >= (0)::numeric) AND (annual_rate <= (1)::numeric)));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_interest_rates_check' AND conrelid = 'public.wealth_interest_rates'::regclass) THEN
+    ALTER TABLE wealth_interest_rates ADD CONSTRAINT wealth_interest_rates_check CHECK (((effective_to IS NULL) OR (effective_to >= effective_from)));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_interest_rates_pkey' AND conrelid = 'public.wealth_interest_rates'::regclass) AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.wealth_interest_rates'::regclass AND contype = 'p') THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_interest_rates_pkey' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_interest_rates ADD CONSTRAINT wealth_interest_rates_pkey PRIMARY KEY USING INDEX wealth_interest_rates_pkey;
+    ELSE
+      ALTER TABLE wealth_interest_rates ADD CONSTRAINT wealth_interest_rates_pkey PRIMARY KEY (id);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_interest_statements_statement_total_check' AND conrelid = 'public.wealth_interest_statements'::regclass) THEN
+    ALTER TABLE wealth_interest_statements ADD CONSTRAINT wealth_interest_statements_statement_total_check CHECK ((statement_total >= (0)::numeric));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_interest_statements_pkey' AND conrelid = 'public.wealth_interest_statements'::regclass) AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.wealth_interest_statements'::regclass AND contype = 'p') THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_interest_statements_pkey' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_interest_statements ADD CONSTRAINT wealth_interest_statements_pkey PRIMARY KEY USING INDEX wealth_interest_statements_pkey;
+    ELSE
+      ALTER TABLE wealth_interest_statements ADD CONSTRAINT wealth_interest_statements_pkey PRIMARY KEY (id);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_interest_statements_user_id_provider_product_key_per_key' AND conrelid = 'public.wealth_interest_statements'::regclass) THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_interest_statements_user_id_provider_product_key_per_key' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_interest_statements ADD CONSTRAINT wealth_interest_statements_user_id_provider_product_key_per_key UNIQUE USING INDEX wealth_interest_statements_user_id_provider_product_key_per_key;
+    ELSE
+      ALTER TABLE wealth_interest_statements ADD CONSTRAINT wealth_interest_statements_user_id_provider_product_key_per_key UNIQUE (user_id, provider, product_key, period_start, period_end, statement_label);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_investment_assets_status_check' AND conrelid = 'public.wealth_investment_assets'::regclass) THEN
+    ALTER TABLE wealth_investment_assets ADD CONSTRAINT wealth_investment_assets_status_check CHECK ((pricing_status = ANY (ARRAY['active'::text, 'pending'::text, 'manual'::text, 'unsupported'::text, 'stale'::text])));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_investment_assets_pkey' AND conrelid = 'public.wealth_investment_assets'::regclass) AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.wealth_investment_assets'::regclass AND contype = 'p') THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_investment_assets_pkey' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_investment_assets ADD CONSTRAINT wealth_investment_assets_pkey PRIMARY KEY USING INDEX wealth_investment_assets_pkey;
+    ELSE
+      ALTER TABLE wealth_investment_assets ADD CONSTRAINT wealth_investment_assets_pkey PRIMARY KEY (id);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_investment_assets_position_id_key' AND conrelid = 'public.wealth_investment_assets'::regclass) THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_investment_assets_position_id_key' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_investment_assets ADD CONSTRAINT wealth_investment_assets_position_id_key UNIQUE USING INDEX wealth_investment_assets_position_id_key;
+    ELSE
+      ALTER TABLE wealth_investment_assets ADD CONSTRAINT wealth_investment_assets_position_id_key UNIQUE (position_id);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_market_prices_status_check' AND conrelid = 'public.wealth_market_prices'::regclass) THEN
+    ALTER TABLE wealth_market_prices ADD CONSTRAINT wealth_market_prices_status_check CHECK ((status = ANY (ARRAY['fresh'::text, 'stale'::text, 'error'::text, 'manual'::text])));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_market_prices_pkey' AND conrelid = 'public.wealth_market_prices'::regclass) AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.wealth_market_prices'::regclass AND contype = 'p') THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_market_prices_pkey' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_market_prices ADD CONSTRAINT wealth_market_prices_pkey PRIMARY KEY USING INDEX wealth_market_prices_pkey;
+    ELSE
+      ALTER TABLE wealth_market_prices ADD CONSTRAINT wealth_market_prices_pkey PRIMARY KEY (id);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_market_prices_asset_id_key' AND conrelid = 'public.wealth_market_prices'::regclass) THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_market_prices_asset_id_key' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_market_prices ADD CONSTRAINT wealth_market_prices_asset_id_key UNIQUE USING INDEX wealth_market_prices_asset_id_key;
+    ELSE
+      ALTER TABLE wealth_market_prices ADD CONSTRAINT wealth_market_prices_asset_id_key UNIQUE (asset_id);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_payment_occurrences_actual_ck' AND conrelid = 'public.wealth_payment_occurrences'::regclass) THEN
+    ALTER TABLE wealth_payment_occurrences ADD CONSTRAINT wealth_payment_occurrences_actual_ck CHECK (((actual_amount IS NULL) OR (actual_amount >= (0)::numeric)));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_payment_occurrences_expected_ck' AND conrelid = 'public.wealth_payment_occurrences'::regclass) THEN
+    ALTER TABLE wealth_payment_occurrences ADD CONSTRAINT wealth_payment_occurrences_expected_ck CHECK ((expected_amount > (0)::numeric));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_payment_occurrences_status_ck' AND conrelid = 'public.wealth_payment_occurrences'::regclass) THEN
+    ALTER TABLE wealth_payment_occurrences ADD CONSTRAINT wealth_payment_occurrences_status_ck CHECK ((status = ANY (ARRAY['planned'::text, 'paid'::text, 'skipped'::text, 'cancelled'::text])));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_payment_occurrences_pkey' AND conrelid = 'public.wealth_payment_occurrences'::regclass) AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.wealth_payment_occurrences'::regclass AND contype = 'p') THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_payment_occurrences_pkey' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_payment_occurrences ADD CONSTRAINT wealth_payment_occurrences_pkey PRIMARY KEY USING INDEX wealth_payment_occurrences_pkey;
+    ELSE
+      ALTER TABLE wealth_payment_occurrences ADD CONSTRAINT wealth_payment_occurrences_pkey PRIMARY KEY (id);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_payment_occurrences_due_uq' AND conrelid = 'public.wealth_payment_occurrences'::regclass) THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_payment_occurrences_due_uq' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_payment_occurrences ADD CONSTRAINT wealth_payment_occurrences_due_uq UNIQUE USING INDEX wealth_payment_occurrences_due_uq;
+    ELSE
+      ALTER TABLE wealth_payment_occurrences ADD CONSTRAINT wealth_payment_occurrences_due_uq UNIQUE (obligation_id, due_date);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_planned_bills_amount_check' AND conrelid = 'public.wealth_planned_bills'::regclass) THEN
+    ALTER TABLE wealth_planned_bills ADD CONSTRAINT wealth_planned_bills_amount_check CHECK ((amount > (0)::numeric));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_planned_bills_status_check' AND conrelid = 'public.wealth_planned_bills'::regclass) THEN
+    ALTER TABLE wealth_planned_bills ADD CONSTRAINT wealth_planned_bills_status_check CHECK ((status = ANY (ARRAY['planned'::text, 'paid'::text, 'cancelled'::text])));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_planned_bills_pkey' AND conrelid = 'public.wealth_planned_bills'::regclass) AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.wealth_planned_bills'::regclass AND contype = 'p') THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_planned_bills_pkey' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_planned_bills ADD CONSTRAINT wealth_planned_bills_pkey PRIMARY KEY USING INDEX wealth_planned_bills_pkey;
+    ELSE
+      ALTER TABLE wealth_planned_bills ADD CONSTRAINT wealth_planned_bills_pkey PRIMARY KEY (id);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_planned_bills_user_id_title_due_date_key' AND conrelid = 'public.wealth_planned_bills'::regclass) THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_planned_bills_user_id_title_due_date_key' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_planned_bills ADD CONSTRAINT wealth_planned_bills_user_id_title_due_date_key UNIQUE USING INDEX wealth_planned_bills_user_id_title_due_date_key;
+    ELSE
+      ALTER TABLE wealth_planned_bills ADD CONSTRAINT wealth_planned_bills_user_id_title_due_date_key UNIQUE (user_id, title, due_date);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_positions_category_check' AND conrelid = 'public.wealth_positions'::regclass) THEN
+    ALTER TABLE wealth_positions ADD CONSTRAINT wealth_positions_category_check CHECK ((category = ANY (ARRAY['CASA'::text, 'INVESTMENT'::text, 'LIABILITY'::text])));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_positions_pkey' AND conrelid = 'public.wealth_positions'::regclass) AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.wealth_positions'::regclass AND contype = 'p') THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_positions_pkey' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_positions ADD CONSTRAINT wealth_positions_pkey PRIMARY KEY USING INDEX wealth_positions_pkey;
+    ELSE
+      ALTER TABLE wealth_positions ADD CONSTRAINT wealth_positions_pkey PRIMARY KEY (id);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_price_history_pkey' AND conrelid = 'public.wealth_price_history'::regclass) AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.wealth_price_history'::regclass AND contype = 'p') THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_price_history_pkey' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_price_history ADD CONSTRAINT wealth_price_history_pkey PRIMARY KEY USING INDEX wealth_price_history_pkey;
+    ELSE
+      ALTER TABLE wealth_price_history ADD CONSTRAINT wealth_price_history_pkey PRIMARY KEY (id);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_recurring_obligations_amount_ck' AND conrelid = 'public.wealth_recurring_obligations'::regclass) THEN
+    ALTER TABLE wealth_recurring_obligations ADD CONSTRAINT wealth_recurring_obligations_amount_ck CHECK (((expected_amount IS NULL) OR (expected_amount > (0)::numeric)));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_recurring_obligations_amount_type_ck' AND conrelid = 'public.wealth_recurring_obligations'::regclass) THEN
+    ALTER TABLE wealth_recurring_obligations ADD CONSTRAINT wealth_recurring_obligations_amount_type_ck CHECK ((amount_type = ANY (ARRAY['fixed'::text, 'variable'::text, 'up_to'::text])));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_recurring_obligations_frequency_ck' AND conrelid = 'public.wealth_recurring_obligations'::regclass) THEN
+    ALTER TABLE wealth_recurring_obligations ADD CONSTRAINT wealth_recurring_obligations_frequency_ck CHECK ((frequency = ANY (ARRAY['one_time'::text, 'daily'::text, 'weekly'::text, 'monthly'::text, 'quarterly'::text, 'half_yearly'::text, 'yearly'::text, 'as_presented'::text, 'frequency_not_confirmed'::text])));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_recurring_obligations_source_ck' AND conrelid = 'public.wealth_recurring_obligations'::regclass) THEN
+    ALTER TABLE wealth_recurring_obligations ADD CONSTRAINT wealth_recurring_obligations_source_ck CHECK ((source_type = ANY (ARRAY['planned_bill'::text, 'subscription'::text, 'manual'::text])));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_recurring_obligations_status_ck' AND conrelid = 'public.wealth_recurring_obligations'::regclass) THEN
+    ALTER TABLE wealth_recurring_obligations ADD CONSTRAINT wealth_recurring_obligations_status_ck CHECK ((status = ANY (ARRAY['active'::text, 'paused'::text, 'cancelled'::text, 'completed'::text])));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_recurring_obligations_type_ck' AND conrelid = 'public.wealth_recurring_obligations'::regclass) THEN
+    ALTER TABLE wealth_recurring_obligations ADD CONSTRAINT wealth_recurring_obligations_type_ck CHECK ((obligation_type = ANY (ARRAY['rent'::text, 'utility'::text, 'insurance'::text, 'subscription'::text, 'savings'::text, 'loan'::text, 'investment'::text, 'other'::text])));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_recurring_obligations_pkey' AND conrelid = 'public.wealth_recurring_obligations'::regclass) AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.wealth_recurring_obligations'::regclass AND contype = 'p') THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_recurring_obligations_pkey' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_recurring_obligations ADD CONSTRAINT wealth_recurring_obligations_pkey PRIMARY KEY USING INDEX wealth_recurring_obligations_pkey;
+    ELSE
+      ALTER TABLE wealth_recurring_obligations ADD CONSTRAINT wealth_recurring_obligations_pkey PRIMARY KEY (id);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_recurring_obligations_user_key_uq' AND conrelid = 'public.wealth_recurring_obligations'::regclass) THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_recurring_obligations_user_key_uq' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_recurring_obligations ADD CONSTRAINT wealth_recurring_obligations_user_key_uq UNIQUE USING INDEX wealth_recurring_obligations_user_key_uq;
+    ELSE
+      ALTER TABLE wealth_recurring_obligations ADD CONSTRAINT wealth_recurring_obligations_user_key_uq UNIQUE (user_id, obligation_key);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_snapshots_pkey' AND conrelid = 'public.wealth_snapshots'::regclass) AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.wealth_snapshots'::regclass AND contype = 'p') THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_snapshots_pkey' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_snapshots ADD CONSTRAINT wealth_snapshots_pkey PRIMARY KEY USING INDEX wealth_snapshots_pkey;
+    ELSE
+      ALTER TABLE wealth_snapshots ADD CONSTRAINT wealth_snapshots_pkey PRIMARY KEY (id);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_snapshots_user_id_source_key_key' AND conrelid = 'public.wealth_snapshots'::regclass) THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_snapshots_user_id_source_key_key' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_snapshots ADD CONSTRAINT wealth_snapshots_user_id_source_key_key UNIQUE USING INDEX wealth_snapshots_user_id_source_key_key;
+    ELSE
+      ALTER TABLE wealth_snapshots ADD CONSTRAINT wealth_snapshots_user_id_source_key_key UNIQUE (user_id, source_key);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_stock_advisor_reports_pkey' AND conrelid = 'public.wealth_stock_advisor_reports'::regclass) AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.wealth_stock_advisor_reports'::regclass AND contype = 'p') THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_stock_advisor_reports_pkey' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_stock_advisor_reports ADD CONSTRAINT wealth_stock_advisor_reports_pkey PRIMARY KEY USING INDEX wealth_stock_advisor_reports_pkey;
+    ELSE
+      ALTER TABLE wealth_stock_advisor_reports ADD CONSTRAINT wealth_stock_advisor_reports_pkey PRIMARY KEY (id);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_subscriptions_amount_type_check' AND conrelid = 'public.wealth_subscriptions'::regclass) THEN
+    ALTER TABLE wealth_subscriptions ADD CONSTRAINT wealth_subscriptions_amount_type_check CHECK ((amount_type = ANY (ARRAY['fixed'::text, 'up_to'::text, 'variable'::text])));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_subscriptions_status_check' AND conrelid = 'public.wealth_subscriptions'::regclass) THEN
+    ALTER TABLE wealth_subscriptions ADD CONSTRAINT wealth_subscriptions_status_check CHECK ((status = ANY (ARRAY['active'::text, 'paused'::text, 'cancelled'::text])));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_subscriptions_pkey' AND conrelid = 'public.wealth_subscriptions'::regclass) AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.wealth_subscriptions'::regclass AND contype = 'p') THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_subscriptions_pkey' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_subscriptions ADD CONSTRAINT wealth_subscriptions_pkey PRIMARY KEY USING INDEX wealth_subscriptions_pkey;
+    ELSE
+      ALTER TABLE wealth_subscriptions ADD CONSTRAINT wealth_subscriptions_pkey PRIMARY KEY (id);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_subscriptions_user_id_provider_key_mandate_key_key' AND conrelid = 'public.wealth_subscriptions'::regclass) THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_subscriptions_user_id_provider_key_mandate_key_key' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_subscriptions ADD CONSTRAINT wealth_subscriptions_user_id_provider_key_mandate_key_key UNIQUE USING INDEX wealth_subscriptions_user_id_provider_key_mandate_key_key;
+    ELSE
+      ALTER TABLE wealth_subscriptions ADD CONSTRAINT wealth_subscriptions_user_id_provider_key_mandate_key_key UNIQUE (user_id, provider_key, mandate_key);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_templates_pkey' AND conrelid = 'public.wealth_templates'::regclass) AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.wealth_templates'::regclass AND contype = 'p') THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_templates_pkey' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_templates ADD CONSTRAINT wealth_templates_pkey PRIMARY KEY USING INDEX wealth_templates_pkey;
+    ELSE
+      ALTER TABLE wealth_templates ADD CONSTRAINT wealth_templates_pkey PRIMARY KEY (id);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_templates_user_id_template_key_key' AND conrelid = 'public.wealth_templates'::regclass) THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_templates_user_id_template_key_key' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_templates ADD CONSTRAINT wealth_templates_user_id_template_key_key UNIQUE USING INDEX wealth_templates_user_id_template_key_key;
+    ELSE
+      ALTER TABLE wealth_templates ADD CONSTRAINT wealth_templates_user_id_template_key_key UNIQUE (user_id, template_key);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_transactions_amount_check' AND conrelid = 'public.wealth_transactions'::regclass) THEN
+    ALTER TABLE wealth_transactions ADD CONSTRAINT wealth_transactions_amount_check CHECK ((amount > (0)::numeric));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_transactions_kind_check' AND conrelid = 'public.wealth_transactions'::regclass) THEN
+    ALTER TABLE wealth_transactions ADD CONSTRAINT wealth_transactions_kind_check CHECK ((kind = ANY (ARRAY['income'::text, 'expense'::text, 'transfer'::text, 'investment'::text, 'liability'::text])));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_transactions_pkey' AND conrelid = 'public.wealth_transactions'::regclass) AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.wealth_transactions'::regclass AND contype = 'p') THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_transactions_pkey' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_transactions ADD CONSTRAINT wealth_transactions_pkey PRIMARY KEY USING INDEX wealth_transactions_pkey;
+    ELSE
+      ALTER TABLE wealth_transactions ADD CONSTRAINT wealth_transactions_pkey PRIMARY KEY (id);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_users_role_check' AND conrelid = 'public.wealth_users'::regclass) THEN
+    ALTER TABLE wealth_users ADD CONSTRAINT wealth_users_role_check CHECK ((role = ANY (ARRAY['user'::text, 'admin'::text])));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_users_pkey' AND conrelid = 'public.wealth_users'::regclass) AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.wealth_users'::regclass AND contype = 'p') THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_users_pkey' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_users ADD CONSTRAINT wealth_users_pkey PRIMARY KEY USING INDEX wealth_users_pkey;
+    ELSE
+      ALTER TABLE wealth_users ADD CONSTRAINT wealth_users_pkey PRIMARY KEY (id);
+    END IF;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wealth_users_email_key' AND conrelid = 'public.wealth_users'::regclass) THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = 'wealth_users_email_key' AND c.relkind = 'i') THEN
+      ALTER TABLE wealth_users ADD CONSTRAINT wealth_users_email_key UNIQUE USING INDEX wealth_users_email_key;
+    ELSE
+      ALTER TABLE wealth_users ADD CONSTRAINT wealth_users_email_key UNIQUE (email);
+    END IF;
+  END IF;
+END $$;
+
 ALTER SEQUENCE wealth_price_history_id_seq OWNED BY wealth_price_history.id;
 
 DO $$ BEGIN

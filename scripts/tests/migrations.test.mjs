@@ -77,3 +77,27 @@ test('dry run lists pending migrations without applying them', async () => {
   const exists = await a.query(`SELECT 1 FROM information_schema.tables WHERE table_name IN ('t_dry','wealth_schema_migrations')`);
   assert.equal(exists.length, 0, 'a dry run must not create anything');
 });
+
+test('the baseline restores keys and checks on tables that were copied without them', async () => {
+  const baseline = readFileSync(join(MIGRATIONS_DIR, '0000_baseline.sql'), 'utf8');
+  const constraintCount = async a => (await a.query(`SELECT count(*)::int n FROM pg_constraint WHERE connamespace='public'::regnamespace AND contype IN ('p','u','c','f')`))[0].n;
+
+  const { a: reference } = await freshDb();
+  await reference.exec(baseline);
+  const expected = await constraintCount(reference);
+
+  // Drifted database: same tables and columns, every CONSTRAINT line removed, with data already present.
+  const { a } = await freshDb();
+  const tablesOnly = baseline.split('-- Converge databases')[0]
+    .replace(/,\n\s*CONSTRAINT [^\n]+/g, '')
+    .replace(/\n\s*CONSTRAINT [^\n]+,?/g, '');
+  await a.exec(tablesOnly);
+  assert.ok(await constraintCount(a) < expected / 2, 'simulated drift has lost its constraints');
+  await a.exec(`INSERT INTO wealth_users(email,password_hash) VALUES('o@example.test','x')`);
+
+  await a.exec(baseline);
+  assert.equal(await constraintCount(a), expected, 'baseline converges to the full set of constraints');
+  await a.exec(baseline); // and stays idempotent
+  assert.equal(await constraintCount(a), expected);
+  await assert.rejects(a.query(`INSERT INTO wealth_users(email,password_hash) VALUES('o@example.test','y')`), /duplicate key/);
+});
