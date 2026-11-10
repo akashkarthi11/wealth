@@ -43,6 +43,21 @@ async function runMandateDuplicateCleanupMigration(){
  console.log('[db-migrate] Mandate/planned-bill duplicate cleanup applied:',statements.length,'statements');
 }
 
+async function runAngelOnePriceHistoryMigration(){
+ const url=new URL('./migrations/2026-11-10-angelone-ltp-price-history.sql',import.meta.url);
+ const source=await readFile(url,'utf8');
+ const statements=source
+  .replace(/^\\s*--.*$/gm,'')
+  .split(';')
+  .map(statement=>statement.trim())
+  .filter(Boolean);
+ for(const statement of statements) await sql.query(statement);
+ const counts=await sql.query(`SELECT
+  (SELECT count(*)::int FROM wealth_investment_assets WHERE user_id=(SELECT id FROM wealth_users WHERE role='admin' ORDER BY created_at LIMIT 1) AND position_id IS NULL) AS history_only_assets,
+  (SELECT count(*)::int FROM wealth_price_history WHERE source='Angel One historical snapshot') AS angelone_history_rows`);
+ console.log('[db-migrate] Angel One historical LTP backfill ready:',JSON.stringify(counts[0]||{}));
+}
+
 async function migrate(){
  // Idempotent schema migration: safe to run on every deployment and on both preview/production DBs.
  await sql.query(`CREATE TABLE IF NOT EXISTS wealth_category_symbols (
@@ -134,6 +149,7 @@ async function migrate(){
 
  // Provision the unified recurring-obligation model after the legacy source tables exist.
  await runRecurringObligationsMigration();
+ await runAngelOnePriceHistoryMigration();
 
  // Reconcile duplicate planned-bill reminders against active bank mandates.
  await runMandateDuplicateCleanupMigration();
