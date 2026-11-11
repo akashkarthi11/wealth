@@ -417,3 +417,27 @@ test('Bank balances menu shows the live account balances and its total equals th
   assert.match(ctx.html, /class="bank-avatar"[^>]*>HDFC</);
   assert.match(ctx.detail, /Slice Savings[\s\S]*INR 47889\.22/);
 });
+
+test('bank detail page: only that bank\'s rows and notes; combined records filtered; investment records never shown', async () => {
+  const vm = await import('node:vm');
+  const src = readFileSync(new URL('../../app.js', import.meta.url), 'utf8');
+  const fn = name => { const s = src.indexOf('function ' + name + '('); let i = src.indexOf('{', s), d = 0; for (; i < src.length; i++) { if (src[i] === '{') d++; else if (src[i] === '}' && --d === 0) break; } return src.slice(s, i + 1); };
+  const consts = src.match(/const BANK_MATCH=\{[^\n]*?\};/)[0] + src.match(/const NOT_BANK_RECORD=[^\n]*?;/)[0];
+  const sourceSections = [
+    { heading: 'Latest balance snapshot — 7 November 2026', tables: [[['Account', 'Latest balance'], ['Slice Savings', '₹47,925'], ['Slice Atom', '₹63,420'], ['Bank of India', '₹1,426.99'], ['HDFC Bank', '₹3.89']]], notes: ['BOI balance from SMS', 'Atom buckets updated'] },
+    { heading: 'Slice Savings ••3731 — statement summary', tables: [[['Item', 'Value'], ['Opening', '₹40,000'], ['Interest', '₹64.36']]], notes: [] },
+    { heading: 'Angel One equity holdings', tables: [[['Stock', 'Qty'], ['HDFC Bank', '10']]], notes: [] },
+    { heading: '8 November 2026 — Roarbank credit line and savings', tables: [[['Item', 'Value'], ['Savings account', '₹650.65']]], notes: [] },
+  ];
+  const ctx = { sourceSections, String, Object, RegExp };
+  vm.runInNewContext(consts + fn('bankMatches') + fn('accountRecords') + ';globalThis.f=accountRecords;', ctx);
+  const f = b => JSON.parse(JSON.stringify(ctx.f(b)));   // copy out of the sandbox (cross-realm arrays)
+  const rows = (bank, i) => f(bank)[i].tables[0].slice(1).map(r => r[0]);
+  assert.deepEqual(f('Slice').map(r => [r.heading.slice(0, 14), !!r._filtered]), [['Latest balance', true], ['Slice Savings ', false]]);
+  assert.deepEqual(rows('Slice', 0), ['Slice Savings'], 'Atom row goes to Atom, not Slice');
+  assert.deepEqual(rows('Atom', 0), ['Slice Atom']);
+  assert.deepEqual(f('Atom')[0].notes, ['Atom buckets updated']);
+  assert.deepEqual(rows('Bank of India', 0), ['Bank of India']);
+  assert.deepEqual(f('HDFC Bank').map(r => r.heading.slice(0, 6)), ['Latest'], 'the HDFC Bank stock holding is not a bank record');
+  assert.equal(f('Roarbank')[0]._filtered, undefined, 'a record about Roarbank alone is shown whole');
+});
