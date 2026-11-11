@@ -131,6 +131,29 @@ export function planAccrual({ kind, balances = [], rates = [], terms = null, led
   return { status, rows, skipped, last, corrections: corrections.length, dayTotals };
 }
 
+// Month-to-date interest for one daily-credited product, from the app's own records: the latest interest statement that
+// starts in the month (bank figures to its end date) + nightly accruals after it. Written as ONE income transaction per
+// account and month (external_ref interest-month:<product>:<YYYY-MM>), updated in place as days are added.
+export async function upsertMonthInterestRow(db, uid, l, through, actor = 'cron') {
+  const month = through.slice(0, 7);
+  const [st] = await db.query(`SELECT period_end::text AS period_end, statement_total::float8 AS total FROM wealth_interest_statements
+    WHERE user_id = $1 AND product_key = $2 AND to_char(period_start, 'YYYY-MM') = $3 ORDER BY period_end DESC LIMIT 1`, [uid, l.product_key, month]);
+  const [led] = await db.query(`SELECT coalesce(sum(interest_amount), 0)::float8 AS amount, max(accrual_date)::text AS last FROM wealth_interest_ledger
+    WHERE user_id = $1 AND account_key = $2 AND product_key = $3 AND to_char(accrual_date, 'YYYY-MM') = $4 AND ($5::date IS NULL OR accrual_date > $5::date)`,
+    [uid, l.account_key, l.product_key, month, st ? st.period_end : null]);
+  const amount = round2((st ? st.total : 0) + (led ? led.amount : 0));
+  if (!(amount > 0)) return { month, amount: 0, written: false };
+  const day = led && led.last ? led.last : st.period_end, ref = `interest-month:${l.product_key}:${month}`;
+  const label = new Date(month + '-01T00:00:00Z').toLocaleDateString('en-IN', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+  const descr = `${l.account_name} interest · ${label} to date (app: ${st ? 'statement to ' + st.period_end.slice(8) + ' + ' : ''}nightly accrual)`;
+  const [rows] = await withActor(db, actor, [[`INSERT INTO wealth_transactions (user_id, kind, category, description, amount, account, account_id, occurred_on, external_ref)
+      VALUES ($1, 'income', 'Interest', $2, $3, $4, $5, $6, $7)
+      ON CONFLICT (user_id, external_ref) WHERE external_ref IS NOT NULL DO UPDATE SET amount = EXCLUDED.amount, occurred_on = EXCLUDED.occurred_on, description = EXCLUDED.description
+      WHERE wealth_transactions.amount IS DISTINCT FROM EXCLUDED.amount OR wealth_transactions.occurred_on IS DISTINCT FROM EXCLUDED.occurred_on
+      RETURNING id`, [uid, descr, amount, `${l.bank_name} · ${l.account_name}`, l.account_id, day, ref]]]);
+  return { month, amount, through: day, written: rows.length > 0 };
+}
+
 // Run every linked source for one user, through yesterday (IST). Idempotent: unique keys make re-runs no-ops.
 export async function runAccrual(uid, { db = sql, now = Date.now(), dryRun = false, actor = 'cron' } = {}) {
   const through = addDays(istDay(now), -1);
@@ -198,8 +221,11 @@ export async function runAccrual(uid, { db = sql, now = Date.now(), dryRun = fal
         estimate.stored = stored.length > 0;
       }
     }
+    // Daily-credited interest is real income: keep ONE "interest this month" transaction per account at the app's figure
+    // (owner rule 11 Nov 2026: interest is never taken from screenshots; the task records it).
+    const monthRow = dailyCredit && !dryRun ? await upsertMonthInterestRow(db, uid, l, through, actor).catch(e => ({ error: String(e?.message || e) })) : null;
     accounts.push({ accountKey: l.account_key, account: `${l.bank_name} · ${l.account_name}`, product: l.product_key, status: plan.status,
-      estimatedBalance: estimate, lastAccrual: plan.last, rowsWritten: dryRun ? 0 : written, rowsPlanned: plan.rows.length, corrections: plan.corrections || 0,
+      monthInterest: monthRow, estimatedBalance: estimate, lastAccrual: plan.last, rowsWritten: dryRun ? 0 : written, rowsPlanned: plan.rows.length, corrections: plan.corrections || 0,
       interestTotal: round8(plan.rows.reduce((s, r) => s + r.interest_amount, 0)), skipped: plan.skipped.slice(-5) });
   }
   for (const a of unlinked) accounts.push({ accountKey: a.account_key, account: `${a.bank_name} · ${a.account_name}`, product: null, status: 'needs_link', rowsWritten: 0, corrections: 0, interestTotal: 0 });
