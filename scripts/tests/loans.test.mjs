@@ -117,7 +117,7 @@ test('page: split sheet maths match the server (GST by part), people cards, spli
   const block = src.slice(src.indexOf('// Money lent & split bills (Plan 4 Part B'), src.indexOf('// Reward alerts (Plan 4, TR4-A.8)'));
   const ctx = { esc: s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'), money: v => '₹' + Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 }),
     user: { role: 'admin' }, activeView: 'lending', api: async () => ({}), Number, String, Date, Math, JSON, Array, Set, Map, Object };
-  vm.runInNewContext(block + ';globalThis.t={splitCompute,lendingPageHtml,lendActivityButtonHtml,lendRowTag,setData:d=>{lendingData=d}};', ctx);
+  vm.runInNewContext(block + ';globalThis.t={splitCompute,lendingPageHtml,lendActivityButtonHtml,lendRowTag,setData:d=>{lendingData=d},setTab:x=>{lendTab=x}};', ctx);
   const c = ctx.t.splitCompute({ total: 1180, taxMode: 'pct', taxVal: 18, includeMe: true, mode: 'amounts', sel: [{ name: 'Arun S', base: 300 }, { name: 'Priya', base: 200 }] });
   const server = computeShares({ total: 1180, tax: 180, mode: 'amounts', includeMe: true, people: [{ key: 'a', base: 300 }, { key: 'b', base: 200 }] });
   assert.equal(J(c.rows.map(r => r.amount)), J(server.map(s => s.amount)));
@@ -129,8 +129,10 @@ test('page: split sheet maths match the server (GST by part), people cards, spli
   ctx.t.setData(d);
   const html = ctx.t.lendingPageHtml(d);
   assert.match(html, /Money lent &amp; split bills/);
-  assert.match(html, /₹590<\/strong><small>owed to you · 2 people/);
-  assert.match(html, /Sangeetha dinner<\/b><small>[^<]*₹1,180 incl\. ₹180 GST · by amount/);
+  assert.match(html, /₹590<\/strong><span>owed to you by 2 people/);
+  ctx.t.setTab('splits');
+  assert.match(ctx.t.lendingPageHtml(d), /Sangeetha dinner<\/b><small>[^<]*₹1,180 incl\. ₹180 GST · by amount/);
+  ctx.t.setTab('owe');
   assert.match(ctx.t.lendActivityButtonHtml({ id: ids.dinner, kind: 'expense', amount: 1180 }), /Split · you ₹590 · Arun S ₹354 · Priya ₹236/);
   assert.match(ctx.t.lendRowTag({ id: ids.dinner }), /act-tag split">Split · 2 people · 2 to pay/);
   assert.match(ctx.t.lendActivityButtonHtml({ id: ids.taxi, kind: 'expense', amount: 600, description: 'Uber', occurred_on: '2026-11-09' }), /data-split-tx="[^"]+"[^>]*>Split bill</);
@@ -233,7 +235,7 @@ test('page: write off / undo / remove buttons per record; people who owe nothing
   const block = src.slice(src.indexOf('// Money lent & split bills (Plan 4 Part B'), src.indexOf('// Reward alerts (Plan 4, TR4-A.8)'));
   const ctx = { esc: s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'), money: v => '₹' + Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 }),
     user: { role: 'admin' }, activeView: 'lending', api: async () => ({}), Number, String, Date, Math, JSON, Array, Set, Map, Object };
-  vm.runInNewContext(block + ';globalThis.t={lendingPageHtml,lendRowTag,setData:d=>{lendingData=d}};', ctx);
+  vm.runInNewContext(block + ';globalThis.t={lendingPageHtml,lendRowTag,setData:d=>{lendingData=d},setTab:x=>{lendTab=x},setSel:x=>{lendSel=x}};', ctx);
   const { a, uid, ids } = await setup();
   await addPersonEntry(uid, { name: 'Arun S', transactionIds: [ids.arun] }, { db: a, now: NOW });
   await addPersonEntry(uid, { name: 'Arun S', direction: 'out', amount: 1000, occurredOn: '2026-07-09' }, { db: a, now: NOW });
@@ -244,12 +246,20 @@ test('page: write off / undo / remove buttons per record; people who owe nothing
   await setRecordStatus(uid, { entryId: thousand.entryId, status: 'written_off' }, { db: a, now: NOW });
   d = await loansOverview(uid, { db: a, now: NOW });
   ctx.t.setData(d);
-  const html = ctx.t.lendingPageHtml(d);
-  const top = html.slice(0, html.indexOf('lend-history'));
-  assert.match(top, /Arun S<\/h4>/);
-  assert.ok(!top.includes('Priya</h4>'), 'Priya owes nothing → not at the top');
-  assert.match(html, /History · 1 · owe ₹0<\/summary>[\s\S]*Priya<\/h4><span class="bank-chip ok">All paid<\/span>[\s\S]*<b class="">₹0<\/b>/);
+  // "Owe you" tab: Arun only; History tab: Priya with ₹0
+  let html = ctx.t.lendingPageHtml(d);
+  assert.match(html, /data-lend-person="[^"]+">[\s\S]*?<b>Arun S<\/b>/);
+  assert.ok(!html.includes('<b>Priya</b>'), 'Priya owes nothing → not under Owe you');
+  assert.match(html, /data-lend-tab="history">History <em>1<\/em>/);
+  ctx.t.setTab('history');
+  html = ctx.t.lendingPageHtml(d);
+  assert.match(html, /<b>Priya<\/b><span class="bank-chip ok">All paid<\/span>[\s\S]*?<b class="">₹0<\/b><small>owes ₹0<\/small>/);
+  // Arun's detail: per-record buttons
+  ctx.t.setTab('owe'); ctx.t.setSel(d.people.find(p => p.name === 'Arun S').id);
+  html = ctx.t.lendingPageHtml(d);
+  assert.match(html, /‹ All people/);
   assert.match(html, /written off ₹1,000/);
+  assert.match(html, /data-share-make="[^"]+">Share link</);
   assert.match(html, /lend-pay out is-off[\s\S]*?Written off<\/span><button type="button" class="link-btn" data-rec-entry="[^"]+" data-rec-status="active">Undo<\/button>/);
   assert.match(html, /data-rec-status="written_off">Write off<\/button><button type="button" class="link-btn danger" data-rec-entry="[^"]+" data-rec-status="removed">Remove \(mistake\)<\/button>/);
   assert.match(ctx.t.lendRowTag({ id: ids.arun }), /act-tag lent">Lent · Arun S</);

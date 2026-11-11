@@ -53,6 +53,10 @@ export const ROUTES = {
   'loans/shares/paid': () => import('./_routes/loans.js'),
   'loans/roundoff': () => import('./_routes/loans.js'),
   'loans/records': () => import('./_routes/loans.js'),
+  'loans/share': () => import('./_routes/loans.js'),
+  'loans/requests/decide': () => import('./_routes/loans.js'),
+  // Public: the page a person opens from a shared link (/l/<secret>), and their "I've paid" request
+  'lend-view': () => import('./_routes/lend-view.js'),
 };
 
 // The route comes from the rewrite's __route parameter, or from the path when the router is called directly.
