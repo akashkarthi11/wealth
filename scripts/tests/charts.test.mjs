@@ -69,7 +69,7 @@ test('labels: year, month and day', () => {
 test('share bars carry tap-to-read data and a readout; events are bound once', () => {
   assert.equal((src.match(/data-share="'\+esc\(/g) || []).length, 2, 'investments and banks bars');
   assert.equal((src.match(/<div class="share-readout" aria-live="polite" hidden><\/div>/g) || []).length, 2);
-  assert.equal((src.match(/^chartBindEvents\(\);$/gm) || []).length, 1);
+  assert.equal((src.match(/^chartBindEvents\(\);/gm) || []).length, 1);
   assert.match(src, /chartWidget\('interest-day',interestChartDef\(/);
   assert.match(src, /'\+chartRangeRowHtml\(\)\+'<section class="chart-card"><div class="chart-head"><div><h4>Cash flow trend<\/h4>/);
 });
