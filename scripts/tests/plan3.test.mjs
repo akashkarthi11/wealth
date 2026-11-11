@@ -323,3 +323,16 @@ test('daily refresh leaves held instruments and (by default) metal futures alone
   assert.equal(refreshSkipReason({ symbol: 'GC=F' }, { WEALTH_METAL_PRICE_SOURCE: 'futures' }), null);
   assert.equal(refreshSkipReason({ symbol: 'LT.NS' }, {}), null);
 });
+
+test('interest view: a day with correction revisions shows the sum of its rows (9 Nov 2026 Slice Savings = 7.21)', async () => {
+  const vm = await import('node:vm');
+  const src = readFileSync(new URL('../../app.js', import.meta.url), 'utf8');
+  const s = src.indexOf('function interestLatestLedger(');
+  let i = src.indexOf('{', s), d = 0; for (; i < src.length; i++) { if (src[i] === '{') d++; else if (src[i] === '}' && --d === 0) break; }
+  const row = (rev, amt) => ({ product_key: 'slice-savings', account_key: 'slice-savings-3731', accrual_date: '2026-11-09', revision: rev, interest_amount: amt });
+  const ctx = { interestRows: [row(1, '7.21404110'), row(2, '7.21000000'), row(3, '-7.21404110')], Map, Number, Math };
+  vm.runInNewContext(src.slice(s, i + 1) + ';globalThis.out=interestLatestLedger();', ctx);
+  assert.equal(ctx.out.length, 1);
+  assert.equal(ctx.out[0].interest_amount, 7.21);
+  assert.equal(ctx.out[0].revision, 3);
+});
