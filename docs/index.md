@@ -79,7 +79,8 @@ Each module fix note should include:
 | 2026-11-11 | Interest / Accounts | Daily-credited interest did not raise the bank balance | [Plan 3 §14.1](plans/claude-plan-3.md) (migration 0009; estimated balance) | Deployed to Production |
 | 2026-11-11 | Interest | FDs had no terms, so no interest was calculated; the Interest page could not show FDs (FD rows overwrote Slice Savings) | [FD interest](modules/interest/2026-11-11-fd-interest-in-interest-view.md) | In Production (main `8edae9b`, plan-3o); FD terms set, 5–10 Nov accrued |
 | 2026-11-11 | Accounts | Slice Savings left the bank total after an external writer set it to pending_reconciliation | [Account history](modules/accounts/2026-11-11-supermoney-upi-history.md) | Fixed in Production (status estimated) |
-| 2026-11-11 | Tools | "Other records" showed only some saved records, with no clear name, search or grouping | [Records page](modules/accounts/2026-11-11-records-page.md) | Code on `claude-dev` (plan-3p), not deployed |
+| 2026-11-11 | Tools | "Other records" showed only some saved records, with no clear name, search or grouping | [Records page](modules/accounts/2026-11-11-records-page.md) | Deployed (main `b8d040a`, plan-3p) |
+| 2026-11-11 | Menu | "Financial overview" in the More menu repeated Home (owner: "remove finacial overview", "menu oly") | — (menu item removed; balance summary kept) | Code on `claude-dev` (plan-3q), not deployed |
 | 2026-11-11 | Infra | Every branch built on Vercel; only `main` should | [Vercel builds main only](modules/infra/2026-11-11-vercel-build-main-only.md) | Deployed |
 | 2026-11-11 | Accounts / Dashboard | Bank balances menu disagreed with the dashboard; account details used static snapshot data and other banks' rows | [Bank balances from the database](modules/accounts/2026-11-11-bank-balances-live-and-account-details.md) | Deployed to Production |
 | 2026-11-11 | Database | Audit log stored whole rows and no-op updates; unused price history; a new estimated row every night | [Store only required data (0010)](modules/database/2026-11-11-store-only-required-data.md) | Deployed to Production |
@@ -93,7 +94,7 @@ Each module fix note should include:
 
 | Date | Plan | Status |
 |---|---|---|
-| 2026-11-11 | **[TSD — Claude Plan 3: data quality, in-app automation, operations](plans/claude-plan-3.md)** | **Deployed to Production 2026-11-11** (`2a2afde`, migrations 0008–0010); owner settings open — see §14.6 ([runbook](ops/operations-runbook.md)) |
+| 2026-11-11 | **[TSD — Claude Plan 3: data quality, in-app automation, operations](plans/claude-plan-3.md)** | **v1.3 — deployed to Production 2026-11-11** (`b8d040a`, migrations 0008–0011); changes after v1.2 in §14.7–14.16; owner settings open — see §14.6 ([runbook](ops/operations-runbook.md)) |
 | 2026-11-10 | **[TSD — Claude Plan 2: account model cut-over](plans/claude-plan-2.md)** | In progress: A.3, B, G, D.1 in Production; C done via Plan 3; D.2 (switch to v2), E, F not started |
 | 2026-11-10 | **[TSD — Claude Plan 1: stabilisation, security and account hierarchy](plans/claude-plan-1.md)** (master technical specification; links the plans below) | **Deployed to Production 2026-11-10** (data model still v1) |
 | 2026-11-10 | [Database optimization](plans/2026-11-10-database-optimization-plan.md) | Superseded by the TSD |

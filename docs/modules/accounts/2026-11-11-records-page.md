@@ -1,6 +1,6 @@
 # "Other records" → Records page — 2026-11-11
 
-**Status:** code on `claude-dev` (build `20261111-claude-plan-3p`), not deployed.
+**Status:** deployed — `main` `b8d040a` (build `20261111-claude-plan-3p`).
 
 ## Problem (owner: "what is other in app" → "give proper name, i need datas store in db, give better uiux")
 - The menu item was called "Other records" / "Other", which says nothing about what it holds.
