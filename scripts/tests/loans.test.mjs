@@ -338,3 +338,25 @@ test('page: All people tab with Hidden section, rename / other names / not added
   assert.match(ctx.t.lendActivityButtonHtml({ id: ids.anIn, kind: 'transfer', category: 'Transfer received', description: 'Anantha Raj Maria · UPI · ref 4', amount: 7000, occurred_on: '2026-06-01' }), />Paid back by Anantha</);
   assert.equal(ctx.t.lendActivityButtonHtml({ id: ids.dinoIn, kind: 'transfer', category: 'Transfer received', description: 'Dinoraj P · UPI · ref 2', amount: 5000 }), '');
 });
+
+test('page: a person’s Entries and Not added yet start closed and open on tap (open by itself only for Change person)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const vm = await import('node:vm');
+  const src = readFileSync(new URL('../../app.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+  const block = src.slice(src.indexOf('// Money lent & split bills (Plan 4 Part B'), src.indexOf('// Reward alerts (Plan 4, TR4-A.8)'));
+  const ctx = { esc: s => String(s ?? ''), money: v => '₹' + Number(v).toLocaleString('en-IN'), user: { role: 'admin' }, activeView: 'lending', api: async () => ({}), accounts: [], Number, String, Date, Math, JSON, Array, Set, Map, Object };
+  vm.runInNewContext(block + ';globalThis.t={lendingPageHtml,setData:d=>{lendingData=d},setSel:x=>{lendSel=x},setOpen:x=>{lendOpen=x},fold:k=>lendFolds.add(k)};', ctx);
+  const { a, uid, ids } = await setup();
+  await addPersonEntry(uid, { name: 'Anantha', transactionIds: [ids.anOut] }, { db: a, now: NOW });
+  const d = await loansOverview(uid, { db: a, now: NOW });
+  const p = d.people[0];
+  ctx.t.setData(d); ctx.t.setSel(p.id);
+  let html = ctx.t.lendingPageHtml(d);
+  assert.match(html, /<details class="lend-section lend-fold" data-fold="[^"]+:entries"><summary><h4>Entries/);
+  assert.match(html, /<details class="lend-section lend-unlinked lend-fold" data-fold="[^"]+:unlinked"><summary>/);
+  assert.match(html, /<\/details><div class="lend-actions lend-person-acts">/, 'Hide / Merge stay visible outside');
+  ctx.t.fold(p.id + ':entries');
+  assert.match(ctx.t.lendingPageHtml(d), /data-fold="[^"]+:entries" open>/, 'stays open once opened');
+  ctx.t.setOpen('move:' + p.items[0].entryId);
+  assert.match(ctx.t.lendingPageHtml(d), /data-fold="[^"]+:entries" open>/);
+});

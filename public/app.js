@@ -901,7 +901,7 @@ function lendAssignHtml(a){const out=a.dir==='out';
   +'<button type="button" class="link-btn" data-assign-cancel>Not now</button><p class="rw-form-msg" aria-live="polite"></p></section>'}
 // Page layout (build 4j): header with the total → waiting payments → tabs (Owe you · Split bills · History · To review)
 // → compact person rows → one person's detail (actions, share link, entries). lendTab / lendPerson keep the place.
-let lendTab='owe',lendSel=null,lendShareUrl=null,lendReq=null;
+let lendTab='owe',lendSel=null,lendShareUrl=null,lendReq=null;const lendFolds=new Set();
 function lendMeta(p){return [p.lent?'gave '+money(p.lent):'',p.repaid?'paid back '+money(p.repaid):'',p.unpaidShares?p.unpaidShares+' share'+(p.unpaidShares===1?'':'s')+' unpaid':'',p.writtenOff?'written off '+money(p.writtenOff):'',p.dueOn?(p.overdue?'was due ':'due ')+lendDay(p.dueOn):''].filter(Boolean).join(' · ')}
 function lendRowHtml(p){const req=p.requests?'<span class="lend-badge" title="Says they paid">'+p.requests+' paid?</span>':'';
  return '<button type="button" class="lend-row'+(p.overdue?' overdue':'')+'" data-lend-person="'+esc(p.id)+'">'+lendAvatar(p.name)+'<span class="lend-row-main"><b>'+esc(p.name)+'</b>'+req+lendChip(p)+'<small>'+esc(lendMeta(p)||'no entries yet')+'</small></span><span class="lend-row-amt"><b class="'+(p.owed>0?'positive':'')+'">'+money(p.owed)+'</b><small>'+(p.owed>0?'owes you':'owes ₹0')+'</small></span><span class="lend-row-go" aria-hidden="true">›</span></button>'}
@@ -911,9 +911,9 @@ function lendShareHtml(p){
  return ''}
 function lendAkaHtml(p){const a=p.aliases||[];return '<div class="lend-aka"><small>'+(a.length?'Also in bank text as':'Other names')+'</small>'+a.map(n=>'<span class="lend-aka-chip">'+esc(n)+'<button type="button" data-alias-remove="'+esc(n)+'" data-alias-pid="'+esc(p.id)+'" aria-label="Remove '+esc(n)+'">×</button></span>').join('')+'<button type="button" class="link-btn" data-lend-open="alias:'+esc(p.id)+'">＋ Add a name</button></div>'}
 function lendUnlinkedHtml(p){const u=p.unlinked||[];if(!u.length)return '';
- return '<section class="lend-section lend-unlinked"><h4>Not added yet <small>'+p.unlinkedCount+' transfer'+(p.unlinkedCount===1?'':'s')+' under '+esc(p.name)+'’s names</small></h4><p class="rw-form-hint">In Activity but not counted here. Add the ones that are lending or paying back.</p>'
+ return '<details class="lend-section lend-unlinked lend-fold" data-fold="'+esc(p.id)+':unlinked"'+(lendFolds.has(p.id+':unlinked')?' open':'')+'><summary><h4>Not added yet <small>'+p.unlinkedCount+' transfer'+(p.unlinkedCount===1?'':'s')+' under '+esc(p.name)+'’s names</small></h4><span class="lend-fold-hint">tap to see</span></summary><p class="rw-form-hint">In Activity but not counted here. Add the ones that are lending or paying back.</p>'
   +u.map(t=>'<div class="lend-pay '+(t.direction==='out'?'out':'in')+'"><span><b>'+(t.direction==='out'?'You sent':'You got')+'</b><small>'+esc(lendDay(t.day))+' · '+esc(t.description||'')+'</small><span class="lend-item-act"><button type="button" class="link-btn" data-unlinked-add="'+esc(t.id)+'" data-unlinked-pid="'+esc(p.id)+'">Add to '+esc(p.name)+'</button></span></span><b>'+(t.direction==='out'?'+':'−')+esc(money(t.amount))+'</b></div>').join('')
-  +(u.length>1?'<div class="lend-actions"><button type="button" class="ghost" data-unlinked-all="'+esc(p.id)+'">Add all '+u.length+'</button></div>':'')+'</section>'}
+  +(u.length>1?'<div class="lend-actions"><button type="button" class="ghost" data-unlinked-all="'+esc(p.id)+'">Add all '+u.length+'</button></div>':'')+'</details>'}
 function lendPersonDetailHtml(p){const k=lendOpen||'',mine=k.endsWith(':'+p.id),pct=p.lent>0?Math.min(100,p.repaid/p.lent*100):0;
  const moving=k.startsWith('move:')&&p.items.some(i=>'move:'+i.entryId===k),empty=!p.items.length&&!p.rollups.length;
  const reqs=(lendingData?.requests||[]).filter(r=>r.personId===p.id).map(lendRequestHtml).join('');
@@ -926,7 +926,8 @@ function lendPersonDetailHtml(p){const k=lendOpen||'',mine=k.endsWith(':'+p.id),
   +'<small class="lend-hero-meta">'+esc([lendMeta(p),p.annualRate?(+(p.annualRate*100).toFixed(2))+'% a year':'',p.interest?'interest '+money(p.interest):'',p.lastMovement?'last '+lendDay(p.lastMovement):'',p.overpaid?'paid back '+money(p.overpaid)+' more than given':''].filter(Boolean).join(' · '))+'</small>'
   +lendAkaHtml(p)+acts+(mine?lendFormHtml(k.slice(0,k.indexOf(':')),p):'')+lendShareHtml(p)+'</section>'
   +reqs+lendUnlinkedHtml(p)
-  +'<section class="lend-section"><h4>Entries <small>'+p.items.length+(p.rollups.length?' · '+p.rollups.length+' round-off'+(p.rollups.length===1?'':'s'):'')+'</small></h4>'+(p.items.length?p.items.map(i=>lendItemHtml(i,p)).join(''):'<p class="rw-form-hint">No open entries.</p>')+p.rollups.map(lendRollupHtml).join('')+(p.note?'<p class="rw-form-hint">'+esc(p.note)+'</p>':'')+'<div class="lend-actions">'+status+'</div></section></div>'}
+  +'<details class="lend-section lend-fold" data-fold="'+esc(p.id)+':entries"'+(moving||lendFolds.has(p.id+':entries')?' open':'')+'><summary><h4>Entries <small>'+p.items.length+(p.rollups.length?' · '+p.rollups.length+' round-off'+(p.rollups.length===1?'':'s'):'')+'</small></h4><span class="lend-fold-hint">'+esc(p.items.length?money(p.items.filter(i=>!i.writtenOff&&i.direction==='out').reduce((n,i)=>n+i.amount,0))+' given · '+money(p.items.filter(i=>!i.writtenOff&&i.direction==='in').reduce((n,i)=>n+i.amount,0))+' back':'none open')+'</span></summary>'+(p.items.length?p.items.map(i=>lendItemHtml(i,p)).join(''):'<p class="rw-form-hint">No open entries.</p>')+p.rollups.map(lendRollupHtml).join('')+(p.note?'<p class="rw-form-hint">'+esc(p.note)+'</p>':'')+'</details>'
+  +'<div class="lend-actions lend-person-acts">'+status+'</div></div>'}
 const LEND_METHOD={upi:'UPI',bank:'bank transfer',cash:'cash',other:'other'};
 function lendBankAccounts(){return (accounts||[]).filter(a=>/^(savings|current)$/i.test(String(a.account_type||'')))}
 function lendRequestHtml(r){const open=lendReq===r.id,p=(lendingData?.people||[]).find(x=>x.id===r.personId),owed=p?p.owed:0;
@@ -994,6 +995,7 @@ function lendRoundNote(f){const tot=Number(f.dataset.roundTotal||0),back=Number(
  const n=f.querySelector('[data-round-note]');if(n)n.textContent=back>tot?'Already back is more than owed':d===0?'Exact: owed '+money(tot)+' − already back '+money(back)+' = '+money(nw):(d>0?'Rounded down by ':'Rounded up by ')+money(Math.abs(d))+' (owed '+money(tot)+' − already back '+money(back)+' = '+money(Math.max(0,tot-back))+')'}
 function lendingBindEvents(){
  splitBindEvents();
+ document.addEventListener('toggle',e=>{const d=e.target;if(!d||!d.matches||!d.matches('details.lend-fold[data-fold]'))return;if(d.open)lendFolds.add(d.dataset.fold);else lendFolds.delete(d.dataset.fold)},true);
  const reqPrev=e=>{const f=e.target.closest?.('.lend-req-form');if(f)lendReqPreview(f)};document.addEventListener('input',reqPrev);document.addEventListener('change',reqPrev);
  setInterval(()=>{if(user?.role==='admin'&&document.visibilityState==='visible')notifRefresh()},180000);
  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')notifRefresh()});
