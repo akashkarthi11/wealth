@@ -461,3 +461,28 @@ test('account details page comes from the tables: own account only, history, mon
   const [other] = await a.query(`INSERT INTO wealth_users(email,password_hash) VALUES('x@example.test','x') RETURNING id`);
   assert.equal(await accountDetail(other.id, sav, a, { now: NOW }), null, 'another user cannot read it');
 });
+
+test('no waste: prices are not copied into the unused history table; one rolling estimate per account; audit keeps only changes', async () => {
+  const { a, uid, sav } = await interestFixture();
+  // 1. Prices: latest price (v1) + instrument history (v2), nothing in wealth_price_history.
+  await stock(a, uid);
+  await storePrices(uid, [{ assetClass: 'indian_equity', symbol: 'LT', price: 4200, currency: 'INR', asOf: '2026-11-10T10:00:00Z', source: 'NSE' }], { db: a, now: NOW });
+  assert.equal((await a.query(`SELECT count(*)::int n FROM wealth_price_history`))[0].n, 0);
+  assert.equal((await a.query(`SELECT count(*)::int n FROM wealth_market_prices`))[0].n, 1);
+  // 2. Two nights of daily-credited interest → still one estimated row, moved forward; the verified row untouched.
+  await a.query(`UPDATE wealth_interest_products SET credit_frequency='daily' WHERE product_key='slice-savings'`);
+  await runAccrual(uid, { db: a, now: NOW });
+  await runAccrual(uid, { db: a, now: NOW + 864e5 });
+  const rows = await a.query(`SELECT status, as_of, balance::float8 b FROM wealth_account_balances WHERE account_id=$1 ORDER BY as_of`, [sav]);
+  assert.deepEqual(rows.map(r => r.status), ['verified', 'estimated']);
+  assert.equal(rows[1].as_of.toISOString(), '2026-11-11T18:29:59.000Z', 'estimate moved to the end of 11 Nov');
+  const i10 = round2(47882 * 0.055 / 365), p11 = round2(47882 + i10);
+  assert.equal(rows[1].b, round2(47882 + i10 + round2(p11 * 0.055 / 365)));
+  // 3. Audit: an update stores only the changed columns; touching only updated_at is not recorded.
+  const before = (await a.query(`SELECT count(*)::int n FROM wealth_audit_log WHERE table_name='wealth_accounts'`))[0].n;
+  await a.query(`UPDATE wealth_accounts SET updated_at = now() + interval '1 minute' WHERE id=$1`, [sav]);
+  assert.equal((await a.query(`SELECT count(*)::int n FROM wealth_audit_log WHERE table_name='wealth_accounts'`))[0].n, before, 'updated_at alone is not audited');
+  await a.query(`UPDATE wealth_accounts SET account_name='Slice Savings A/c', updated_at=now() WHERE id=$1`, [sav]);
+  const [last] = await a.query(`SELECT before, after FROM wealth_audit_log WHERE table_name='wealth_accounts' ORDER BY id DESC LIMIT 1`);
+  assert.deepEqual([last.before, last.after], [{ account_name: 'Slice Savings' }, { account_name: 'Slice Savings A/c' }]);
+});

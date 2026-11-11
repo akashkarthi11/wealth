@@ -2,7 +2,7 @@ import {sql,json,invalidateUserCaches} from '../_lib.js';
 import {startJob,finishJob} from '../_jobs.js';
 
 // Daily price refresh (Vercel Cron). Writes:
-//   v1: wealth_market_prices / wealth_price_history per legacy asset (kept while v1 is live)
+//   v1: wealth_market_prices, the latest price per legacy asset (updated in place; read by the v1 dashboard)
 //   v2: wealth_instrument_prices once per instrument, with fx_to_inr for USD (TSD TR-5.4)
 // A failed quote never writes 'fresh': v1 marks the row stale, v2 writes nothing (last price ages out).
 
@@ -97,8 +97,7 @@ async function refreshLegacy(price){
      ON CONFLICT(asset_id) DO UPDATE SET unit_price=EXCLUDED.unit_price,currency=EXCLUDED.currency,source=EXCLUDED.source,
      source_timestamp=EXCLUDED.source_timestamp,fetched_at=now(),status='fresh',metadata=EXCLUDED.metadata`,
      [a.id,a.user_id,q.unitPrice,q.currency,q.asOf.toISOString(),JSON.stringify(meta),q.source]);
-   await sql.query(`INSERT INTO wealth_price_history(asset_id,user_id,unit_price,currency,source,source_timestamp,metadata) VALUES($1,$2,$3,$4,$6,$5,$7::jsonb)`,
-     [a.id,a.user_id,q.unitPrice,q.currency,q.asOf.toISOString(),q.source,JSON.stringify(meta)]);
+   // (No wealth_price_history row: nothing reads it; v2 wealth_instrument_prices keeps one row per new quote.)
    await sql.query("UPDATE wealth_investment_assets SET pricing_status='active',updated_at=now() WHERE id=$1",[a.id]);
    users.add(a.user_id);
    return {asset_id:a.id,status:'updated',unit_price:q.unitPrice,currency:q.currency};
