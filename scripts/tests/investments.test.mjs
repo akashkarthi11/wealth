@@ -27,8 +27,8 @@ const positions = [
 const items = [{ kind: 'investment', category: 'SIP', amount: '1000', occurred_on: '2026-11-03', account: 'HDFC' }, { kind: 'expense', category: 'Food', amount: '50', occurred_on: '2026-11-03' }];
 
 function render() {
-  const ctx = { positions, items, accounts: [], esc: s => String(s), money: v => 'INR ' + Number(v).toFixed(2), accountKey: s => s, latestAngelOneEquitySummary: null, Number, String, Date, Math, Set, Object, JSON };
-  vm.runInNewContext(consts + ['usHoldingInrValue', 'wealthPosition', 'dayChangeOf', 'istDayKey', 'dayChangeLabel', 'invTime', 'invPriceTag', 'invHolding', 'invPnlHtml', 'investmentsPageModel', 'investmentsPageHtml'].map(fn).join('\n')
+  const ctx = { positions, items, accounts: [], esc: s => String(s), money: v => 'INR ' + Number(v).toFixed(2), accountKey: s => s, latestAngelOneEquitySummary: null, brokerLedger: globalThis.__broker || [], Number, String, Date, Math, Set, Object, JSON };
+  vm.runInNewContext(consts + ['usHoldingInrValue', 'wealthPosition', 'dayChangeOf', 'istDayKey', 'dayChangeLabel', 'invTime', 'invPriceTag', 'invHolding', 'invPnlHtml', 'investmentsPageModel', 'brokerMonth', 'brokerPanelHtml', 'investmentsPageHtml'].map(fn).join('\n')
     + ';globalThis.model=investmentsPageModel();globalThis.html=investmentsPageHtml();', ctx);
   return ctx;
 }
@@ -64,4 +64,26 @@ test('money put in is shown separately and not added to the value', () => {
 test('renderView uses the new page; old snapshot-based investments view removed', () => {
   assert.match(src, /else if\(view==='investments'\)\{target\.innerHTML=investmentsPageHtml\(\)\}/);
   assert.doesNotMatch(src, /RECORDED INVESTMENTS/);
+});
+
+test('Angel One ledger panel: net put in, value now (stocks + broker cash), overall gain, charges, MTF', () => {
+  globalThis.__broker = [{ broker: 'angel_one', added: 369093, withdrawn: 152953, netPutIn: 216140, charges: 4400.37, chargesThisYear: 141.6, cash: -3.81, mtfBalance: 0, mtfLast: '2025-12-05',
+    first: '2022-04-02', last: '2026-11-06', matchedTransfers: 3, years: [{ year: 2025, added: 50000, withdrawn: 20000, charges: 400 }, { year: 2026, added: 13882, withdrawn: 0, charges: 141.6 }] }];
+  try {
+    const { html, model } = render();
+    const stocks = model.groups.find(g => g.id === 'equity').value;
+    const gain = stocks - 3.81 - 216140;
+    assert.match(html, /Angel One · since Apr 2022/);
+    assert.match(html, /Net put in<\/small><b>INR 216140\.00/);
+    assert.match(html, new RegExp('Value now</small><b>INR ' + (stocks - 3.81).toFixed(2).replace('.', '\.')));
+    assert.match(html, new RegExp('Overall gain</small><b class="' + (gain >= 0 ? 'positive' : 'negative') + '">' + (gain >= 0 ? '\+' : '−') + 'INR ' + Math.abs(gain).toFixed(2).replace('.', '\.')));
+    assert.match(html, /Broker charges<\/small><b>INR 4400\.37<\/b><em>INR 141\.60 this year/);
+    assert.match(html, /MTF closed since 5 Dec 2025 · 3 bank transfers matched to the ledger/);
+    assert.ok(html.indexOf('<td>2026</td>') < html.indexOf('<td>2025</td>'), 'newest year first');
+  } finally { delete globalThis.__broker; }
+});
+
+test('no ledger uploaded → no panel', () => {
+  const { html } = render();
+  assert.doesNotMatch(html, /broker-panel/);
 });

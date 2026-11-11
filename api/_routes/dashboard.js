@@ -1,6 +1,7 @@
 import {sql,schema,json,sessionUser,dataModel} from '../_lib.js';
 import {pageTransactions,spendingRows,accountHierarchyRows,legacyPositionRows} from '../_queries.js';
 import {valuePortfolio} from '../_valuation.js';
+import {brokerSummary} from '../_broker.js';
 
 async function readDashboard(uid){
  const [users,page,spending,templates,accounts,positions,interest,interestStatements]=await Promise.all([
@@ -39,6 +40,8 @@ export default async function handler(req,res){
    try{model={version:'v2',generatedAt:new Date().toISOString(),...valuePortfolio(await accountHierarchyRows(uid))}}
    catch(e){console.error('[wealth-dashboard:v2]',e?.message||e);model={version:'v2',error:'Account model is not available yet.'}}
   }
-  return json(res,200,{transactions:payload.transactions,nextCursor:payload.nextCursor,spending:payload.spending,snapshots:payload.snapshots,template:payload.template,accounts:payload.accounts,positions:payload.positions,interest:payload.interest,interestStatements:payload.interestStatements,categorySymbols,model});
+  // Broker funds ledger (0011): money put in / withdrawn / charges per broker. Never blocks the dashboard.
+  const broker=await brokerSummary(uid).catch(e=>{console.warn('[wealth-dashboard:broker]',e?.message||e);return []});
+  return json(res,200,{broker,transactions:payload.transactions,nextCursor:payload.nextCursor,spending:payload.spending,snapshots:payload.snapshots,template:payload.template,accounts:payload.accounts,positions:payload.positions,interest:payload.interest,interestStatements:payload.interestStatements,categorySymbols,model});
  }catch(e){console.error('[wealth-dashboard]',e?.message||e);return json(res,500,{error:'Unable to load dashboard.'})}
 }

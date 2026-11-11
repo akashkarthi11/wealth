@@ -685,3 +685,19 @@ em.in{color:var(--green)}em.out{color:#ff9b9b}
 .act-more-btn{display:block;width:100%;margin:16px 0 4px}
 @media(max-width:700px){.act-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.act-tile b{font-size:16px}.act-month-head{top:0}.act-more{flex-direction:column;align-items:stretch;padding-left:4px}.act-delete.delete{align-self:flex-end}}
 .inv-day{font-size:11px!important;letter-spacing:0!important;white-space:nowrap}
+
+/* Broker ledger panel (0011) inside Investments → Indian stocks */
+.broker-panel{margin:4px 14px 10px;padding:12px 13px;border:1px solid #2e4260;border-radius:13px;background:#0d1929}
+.broker-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.broker-head b{font-size:13px}.broker-head small{margin:0;font-size:11px;letter-spacing:0;color:#8fa2bd}
+.broker-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:10px}
+.broker-grid>div{min-width:0;background:#111f33;border:1px solid #24364f;border-radius:10px;padding:9px 10px}
+.broker-grid small{display:block;margin:0;font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:#8fa2bd}
+.broker-grid b{display:block;margin-top:4px;font-size:15px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.broker-grid em{display:block;margin-top:3px;font-style:normal;font-size:10px;line-height:1.35;color:#7f93ad}
+.broker-years{margin-top:9px}.broker-years>summary{cursor:pointer;font-size:12px;color:var(--green)}
+.broker-years table{width:100%;border-collapse:collapse;margin-top:6px;font-size:12px;font-variant-numeric:tabular-nums}
+.broker-years th,.broker-years td{text-align:right;padding:6px 4px;border-bottom:1px solid #22324a}.broker-years th:first-child,.broker-years td:first-child{text-align:left}
+.broker-years th{font-size:10px;color:#8fa2bd;font-weight:600}
+.broker-note{margin:8px 0 0;font-size:11px;color:#8fa2bd}
+@media(max-width:700px){.broker-panel{margin:4px 11px 10px}.broker-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
