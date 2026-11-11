@@ -53,3 +53,43 @@ The production database was updated and verified on 11 Nov 2026. The earlier dev
 9. **Interest from screenshots is never saved** (owner rule, 11 Nov 2026; see rules.md §2a). Screens show interest as a full / running total; the app's nightly interest task records interest. Do not insert any interest transaction or row from a screenshot.
 10. **Slice Atom = the "Atom Savings" account** (bank "Atom"). Round-ups and Atom interest go there.
 11. Atom has **splits** (pots such as Rent). Until split tracking is added to the app, put Atom money on Atom Savings and name the split in the description; do not invent a split.
+
+---
+
+## Issue: New user onboarding — a non-owner user sees blank or empty pages (found 11 Nov 2026, to solve 12 Nov 2026)
+
+### What happened
+- A demo user **test@gmail.com** (password `1234567890`, role `user`) was created on Production to try the app as a new user.
+- After signing in, the owner saw a **blank page**. The app is built for one owner (the admin); a second, normal user cannot set up
+  most of their own data, and several pages are empty or show only "Owner only".
+- To make the demo usable, sample data was written **directly with SQL** (no code changed). See "Demo data" below.
+
+### Problems to solve
+| # | Problem | Where | Effect for a new user |
+|---|---|---|---|
+| 1 | Account, balance and holdings routes are owner-only | `authorize()` in `api/_lib.js` (returns "Owner only" unless role is admin) | A new user cannot add bank accounts, balances or investments from the app at all |
+| 2 | Rewards, Lending, Data quality, Interest sources, Snapshot, Angel One are owner-only, but their pages are still in the menu | `api/_routes/*` + `views` list in `app.js` | Pages show just "Owner only" |
+| 3 | The last opened page is restored at sign-in (sessionStorage, per tab) | `readViewState()` / `showApp()` in `app.js` | Switching from admin to a new user in the same tab can open an owner-only page → looks blank |
+| 4 | Subscriptions page returns an empty string when there are no subscriptions | `subscriptionsHtml()` in `app.js` (`return ''`) | Completely blank page (for any user with no subscriptions) |
+| 5 | Bank Balances page reads the old `wealth_accounts.current_balance` and only counts `verified` / `stale`; the dashboard reads the account-model balance history | `liveBankAccounts()` / `bankCounted()` in `app.js` | Net worth shows a balance but Bank Balances says "No bank balance records found" |
+| 6 | No way for a normal user to add subscriptions / mandates in the app | `api/_routes/planned-bills.js` (GET and PATCH only) | Subscriptions and Alerts stay empty |
+| 7 | Owner-specific content is hard-coded | `app.js` / `index.html`: title "Karthi Portfolio"; interest card lists Slice Savings and Atom | Every user sees the owner's name and bank names |
+| 8 | "A new Wealth Ledger version is available" prompt appears on a first visit | `promptForUpdatedApp()` in `app.js` (default previous build id) | Confusing first screen; cancelling can leave an old cached app |
+| 9 | Only one admin is safe: agents (ChatGPT), cron and the nightly job write to "the admin user" (`ownerId()`) | `api/_lib.js`, `api/_routes/nightly.js` | Making a new user an admin to unlock pages would mix their data with the owner's jobs — do not do this |
+| 10 | Sign-up needs the secret access key; password minimum is 10 characters | `api/_routes/auth.js`, `PASSWORD_MIN` in `api/_lib.js` | Fine for security, but onboarding instructions must say so |
+
+### Decide tomorrow
+- Should the app support **several independent users** (each user owns their own accounts, balances, holdings, rewards, loans), or stay
+  **single-owner** with other users limited to a smaller view? This choice drives fixes 1, 2, 6 and 9.
+- Quick fixes that do not depend on that choice: 3 (only restore pages the user may open), 4 (show "No subscriptions or mandates yet"),
+  5 (Bank Balances should use the same balance as the dashboard), 7 (remove owner name / owner banks for other users), 8 (no prompt on first visit),
+  and hide owner-only menu items for non-admin users.
+- Code goes to `claude-dev` first, then `main` (only `main` deploys). Leave `v2` untouched.
+
+### Demo data (Production, user test@gmail.com only — for cleanup later)
+- 57 transactions: `external_ref LIKE 'demo-seed:%'`, linked to the two demo accounts.
+- 2 accounts: Demo Bank "Demo Savings" XX1234 and Sample Bank "Salary Account" XX5678 (savings).
+- Balances: ₹48,250.75 and ₹1,26,430.20 at 11 Nov 2026 19:45 IST, history status `reported`, account columns `stale`,
+  note "Sample data for demo account". Never `verified`, never `pending_reconciliation`.
+- 3 subscriptions: provider keys `demo-streaming-plus`, `demo-music-unlimited`, `demo-cloud-storage`.
+- All writes used `wealth.actor = 'agent'`. Removing the user (`wealth_users` row) cascades to most of these rows — check before deleting.

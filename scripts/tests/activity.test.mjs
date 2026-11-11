@@ -14,7 +14,7 @@ const tx = (id, kind, amount, date, o = {}) => ({ id, kind, amount: String(amoun
 function page(items, { txCursor = null } = {}) {
   const els = {};
   const el = (id, value = '') => (els[id] = { id, value, textContent: '', innerHTML: '', hidden: false, classList: { toggle() {} } });
-  const ctx = { items, txCursor, transactionTotalCount: () => items.length, lendActivityButtonHtml: () => '', lendRowTag: () => '', esc: s => String(s), money: v => 'INR ' + Number(v).toFixed(2), Number, String, Date, Math, Set, Object, JSON,
+  const ctx = { items, txCursor, transactionTotalCount: () => items.length, lendActivityButtonHtml: () => '', lendRowTag: () => '', lendHiddenTx: () => false, esc: s => String(s), money: v => 'INR ' + Number(v).toFixed(2), Number, String, Date, Math, Set, Object, JSON,
     $: id => els[id], document: { querySelectorAll: () => [] } };
   vm.runInNewContext(block + ';globalThis.api={activityRowsHtml,activitiesHtml,activityPresetRange,activityPeriod,actFlows,state:()=>activityState,setState:s=>{activityState=s}};', ctx);
   const mount = () => { const html = ctx.api.activitiesHtml();

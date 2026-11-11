@@ -293,3 +293,19 @@ Checked against screenshots: Monies 1,42,378 (9 Nov) → 1,42,399 (11 Nov) = +21
 - `0022_lending_entry_status` (additive): `status` on entries (active · written_off · removed) and on bill shares (active · written_off); people can be `removed`; one-link-per-transaction / one-payment-per-share ignore removed entries.
 - `POST /api/loans/records`: **Write off** one entry or bill share (listed, struck through, not counted; **Undo** brings it back); **Remove (mistake)** for an entry linked by a wrong tap — hidden and not counted, the transaction stays in Activity and can be linked again. Nothing is deleted. A person with nothing left can be removed.
 - People who owe nothing (paid back, settled, written off) move to **History · owe ₹0**, still listing their entries. Activity tag shows "· written off".
+
+### Shared link, "I've paid" requests, bell, People redesign (build `4j`, migration 0023)
+- Owner: "gen url for user in lend so they can see their lend and after paid then ask request to close … notification icon top right … if i close it need to add balance to bank and close lend" · "money lend screen need better uiux".
+- `0023_lend_share_and_requests` (additive): `wealth_people.share_token_hash` (SHA-256 of the link secret — the link is shown once; a new link replaces it), `wealth_lend_requests` (amount, date, method, note, pending / accepted / declined, account, transaction, balance_added, closed_lend).
+- Public page `/l/<secret>` (vercel.json rewrite → `lend-view`): that person's own entries only (no account names, transaction text or other people), "I've paid" form (≤ 3 waiting, rate-limited per IP), noindex, no-store.
+- Owner: `POST /api/loans/share` (create / revoke), `POST /api/loans/requests/decide` — **Accept** records a received transfer on the chosen bank account (`external_ref lend-request:<id>`) + a paid-back entry; **add to balance** (on by default) writes a new balance row (`reported`, note) and `wealth_accounts` (`stale` — an owner-confirmed estimate, rules.md §2); **close the lend** sets the person to settled. One database transaction. **Not received** declines. Lending again / splitting reopens a settled person.
+- Bell (top right): waiting requests, refreshed on sign-in, every 3 minutes and when the tab returns; tap → People page with that request open.
+- People page redesign: header total + stats + actions → waiting payments → tabs (Owe you · Split bills · History · To review) → compact person rows → person detail (Paid, Round off, Share link, Edit; entries with Write off / Undo / Remove (mistake) / Change person / Mark paid).
+
+### People: rename, other names, merge, hide; transfers mapped to the same person (build `4k`, migration 0024)
+- Owner: "rename for user option it need better uiux … map this transaction to this user if same user transfer we need to consider that same user we created … dont show in that user list if i ask to hide … dont show transaction related to that user in screen but background store it".
+- `0024_people_aliases_hidden` (additive): `wealth_person_aliases` (one name → one person per user), `wealth_people.hidden`.
+- Linking a transfer remembers the name in its bank text as another name for that person; renaming keeps the old name; typing any of a person's names picks that person (no duplicates). Transfers under a person's names that are not linked show on their page as **Not added yet** (Add / Add all) instead of in "To review".
+- `POST /api/loans/people/names` (add / remove a name), `POST /api/loans/people/merge` (same person twice → one; nothing lost), `POST /api/loans/people {hidden}`.
+- **Hide**: out of totals, lists, split chooser, suggestions, the bell and Activity (linked and matched transfers are filtered on screen); all data kept; **All people → Hidden** shows them again.
+- UI: new **All people** tab; on a person — ✎ Rename next to the name, "Also in bank text as" chips (× / ＋ Add a name), Hide from lists, Merge with…
