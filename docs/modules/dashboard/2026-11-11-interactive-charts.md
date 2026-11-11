@@ -26,3 +26,7 @@ Cash flow trend · Average monthly spend by year · Bank balance history (dashbo
 - **Method note** collapsed into "How this is calculated"; **"Interest details →"** on the dashboard only.
 - Engine: optional `legend:false`, toggles from outside the chart kept in sync, x-axis labels never collide with the last label.
 - Checked visually at 540 px and 1000 px; tests updated (`interest-fd.test.mjs` 7); full suite 160/160.
+
+## Touch anywhere (build `3w`, owner: "chart only data show when click joint")
+- Cause found: pages opened before the `3u` deploy kept the old charts (values only on a dot) until reloaded. The live `3u` charts already respond to a touch anywhere (checked with a real touch event in headless Chrome, mobile emulation: tapping an empty spot showed "Mar 2026 · ₹74,595 Money in · ₹47,855 Spending").
+- Extra robustness: a transparent full-size hit layer (`.ichart-hit`) on every chart and a click fallback, so browsers that do not hit-test empty SVG areas (e.g. Safari) still show the nearest date.

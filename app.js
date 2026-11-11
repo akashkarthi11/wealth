@@ -1,4 +1,4 @@
-const APP_BUILD_ID='20261111-claude-plan-3v';
+const APP_BUILD_ID='20261111-claude-plan-3w';
 (function promptForUpdatedApp(){
   try {
     const key='wealth-ledger:app-build';
@@ -146,7 +146,7 @@ function chartInnerHtml(id){
  const tools='<div class="ichart-tools"><span class="ichart-window">'+esc(chartLabelOf(pts[0].x,true))+(pts.length>1?' – '+esc(chartLabelOf(pts[pts.length-1].x,true)):'')+(zoomed?' · drag to move':'')+'</span>'
   +'<button type="button" data-chart-zoom="in" aria-label="Zoom in"'+(v.span<=2?' disabled':'')+'>+</button><button type="button" data-chart-zoom="out" aria-label="Zoom out"'+(zoomed?'':' disabled')+'>−</button><button type="button" data-chart-zoom="reset" aria-label="Show the whole period"'+(zoomed?'':' disabled')+'>⤢</button></div>';
  const legend=c.series.length>1&&c.legend!==false?'<div class="ichart-legend">'+c.series.map(s=>'<button type="button" data-chart-toggle="'+esc(s.key)+'" aria-pressed="'+(!c.hidden.has(s.key))+'"'+(c.hidden.has(s.key)?' class="off"':'')+'><i style="background:'+s.color+'"></i>'+esc(s.legend||s.name)+'</button>').join('')+'</div>':'';
- return tools+'<div class="ichart-plot"><svg viewBox="0 0 '+W+' '+H+'" role="img" tabindex="0" aria-label="'+esc(c.title||'Chart')+'. Tap or use the arrow keys to read values; use + and − or pinch to zoom." data-w="'+W+'" data-l="'+L+'" data-r="'+R+'">'+grid+lines+ticks+'<line class="ichart-cross" x1="0" x2="0" y1="'+T+'" y2="'+(H-B)+'" visibility="hidden"/></svg><div class="ichart-tip" hidden></div></div>'+legend}
+ return tools+'<div class="ichart-plot"><svg viewBox="0 0 '+W+' '+H+'" role="img" tabindex="0" aria-label="'+esc(c.title||'Chart')+'. Tap or use the arrow keys to read values; use + and − or pinch to zoom." data-w="'+W+'" data-l="'+L+'" data-r="'+R+'">'+grid+lines+ticks+'<line class="ichart-cross" x1="0" x2="0" y1="'+T+'" y2="'+(H-B)+'" visibility="hidden"/><rect class="ichart-hit" x="0" y="0" width="'+W+'" height="'+H+'" fill="transparent" pointer-events="all"/></svg><div class="ichart-tip" hidden></div></div>'+legend}
 function chartRedraw(box){const id=box.dataset.chart,c=CHARTS[id];if(!c)return;box.innerHTML=chartInnerHtml(id);document.querySelectorAll('[data-chart-target]').forEach(b=>{if(b.dataset.chartTarget!==id)return;const on=!c.hidden.has(b.dataset.chartToggle);b.classList.toggle('off',!on);b.setAttribute('aria-pressed',String(on))})}
 function chartIndexAt(svg,clientX){const c=CHARTS[svg.closest('.ichart').dataset.chart],n=chartVisible(c).pts.length,r=svg.getBoundingClientRect(),W=+svg.dataset.w,L=+svg.dataset.l,R=+svg.dataset.r;if(n<=1||!r.width)return 0;const px=(clientX-r.left)*W/r.width;return Math.max(0,Math.min(n-1,Math.round((px-L)/((W-L-R)/(n-1)))))}
 function chartShow(box,i){const c=CHARTS[box.dataset.chart];if(!c)return;const v=chartVisible(c),n=v.pts.length;i=Math.max(0,Math.min(n-1,i));const p=v.pts[i];if(!p)return;c.focus=i;
@@ -164,7 +164,9 @@ function chartBindEvents(){
   const r=e.target.closest('[data-chart-range]');if(r){chartRange=r.dataset.chartRange;document.querySelectorAll('[data-chart-range]').forEach(b=>{const on=b.dataset.chartRange===chartRange;b.classList.toggle('active',on);b.setAttribute('aria-pressed',String(on))});document.querySelectorAll('.ichart').forEach(box=>{const c=CHARTS[box.dataset.chart];if(c&&c.ranged!==false){c.span=null;c.end=null;chartRedraw(box)}});return}
   const z=e.target.closest('[data-chart-zoom]');if(z){const box=z.closest('.ichart'),c=CHARTS[box.dataset.chart],v=chartVisible(c),k=z.dataset.chartZoom;if(k==='in'){c.span=Math.max(2,Math.ceil(v.span/2));c.end=v.end}else if(k==='out'){c.span=Math.min(v.n,v.span*2);c.end=v.end}else{c.span=null;c.end=null}chartRedraw(box);return}
   const t=e.target.closest('[data-chart-toggle]');if(t){const box=t.closest('.ichart')||document.querySelector('.ichart[data-chart="'+(t.dataset.chartTarget||'')+'"]');if(!box)return;const c=CHARTS[box.dataset.chart],k=t.dataset.chartToggle;if(c.hidden.has(k))c.hidden.delete(k);else if(c.series.length-c.hidden.size>1)c.hidden.add(k);chartRedraw(box);return}
-  const seg=e.target.closest('[data-share]');if(seg)shareShow(seg)});
+  const seg=e.target.closest('[data-share]');if(seg){shareShow(seg);return}
+  // Plain tap anywhere on a chart (fallback for browsers that send only a click on touch): show the nearest date.
+  const svg=e.target.closest('.ichart svg');if(svg){const box=svg.closest('.ichart');chartShow(box,chartIndexAt(svg,e.clientX))}});
  document.addEventListener('pointerover',e=>{const seg=e.target.closest?.('[data-share]');if(seg&&e.pointerType==='mouse')shareShow(seg)});
  document.addEventListener('pointerdown',e=>{const svg=e.target.closest?.('.ichart svg');if(!svg)return;const box=svg.closest('.ichart'),c=CHARTS[box.dataset.chart],v=chartVisible(c);let d=drag.get(box);if(!d){d={pts:new Map()};drag.set(box,d)}
   d.pts.set(e.pointerId,e.clientX);const xs=[...d.pts.values()];d.startX=e.clientX;d.startEnd=v.end;d.startSpan=v.span;d.startDist=xs.length===2?Math.abs(xs[0]-xs[1]):0;chartShow(box,chartIndexAt(svg,e.clientX))});
