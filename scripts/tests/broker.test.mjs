@@ -88,3 +88,18 @@ test('no ledger yet → empty summary', async () => {
   const { a, uid } = await setup();
   assert.deepEqual(await brokerSummary(uid, a), []);
 });
+
+import { parsePnlSheet, pnlSourceKey } from '../../api/_broker.js';
+test('P&L report: parsed, checked against its summary, no personal fields kept', () => {
+  const head = ['Scrip Symbol', 'Company Name', 'Quantity', 'Avg Buy Price', 'Buy Value', 'Avg Sell Price', 'Sell Value', 'Gross PnL', 'Brokerage', 'Net PnL'];
+  const rows = [['Client Name', 'SOMEONE'], ['PAN', '******379N'], ['From Date', '01/10/2023'], ['To Date', '10/11/2026'],
+    ['Total Gross PnL', '100'], ['Total Brokerage', '5'], ['Net PnL', '85'], ['Intraday Net PnL', '-10'],
+    ['Delivery PnL'], head, ['VEDL', 'VEDL', '2', '10', '20', '60', '120', '100', '5', '95'], ['Total', '', '', '', '20', '', '120', '100', '5', '95'],
+    ['Intraday PnL'], head, ['HAL', 'HAL', '1', '10', '10', '0', '0', '-10', '0', '-10'], ['Total'], ['Disclaimer', 'x']];
+  const p = parsePnlSheet(rows);
+  assert.equal(pnlSourceKey(p), 'angelone-pnl-2023-10-01..2026-11-10');
+  assert.equal(p.summary.deliveryNet, 95); assert.equal(p.delivery.length, 1); assert.equal(p.intraday.length, 1);
+  assert.doesNotMatch(JSON.stringify(p), /SOMEONE|379N/);
+  rows[10][9] = '90';
+  assert.throws(() => parsePnlSheet(rows), /do not match/);
+});

@@ -1,6 +1,7 @@
 # 2026-11-11 — Angel One ledger statement kept as history (migration 0011)
 
 - **Status:** code + tests on `claude-dev`; migration 0011 applied to Development and the statement imported there; Production after a backup and owner approval
+- **Status update 2026-11-11:** in Production. Backup `prod-before-0011.wlb` (31 tables, 1,333 rows, drill passed); `main` `4d2a262` applied 0011 (12 migrations); statement imported (952 entries, 3 transfers matched, 2 recategorised, audited as owner); build `20261111-claude-plan-3m`.
 - **Owner request:** "for history and can we use this data anywhere" → yes
 
 ## What the statement is
@@ -47,3 +48,13 @@ Each unmatched funds-added entry links to an `investment`/`transfer` transaction
 
 - Overall gain compares stocks and ETFs only. Mutual funds bought through Angel One are paid from the bank and do not appear in this ledger. Dividends paid to the bank are not included.
 - The panel is only as current as the last uploaded statement (its date is shown).
+
+## Addition 2026-11-11 — Angel One Profit & Loss report (realised profit)
+
+- Source: Angel One P&L report `.xlsx` ("Equity P&L" + "F&O P&L"), 1 Oct 2023 – 10 Nov 2026. It covers sold positions only, matched FIFO by the broker.
+- Figures: delivery 38 stocks, gross +₹25,309.37 → net **+₹24,227.49**; intraday 3 trades −₹54.49; F&O none; **net +₹24,173.00**; charges in the report ₹1,108.93. Best: VEDL +₹4,518.40, HAL +₹4,180.01, COCHINSHIP +₹2,308.14; worst: AWL −₹2,945.71.
+- Cross-check: booked +₹24,173 + unrealised on current stocks (−₹10,813) = +₹13,360, against +₹13,974 overall from the ledger. The gap fits trades before Oct 2023 (not in the report) and the ledger-only charges.
+- Stored as **one** `wealth_snapshots` record, `source_key = angelone-pnl-<from>..<to>`, `payload.kind = 'broker_pnl'` (summary, 38 delivery rows, 3 intraday rows; about 7 KB; no name, PAN or client id). Tool: `scripts/db/import-broker-pnl.mjs <env> <file.xlsx> [--apply --yes]`; the parser checks the rows against Net PnL and Intraday Net PnL.
+- App: the Angel One panel (Investments → Indian stocks) shows **Booked profit (sold)**, **Still holding** (unrealised on current stocks) and a "Sold stocks" table, best first. Build `20261111-claude-plan-3n`.
+- Not possible from this report: the short-term / long-term capital gains split (no dates; use Angel One's Tax P&L report) and current holdings.
+- Tests: `broker.test.mjs` (parser, summary check, no personal fields), `investments.test.mjs` (panel lines).
