@@ -1,4 +1,4 @@
-import {sql,schema,json,body,sessionUser,invalidateUserCaches,cachedForUser,cacheHeader} from '../_lib.js';
+import {sql,schema,json,body,sessionUser,invalidateUserCaches,cachedForUser,sendCached} from '../_lib.js';
 import {pageTransactions,PAGE_DEFAULT} from '../_queries.js';
 
 // Only the default first page is cached (by data version); later pages and custom sizes always read Neon.
@@ -12,9 +12,9 @@ export default async function handler(req,res){
   const cursor=q.get('cursor'),limit=Number(q.get('limit'))||PAGE_DEFAULT;
   // First page: versioned Redis cache (0018) — served only while no data has changed, so it is never stale.
   if(!cursor&&limit===PAGE_DEFAULT){
-   const {uid,data,hit}=await cachedForUser(req,'ledger',uid=>pageTransactions(uid),{ttl:600});
-   if(!uid)return json(res,401,{error:'Sign in required'});
-   cacheHeader(res,hit);return json(res,200,data);
+   const r=await cachedForUser(req,'ledger',uid=>pageTransactions(uid),{ttl:600});
+   if(!r.uid)return json(res,401,{error:'Sign in required'});
+   return sendCached(res,r);
   }
   const uid=await sessionUser(req);if(!uid)return json(res,401,{error:'Sign in required'});
   return json(res,200,await pageTransactions(uid,{cursor,limit}));
