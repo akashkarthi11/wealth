@@ -28,7 +28,7 @@ const items = [{ kind: 'investment', category: 'SIP', amount: '1000', occurred_o
 
 function render() {
   const ctx = { positions, items, accounts: [], esc: s => String(s), money: v => 'INR ' + Number(v).toFixed(2), accountKey: s => s, latestAngelOneEquitySummary: null, brokerLedger: globalThis.__broker || [], window: { __wealthSnapshots: globalThis.__snaps || [] }, Number, String, Date, Math, Set, Object, JSON };
-  vm.runInNewContext(consts + ['usHoldingInrValue', 'wealthPosition', 'dayChangeOf', 'istDayKey', 'dayChangeLabel', 'invTime', 'invPriceTag', 'invHolding', 'invPnlHtml', 'investmentsPageModel', 'brokerMonth', 'equityLive', 'brokerPnl', 'brokerPnlHtml', 'brokerPanelHtml', 'investmentsPageHtml'].map(fn).join('\n')
+  vm.runInNewContext(consts + ['usHoldingInrValue', 'wealthPosition', 'dayChangeOf', 'istDayKey', 'dayChangeLabel', 'invTime', 'invPriceTag', 'invHolding', 'invPnlHtml', 'invOpenGroups', 'investmentsPageModel', 'brokerMonth', 'equityLive', 'brokerPnl', 'brokerPnlHtml', 'brokerPanelHtml', 'investmentsPageHtml'].map(fn).join('\n')
     + ';globalThis.model=investmentsPageModel();globalThis.html=investmentsPageHtml();', ctx);
   return ctx;
 }
@@ -99,4 +99,13 @@ test('P&L report adds booked profit, unrealised on current stocks and the sold l
     assert.match(html, /Sold stocks \(2\) · intraday −INR 54\.49/);
     assert.ok(html.indexOf('<td>VEDL</td>') < html.indexOf('<td>AWL</td>'), 'best first');
   } finally { delete globalThis.__broker; delete globalThis.__snaps; }
+});
+
+test('Invest page: no group opens by default; groups the owner opened (remembered in this browser) open again', () => {
+  const body = fn('invOpenGroups');
+  const run = stored => { const ctx = { JSON, Set, Array, localStorage: { getItem: () => stored } }; vm.runInNewContext("const INV_OPEN_KEY='k';" + body + ';globalThis.r=[...invOpenGroups()];', ctx); return JSON.stringify(ctx.r); };
+  assert.equal(run(null), "[]");
+  assert.equal(run('["us","gold"]'), '["us","gold"]');
+  assert.equal(run("not json"), "[]");
+  assert.ok(!src.includes(`g.id==='equity'?' open'`), 'Indian stocks no longer forced open');
 });

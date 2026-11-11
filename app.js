@@ -1,4 +1,4 @@
-const APP_BUILD_ID='20261111-claude-plan-4e';
+const APP_BUILD_ID='20261111-claude-plan-4f';
 (function promptForUpdatedApp(){
   try {
     const key='wealth-ledger:app-build';
@@ -533,6 +533,11 @@ function invPriceTag(p){
  if(p.market_unit_price!=null)return '<span class="bank-chip warn">Old price</span><em>'+esc((invTime(at)||'date unknown')+src)+'</em>';
  return '<span class="bank-chip est">Saved value</span><em>'+esc(p.balance_as_of?invTime(p.balance_as_of):'date unknown')+'</em>';
 }
+// Invest page (2026-11-11, owner: "why always indian stocks open"): no group opens by default; the groups you open or close
+// are remembered in this browser only (a convenience, so storage failures are ignored).
+const INV_OPEN_KEY='wealth:invOpenGroups';
+function invOpenGroups(){try{const v=JSON.parse(localStorage.getItem(INV_OPEN_KEY)||'[]');return new Set(Array.isArray(v)?v:[])}catch(e){return new Set()}}
+document.addEventListener('toggle',e=>{const d=e.target;if(!d||!d.matches||!d.matches('details.inv-group[data-inv]'))return;const set=invOpenGroups();if(d.open)set.add(d.dataset.inv);else set.delete(d.dataset.inv);try{localStorage.setItem(INV_OPEN_KEY,JSON.stringify([...set]))}catch(e){}},true);
 function invHolding(p){
  const us=INV_US(p),value=us?usHoldingInrValue(p):Number(p.current_value||0),usd=Number(p.current_value||0);
  const fx=us&&usd>0&&value>0?value/usd:null;
@@ -572,7 +577,7 @@ function investmentsPageHtml(){
    const priceTxt=r.price==null?'':r.cur+r.price.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
    return '<div class="inv-row"><span class="inv-row-main"><b>'+esc(p.name||p.ticker||'Holding')+'</b><small>'+esc([p.ticker&&p.ticker!==p.name?p.ticker:'',qty&&priceTxt?qty+' × '+priceTxt:qty||priceTxt,p.platform_name].filter(Boolean).join(' · '))+'</small><span class="bank-row-meta">'+invPriceTag(p)+'</span></span>'
     +'<span class="inv-row-amt"><b>'+esc(money(r.value))+'</b>'+(r.us?'<small>$'+r.usd.toFixed(2)+'</small>':'')+invPnlHtml(r.pnl,r.invested)+(r.day?'<small class="inv-day '+(r.day.amount>=0?'positive':'negative')+'">'+(r.day.amount>=0?'▲ +':'▼ −')+esc(money(Math.abs(r.day.amount)))+' today</small>':'')+'</span></div>'}).join('');
-  return '<details class="inv-group"'+(g.id==='equity'?' open':'')+'><summary><span class="bank-avatar" style="--c:'+g.color+'">'+g.icon+'</span><span class="inv-group-main"><b>'+esc(g.name)+'</b><small>'+(g.snapshotOnly?'From the Angel One snapshot':g.rows.length+' holding'+(g.rows.length===1?'':'s')+(platforms?' · '+esc(platforms):''))+'</small></span><span class="inv-row-amt"><b>'+esc(money(g.value))+'</b>'+(gInv.length?invPnlHtml(gp,gi):'<small>'+pct(share(g))+' of total</small>')+gDayHtml+'</span></summary>'
+  return '<details class="inv-group" data-inv="'+g.id+'"'+(invOpenGroups().has(g.id)?' open':'')+'><summary><span class="bank-avatar" style="--c:'+g.color+'">'+g.icon+'</span><span class="inv-group-main"><b>'+esc(g.name)+'</b><small>'+(g.snapshotOnly?'From the Angel One snapshot':g.rows.length+' holding'+(g.rows.length===1?'':'s')+(platforms?' · '+esc(platforms):''))+'</small></span><span class="inv-row-amt"><b>'+esc(money(g.value))+'</b>'+(gInv.length?invPnlHtml(gp,gi):'<small>'+pct(share(g))+' of total</small>')+gDayHtml+'</span></summary>'
    +(g.id==='equity'?brokerPanelHtml(g.value):'')+(rows?'<div class="inv-rows">'+rows+'</div>':'<p class="muted inv-empty">No holdings in the database for this group'+(g.snapshotOnly?'; the value comes from the latest Angel One snapshot.':'.')+'</p>')+'</details>'};
  const activity=items.filter(x=>x.kind==='investment');
  const activityTotal=activity.reduce((n,x)=>n+Number(x.amount||0),0);
