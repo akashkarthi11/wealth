@@ -1,4 +1,4 @@
-import {sql,schema,json,sessionUser,dataModel} from '../_lib.js';
+import {sql,schema,json,sessionUser,dashboardModel} from '../_lib.js';
 import {pageTransactions,spendingRows,accountHierarchyRows,legacyPositionRows} from '../_queries.js';
 import {valuePortfolio} from '../_valuation.js';
 import {brokerSummary} from '../_broker.js';
@@ -33,8 +33,9 @@ export default async function handler(req,res){
   // for every dashboard request; keep cache invalidation for other resources separate.
   const payload=await readDashboard(uid);
   if(!payload)return json(res,401,{error:'Sign in required'});
-  // Account hierarchy (v2): on when WEALTH_DATA_MODEL=v2, or for the owner with ?model=v2 to compare before switching.
-  const wantV2=dataModel()==='v2'||(payload.role==='admin'&&new URL(req.url,'https://local').searchParams.get('model')==='v2');
+  // Account hierarchy (v2) is the default dashboard; the owner can compare with ?model=v1 (or ?model=v2 when the default is v1).
+  const asked=payload.role==='admin'?new URL(req.url,'https://local').searchParams.get('model'):null;
+  const wantV2=asked==='v1'?false:asked==='v2'?true:dashboardModel()==='v2';
   let model=null;
   if(wantV2){
    try{model={version:'v2',generatedAt:new Date().toISOString(),...valuePortfolio(await accountHierarchyRows(uid))}}

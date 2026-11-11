@@ -26,3 +26,9 @@ Development: terms UPDATE 2, rates UPDATE 2, values UPDATE 1+1, re-run 0; accrua
 ## Production (2026-11-11)
 - Backup `prod-before-fd-terms.wlb` (32 tables, 5,736 rows); repair: terms UPDATE 2, rate periods UPDATE 2, Slice FD value UPDATE 1 (₹3,005.04), Angel One FD value UPDATE 1 (₹1,001.30).
 - Accrual 5–10 Nov written as owner: Slice FD 6 rows ₹3.82, Angel One FD 6 rows ₹1.32; a re-run writes 0. The nightly job continues from 11 Nov.
+
+## Two FDs shown separately (2026-11-11, owner: "check fd in intrest beacause we have 2 accounts")
+- **Bug:** the Fixed deposits box skipped positions flagged `historical_snapshot`; the Angel One FD carries that flag from its screenshot import, so only Slice FD (₹4.04) was shown. The dashboard already counted both. The filter is removed (pending-reconciliation FDs are still left out).
+- **Split per FD:** each FD row shows current value, invested and the interest this app calculated for that FD (matched by account key); the daily list shows "Angel One FD ₹0.22 · Slice FD ₹0.64" under the FD amount; the chart legend shows the month total per FD.
+- Production data checked (read-only): both FDs have 6 accrual days, 5–10 Nov — Slice FD ₹3.82, Angel One FD ₹1.32.
+- Build `20261111-claude-plan-3s` on `claude-dev`; tests `interest-fd.test.mjs` (7).

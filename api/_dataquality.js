@@ -47,6 +47,16 @@ export async function collectIssues(uid, { db = sql, now = Date.now(), env = pro
     .catch(() => db.query(`SELECT id, bank_name, account_name FROM wealth_accounts WHERE user_id=$1 AND status='active' AND subtype_code='fixed_deposit'`, [uid]));
   for (const a of fds) add(`fd_terms:${a.id}`, 'low', 'fd_terms_missing', `${a.bank_name} · ${a.account_name}: principal, booking date and payout are not recorded`,
     'Record the FD terms (PATCH /api/accounts) so interest can be calculated');
+  // TR4-0.2: the dashboard (wealth_accounts) and the balance history (newest wealth_account_balances row) must agree.
+  const mismatched = await db.query(`SELECT a.id, a.bank_name, a.account_name, a.current_balance::float8 AS shown, a.balance_as_of AS shown_at,
+      b.balance::float8 AS latest, b.as_of AS latest_at, b.status AS latest_status
+    FROM wealth_accounts a
+    JOIN LATERAL (SELECT balance, as_of, status FROM wealth_account_balances WHERE account_id = a.id ORDER BY as_of DESC LIMIT 1) b ON true
+    WHERE a.user_id=$1 AND a.status='active' AND a.subtype_code IN ('savings','current','credit_card') AND a.current_balance IS NOT NULL
+      AND (abs(a.current_balance - b.balance) >= 0.01 OR a.balance_as_of < b.as_of)`, [uid]).catch(() => []);
+  for (const m of mismatched) add(`balance_mismatch:${m.id}`, 'high', 'balance_mismatch',
+    `${m.bank_name} · ${m.account_name}: dashboard shows ₹${fmt(m.shown)} (${new Date(m.shown_at).toISOString().slice(0, 10)}) but the newest balance is ₹${fmt(m.latest)} (${new Date(m.latest_at).toISOString().slice(0, 10)}, ${m.latest_status})`,
+    'Confirm the real balance and record it (POST /api/balances); one value must win', { shown: m.shown, shownAt: m.shown_at, latest: m.latest, latestAt: m.latest_at });
   const holds = await db.query(`SELECT id, symbol, price_hold_reason FROM wealth_instruments WHERE price_hold_reason IS NOT NULL`).catch(() => []);
   for (const h of holds) add(`price_hold:${h.id}`, 'medium', 'price_hold', `${h.symbol}: price updates are on hold — ${h.price_hold_reason}`,
     'Confirm the quantity (PUT /api/holdings with releasePriceHold) to resume prices');

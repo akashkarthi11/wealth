@@ -467,7 +467,7 @@ The earlier failed `main` deploy (Hobby 12-function limit) is fixed by the singl
 - **Menu:** grouped as Money (Overview, Banks, Investments, Interest) · Activity (Transactions, Alerts, Subscriptions) · Tools ▾ (Stock Advisor, Angel One, Records, Data quality — owner only). Mobile bar: Home · Banks · Invest · Activity · More (alert badge). Owner choice "grouping better". Commit in `06df8a5`.
 - **Investments page** is built from holdings (`investmentsPageModel`), so its total equals the dashboard's investments figure; groups INR / US / FD / PF with price time and P&L per holding. Fix record: [Investments from holdings](../modules/investments/2026-11-11-investments-page-from-holdings.md).
 - **Activity page:** period presets (opens on this month), money in / out / net / transfers summary (out = spending + investments + card payments; transfers apart), day and month groups, search and filters kept across re-render, "Show more" paging. Fix record: [Activity redesign](../modules/accounts/2026-11-11-activity-page-redesign.md).
-- **More menu:** the "Financial overview" item (same as Home) is removed; the balance summary stays. Commit `44c3f6f` on `claude-dev` — **not yet deployed**.
+- **More menu:** the "Financial overview" item (same as Home) is removed; the balance summary stays. Commit `44c3f6f`; in Production from `f27100f` (build `3q`).
 - Tests: `menu.test.mjs`, `investments.test.mjs`, `activity.test.mjs`. In Production from `041fc03` (Investments, Activity).
 
 ### 14.8 Change 2026-11-11 — Angel One "today's gain"
