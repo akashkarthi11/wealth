@@ -244,3 +244,12 @@ Repair [`2026-11-11-november-interest-and-roundups.sql`](../../scripts/db/repair
 
 ### Monies from card spends only (owner: "every card spend it add against monis")
 Checked against screenshots: Monies 1,42,378 (9 Nov) → 1,42,399 (11 Nov) = +21 = 1% of the ₹21 Slice card spend (MMTC PAMP); Slice Savings spends (Gullak ₹1, ₹5,000 to Arun S) earned none. Scheme engine: `spend_account_type` filter; Monies scheme now `spend_account_type: "credit_card"`, label "Slice card spends". Development: UPDATE 1 then 0. Production waits for "approve schemes" (with "main" for the code).
+
+### Atom splits (build `4d`, owner: "this is splits", Atom screen 11 Nov 5:21 PM)
+- Migration [`0019_account_splits.sql`](../../scripts/migrations/0019_account_splits.sql): `wealth_account_splits` (name, kind goal/roundups/general, goal, purpose), `wealth_account_split_balances` (verified/estimated history), `wealth_account_split_moves` (signed: + into, − out of the split; optional transaction link, one move per transaction per split). Audited; bumps the data version. Splits never change account balances or totals.
+- `api/_splits.js`: estimated split balance = latest split balance + moves after it; `GET /api/splits?accountId=`, `POST /api/splits/balances`, `POST /api/splits/moves` (owner or ingest secret; a move cannot point at a transaction on another account). Account detail includes `splits`.
+- Account page (e.g. Atom): "Splits" — share bar (tap to read), each split with balance, verified/estimated (with the change since the screenshot), goal progress when a goal exists, last moves, and a check that the splits add up to the account balance.
+- Seed [`2026-11-11-atom-splits.sql`](../../scripts/db/repairs/2026-11-11-atom-splits.sql): Invest later ₹30,036 · Rent ₹8,209 · Emergency fund ₹25,030 · Round ups ₹172 (verified 11 Nov 5:21 PM; Atom ₹63,448.36); November round-ups ₹141 and ₹18 linked to Round ups as history. Development: 0019 applied (20 migrations), seed INSERT 4+4 then 0. **Production: waiting for "main" and "approve splits".**
+- Also fixed: the hidden tap readout under share bars showed as an empty box (`.share-readout[hidden]`).
+- Tests: `splits.test.mjs` (4). Full suite 178/178.
+- Next: rent — amount and due day, then rent payments create a − move on the Rent split; ChatGPT rule to post Atom movements with their split.

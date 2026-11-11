@@ -67,8 +67,8 @@ test('labels: year, month and day', () => {
 });
 
 test('share bars carry tap-to-read data and a readout; events are bound once', () => {
-  assert.equal((src.match(/data-share="'\+esc\(/g) || []).length, 2, 'investments and banks bars');
-  assert.equal((src.match(/<div class="share-readout" aria-live="polite" hidden><\/div>/g) || []).length, 2);
+  assert.equal((src.match(/data-share="'\+esc\(/g) || []).length, 3, 'investments, banks and account-splits bars');
+  assert.equal((src.match(/<div class="share-readout" aria-live="polite" hidden><\/div>/g) || []).length, 3);
   assert.equal((src.match(/^chartBindEvents\(\);/gm) || []).length, 1);
   // Touched date gets a ball on every visible line; touching outside a chart / share bar closes the readout.
   assert.match(src, /ball\.setAttribute\('class','ichart-focus'\)/);
