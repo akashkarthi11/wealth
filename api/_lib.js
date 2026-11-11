@@ -221,9 +221,10 @@ export async function rateCount(key){
 }
 export async function rateReset(key){await cacheDel('wealth:rl:'+key)}
 export function clientIp(req){return String(req.headers['x-forwarded-for']||'').split(',')[0].trim()||req.socket?.remoteAddress||'unknown'}
-export function cookie(res,v){res.setHeader('Set-Cookie',v?'wealth_session='+v+'; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800':'wealth_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
- // Signing out also drops the browser's copies of cached API responses (they are kept privately for 304 checks).
- if(!v)res.setHeader('Clear-Site-Data','"cache"')}
+// No Clear-Site-Data on sign-out (2026-11-11): Chrome holds the response until its cache is cleared, which can take long
+// enough that sign-out timed out and the cookie was never removed. Cached API responses are private + no-cache, so a
+// signed-out browser must ask again and gets 401 — nothing is shown without a session.
+export function cookie(res,v){res.setHeader('Set-Cookie',v?'wealth_session='+v+'; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800':'wealth_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0')}
 export function json(res,status,data){res.statusCode=status;res.setHeader('Content-Type','application/json; charset=utf-8');res.setHeader('Cache-Control','no-store');res.end(JSON.stringify(data))}
 export async function body(req){let s='';for await(const c of req)s+=c;if(s.length>20000)throw new Error('Request too large');return JSON.parse(s||'{}')}
 

@@ -54,7 +54,7 @@ test('sendCached: 304 without a body when the browser has the version; otherwise
   res = fake(); sendCached(res, { status: 200, body: '{"ok":1}', etag: '"w2-y"', source: 'redis' });
   assert.deepEqual([res.statusCode, res.body, res.h['content-type'], res.h['x-wealth-cache']], [200, '{"ok":1}', 'application/json; charset=utf-8', 'redis']);
   assert.deepEqual(withStatus(404, { error: 'x' }), { __status: 404, data: { error: 'x' } });
-  res = fake(); cookie(res, ''); assert.equal(res.h['clear-site-data'], '"cache"', 'sign-out clears cached copies');
+  res = fake(); cookie(res, ''); assert.equal(res.h['clear-site-data'], undefined, 'no Clear-Site-Data: Chrome held sign-out until its cache was cleared (2026-11-11)');
   res = fake(); cookie(res, 'token'); assert.equal(res.h['clear-site-data'], undefined);
 });
 
