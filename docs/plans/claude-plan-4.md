@@ -263,3 +263,7 @@ Checked against screenshots: Monies 1,42,378 (9 Nov) → 1,42,399 (11 Nov) = +21
 ### Splits in Production; interest rule (2026-11-11)
 - Build `4d` live (`main` `cdb8e20`, 0019 applied, 20 migrations). Atom splits added (owner "approve splits"): INSERT 4 splits, 4 verified balances, 2 round-up moves; re-run 0. Splits ₹63,447 vs Atom ₹63,448.36 (rounding).
 - Owner rule: screenshots show interest as a full/running total — **never save interest from a screenshot**; the nightly interest task records it. Added as `rules.md` §2a; `issue.md` rule 9 changed to match.
+
+### Interest rows from the app, not screenshots (owner: "2 find real amount and replace here")
+- Repair [`2026-11-11-interest-rows-real-amounts.sql`](../../scripts/db/repairs/2026-11-11-interest-rows-real-amounts.sql) (backup `prod-before-interest-real.wlb`, 39 tables, 5,921 rows): the two screenshot interest rows now carry the app's figures through 10 Nov — Slice Savings ₹71.58 (statement ₹64.36 + accrual ₹7.2151; screenshot said ₹71.57), Atom Savings ₹76.36 (₹66.80 + ₹9.5564) — and `external_ref interest-month:<product>:2026-11`. UPDATE 2, re-run 0. The six older rows stay marked as duplicates; nothing deleted (deletion declined by the owner).
+- Code: `upsertMonthInterestRow` — after each nightly accrual, every daily-credited product (Slice Savings, Atom) has ONE income transaction per month = latest statement in the month + accruals after its end date, updated in place; a new month starts a new row. Tests `interest-month-row.test.mjs` (2). Needs deploy.
