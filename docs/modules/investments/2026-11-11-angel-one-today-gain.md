@@ -1,6 +1,7 @@
 # 2026-11-11 — Dashboard Angel One "Today's gain" showed ₹0; invested and P&L came from a day-old snapshot
 
 - **Status:** code committed on `claude-dev`; tests pass; checked read-only against Production data; not deployed
+- **Status update 2026-11-11:** deployed to Production (`main` `041fc03`, build `20261111-claude-plan-3l`).
 - **Related:** [Investments page from holdings](2026-11-11-investments-page-from-holdings.md)
 
 ## Symptoms
