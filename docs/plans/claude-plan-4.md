@@ -190,4 +190,6 @@ Part 0 → A → B → C, each: `claude-dev` → Development rehearsal → owner
 | TR4-0.2 | **Built** — data-quality issue `balance_mismatch` (high) when the dashboard balance differs from the newest balance-history row, or the history is newer | `balance-guard.test.mjs` (flags the Slice case, clears when they agree) |
 | TR4-0.3 | **Waiting for D0** — the owner confirms the real Slice Savings balance; then one owner-approved repair records it so both places agree | — |
 
-Production: needs deploy (`main` build applies 0012) after an encrypted backup. Full suite 151/151.
+**Refinement 0013** (owner: "my chatgpt run the task so it need to write in db"): a back-dated balance is allowed when it is `verified` (bank evidence, e.g. a late-recorded screenshot); only back-dated estimates are refused. ChatGPT's normal writes — prices, Gmail transactions, email imports, advisor reports, newer stale/verified balances — were never affected. Development: 0013 applied (14 migrations), live check passed.
+
+Production: needs deploy (`main` build applies 0012 and 0013) after an encrypted backup. Full suite 154/154.

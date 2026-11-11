@@ -35,6 +35,8 @@ test('external writer cannot move a balance back in time, but can record a newer
   await as(db, null, [[`UPDATE wealth_accounts SET current_balance=42889.22, balance_as_of='2026-11-11T07:31:00Z', balance_status='stale' WHERE id=$1`, [id]]]);
   await assert.rejects(as(db, null, [[`UPDATE wealth_accounts SET current_balance=47889.22, balance_as_of='2026-11-10T18:29:59Z' WHERE id=$1`, [id]]]),
     /cannot move back in time/);
+  // 0013: an older balance with bank evidence (verified) is accepted — e.g. yesterday's screenshot recorded late.
+  await as(db, null, [[`UPDATE wealth_accounts SET current_balance=42950, balance_as_of='2026-11-11T05:00:00Z', balance_status='verified' WHERE id=$1`, [id]]]);
   await as(db, null, [[`UPDATE wealth_accounts SET current_balance=42800, balance_as_of='2026-11-11T12:00:00Z', balance_status='verified' WHERE id=$1`, [id]]]);
   const [row] = (await db.query(`SELECT current_balance::float8 AS b FROM wealth_accounts WHERE id=$1`, [id])).rows;
   assert.equal(row.b, 42800);
