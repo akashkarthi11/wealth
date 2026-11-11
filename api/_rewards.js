@@ -51,6 +51,7 @@ export async function rewardsOverview(uid, { db = sql, now = Date.now() } = {}) 
   // scheme: {basis:"spend", rate, spend_bank?, spend_scope?: "bank"|"account", merchant?: regex, label?, tiers:[{at, rate, label}]}
   //  - spend_scope "account": only spends on the program's linked account (e.g. Swiggy on the HDFC Swiggy card).
   //  - merchant: only spends whose category/description match (e.g. "swiggy").
+  //  - spend_account_type: only that kind of account at the bank (e.g. "credit_card": Slice Monies come from card spends only).
   //  - cash programs (no ₹ rate per unit) earn ₹ directly: 1 unit = ₹1.
   const schemeInfo = new Map();
   for (const p of programs.filter(x => x.scheme && x.scheme.basis === 'spend')) {
@@ -62,8 +63,9 @@ export async function rewardsOverview(uid, { db = sql, now = Date.now() } = {}) 
       FROM wealth_transactions t JOIN wealth_accounts a ON a.id = t.account_id
       WHERE t.user_id = $1 AND t.kind = 'expense' AND t.duplicate_of IS NULL
         AND (CASE WHEN $4::uuid IS NOT NULL THEN t.account_id = $4 ELSE a.bank_name = $2 END)
+        AND ($6::text IS NULL OR a.account_type = $6)
         AND ($5::text IS NULL OR (coalesce(t.category,'') || ' ' || coalesce(t.description,'')) ~* $5)`,
-      [uid, String(s.spend_bank || p.provider), month, byAccount ? p.account_id : null, merchant]).catch(() => [null]);
+      [uid, String(s.spend_bank || p.provider), month, byAccount ? p.account_id : null, merchant, s.spend_account_type ? String(s.spend_account_type) : null]).catch(() => [null]);
     const tiers = (Array.isArray(s.tiers) ? s.tiers : []).filter(t => Number(t.at) > 0 && Number(t.rate) > 0).sort((x, y) => x.at - y.at);
     const reached = p.units == null ? [] : tiers.filter(t => p.units >= Number(t.at));
     const rate = reached.length ? Number(reached[reached.length - 1].rate) : baseRate;
