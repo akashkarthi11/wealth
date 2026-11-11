@@ -1,4 +1,4 @@
-const APP_BUILD_ID='20261111-claude-plan-4a';
+const APP_BUILD_ID='20261111-claude-plan-4b';
 (function promptForUpdatedApp(){
   try {
     const key='wealth-ledger:app-build';
