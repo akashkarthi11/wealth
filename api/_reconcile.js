@@ -18,7 +18,8 @@ function usHoldingInrValue(p) {
 
 export function v1Totals(accounts, positionsIn) {
   const positions = positionsIn.filter(p => !String(p.record_type || '').endsWith('_ARCHIVED'));
-  const verified = accounts.filter(a => a.balance_status === 'verified' && a.current_balance != null
+  // 'stale' = estimated (verified balance + interest since, Plan 3 nightly job): counted, like app.js.
+  const verified = accounts.filter(a => (a.balance_status === 'verified' || a.balance_status === 'stale') && a.current_balance != null
     && String(a.currency || 'INR').trim() === 'INR' && /^(savings|current)$/i.test(String(a.account_type || '')));
   const casa = verified.reduce((s, a) => s + n(a.current_balance), 0);
   const inr = positions.filter(p => String(p.currency || 'INR').trim() === 'INR' && p.current_value != null);

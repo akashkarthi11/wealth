@@ -7,7 +7,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { migratedDb, adapter, MIGRATIONS_DIR } from './helpers/pglite.mjs';
 import { loadMigrations, applyMigrations } from '../db/migrations-lib.mjs';
 import { storePrices, recordEmailImport, seenMessages, recordBalance, updateHolding, createAccount, setFdTerms, markDuplicate, suggestAccounts, assignAccounts } from '../../api/_ingest.js';
-import { planAccrual, runAccrual, submitRate, recordCredit, interestOverview, dayCount, fdPrincipal, round8 } from '../../api/_interest.js';
+import { planAccrual, runAccrual, submitRate, recordCredit, interestOverview, dayCount, fdPrincipal, round8, round2, estimatedBalance } from '../../api/_interest.js';
 import { spendingRows, obligationsByAccount } from '../../api/_queries.js';
 import { collectIssues } from '../../api/_dataquality.js';
 import { encryptBackup, decryptBackup, dumpDatabase } from '../../api/_backup.js';
@@ -358,4 +358,37 @@ test('interest month total = statement through its end date + ledger days after 
   ctx.interestRows.push(led('slice-savings', 's', '2026-12-01', '7.30'));
   vm.runInNewContext(";globalThis.s=interestMonthTotal('slice-savings');", ctx);
   assert.deepEqual({ ...ctx.s }, { month: '2026-12', statementThrough: null, total: 7.3 }, 'a new month starts from the ledger');
+});
+
+test('daily-credited interest compounds: principal includes interest credited since the verified balance', () => {
+  const balances = [bal('2026-11-09T19:48:00Z', 47882)];          // 10 Nov 01:18 IST, already includes 9 Nov interest
+  const ledger = [{ id: 'x', accrual_date: '2026-11-10', revision: 1, interest_amount: 7.21509589, calculation_status: 'estimated' }];
+  const plan = planAccrual({ kind: 'savings', balances, rates: [rate('r', 0.055, '2026-10-07')], ledger, through: '2026-11-12', dailyCredit: true });
+  const p11 = 47882 + 7.22, i11 = round8(p11 * 0.055 / 365), p12 = round2(p11 + round2(i11));
+  assert.deepEqual(plan.rows.map(r => [r.accrual_date, r.principal]), [['2026-11-11', p11], ['2026-11-12', p12]]);
+  const est = estimatedBalance({ balances, dayTotals: plan.dayTotals, through: '2026-11-12' });
+  assert.equal(est.balance, round2(47882 + 7.22 + round2(i11) + round2(plan.rows[1].interest_amount)));
+  assert.equal(est.asOf, '2026-11-12T18:29:59.000Z', 'end of 12 Nov IST');
+  const plain = planAccrual({ kind: 'savings', balances, rates: [rate('r', 0.055, '2026-10-07')], ledger, through: '2026-11-11' });
+  assert.equal(plain.rows[0].principal, 47882, 'without daily credit the principal is the verified balance');
+  assert.equal(estimatedBalance({ balances: [bal('2026-11-12T19:00:00Z', 1)], dayTotals: plan.dayTotals, through: '2026-11-12' }), null, 'a newer verified balance wins');
+});
+
+test('nightly run raises a daily-credited balance as "estimated" (v2) / "stale" (v1); a verified balance takes over again', async () => {
+  const { a, uid, sav } = await interestFixture();
+  await a.query(`UPDATE wealth_interest_products SET credit_frequency='daily' WHERE product_key='slice-savings'`);
+  await a.query(`UPDATE wealth_accounts SET current_balance=47882, balance_as_of='2026-11-09T19:48:00Z', balance_status='verified' WHERE id=$1`, [sav]);
+  const r = await runAccrual(uid, { db: a, now: NOW });
+  const e = r.accounts.find(x => x.accountKey === 'slice-savings-3731').estimatedBalance;
+  assert.deepEqual([e.balance, e.credited, e.stored], [47889.22, 7.22, true]);
+  const [latest] = await a.query(`SELECT balance::float8 b, status FROM wealth_v_latest_balances WHERE account_id=$1`, [sav]);
+  assert.deepEqual(latest, { b: 47889.22, status: 'estimated' });
+  const [legacy] = await a.query(`SELECT current_balance::float8 b, balance_status s FROM wealth_accounts WHERE id=$1`, [sav]);
+  assert.deepEqual(legacy, { b: 47889.22, s: 'stale' });
+  await runAccrual(uid, { db: a, now: NOW });
+  assert.equal((await a.query(`SELECT count(*)::int n FROM wealth_account_balances WHERE account_id=$1`, [sav]))[0].n, 2, 're-run adds nothing');
+  await recordBalance(uid, { accountId: sav, balance: 47890, asOf: '2026-11-11T04:00:00Z', status: 'verified' }, { db: a, now: NOW });
+  const [after] = await a.query(`SELECT current_balance::float8 b, balance_status s FROM wealth_accounts WHERE id=$1`, [sav]);
+  assert.deepEqual(after, { b: 47890, s: 'verified' });
+  assert.equal((await a.query(`SELECT count(*)::int n FROM wealth_account_balances WHERE status='estimated'`))[0].n, 1, 'estimate kept in history');
 });
