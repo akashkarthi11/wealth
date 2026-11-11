@@ -21,3 +21,10 @@ Backup first: `prod-before-supermoney.wlb` (32 tables, 2,288 rows). Transactions
 ## Prepared, not run
 
 - (c) [`2026-11-11-mark-slice-card-duplicates.sql`](../../../scripts/db/repairs/2026-11-11-mark-slice-card-duplicates.sql): marks each plain row `duplicate_of` its statement twin (the 1st plain row pairs with the 1st statement row of the same date, amount and merchant, and so on). It never deletes; it can be undone by clearing `duplicate_of`. Dry run on Production: 95 rows, ₹1,34,692.54. Run only after owner approval.
+
+## Addition 2026-11-11 — Paytm UPI statement, 11 Nov 2023 – 10 Nov 2024
+
+- 151 pages, 963 payments. Totals as printed: paid ₹10,70,611.47 (846), received ₹6,73,561.70 (117); self-transfers excluded.
+- The whole period is before the ledger starts (21 May 2026), so nothing was matched or added to transactions.
+- Owner approved ("paytm summary approved"): **one** reference record `paytm-upi-statement-2023-11-11..2024-11-10` (1.6 KB; per-account totals and notes; no name, phone or email) via [`2026-11-11-paytm-upi-summary-2023-24.sql`](../../../scripts/db/repairs/2026-11-11-paytm-upi-summary-2023-24.sql). Backup first: `prod-before-paytm-summary.wlb` (32 tables, 2,306 rows).
+- Open questions, for the owner to raise when ready: crypto on CoinDCX ("Neblio Technologies", notes "DCX") and CoinSwitch ("Bitcipherlabsllp") is not recorded as a holding; the NDX P2P (likely LiquiLoans) ₹15,000 from 20 Nov 2023; the monthly ₹21,600 to HDFC A/c ••7649.
