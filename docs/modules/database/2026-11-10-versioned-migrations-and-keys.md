@@ -4,6 +4,7 @@
 - **Primary module:** Database
 - **Related modules:** Market data, Investments, Dashboard, Obligations, Interest
 - **Status:** Code and migrations committed on `claude-dev` (`eae5131`, `83b00ff`, `49f9704`, `6d28265`, `177dd01`). **Migrations 0000–0005 applied to Development and Production on 2026-11-10** at the owner's request (backups taken first). Application code not deployed; `WEALTH_DATA_MODEL` still `v1`
+- **Status update 2026-11-11:** application code **deployed to Production** (Claude Plan 1, 2026-11-10). Later migrations 0006–0010 were applied by `main` builds (Plan 2 and Plan 3). `WEALTH_DATA_MODEL` is still `v1` in Production.
 - **TSD:** [Claude Plan 1](../../plans/claude-plan-1.md) Phases 2, 4, 5, 6 — defects DEF-03, DEF-04, DEF-06, DEF-07, DEF-08, DEF-11, DEF-12, DEF-13
 
 ## Symptoms

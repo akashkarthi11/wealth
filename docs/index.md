@@ -70,21 +70,26 @@ Each module fix note should include:
 
 | Date | Module | Issue | Canonical fix note | Status |
 |---|---|---|---|---|
-| 2026-11-10 | Dashboard / Investments | US holding INR totals and row values used different fallback rules; recurrence confirmed in Development screenshot | [US holdings total mismatch](modules/dashboard/2026-11-10-us-holdings-total-mismatch.md) | Unified valuation committed on fix branch; validation and Development deployment pending approval |
-| 2026-11-10 | Auth | Password reset with only the shared key; no password policy, rate limit or session revocation | [Auth hardening](modules/auth/2026-11-10-auth-hardening.md) | Code + tests on `claude-dev`; migration 0001 not applied; not deployed |
-| 2026-11-10 | Database / Market data / Investments | Deploys reset live prices; no baseline schema; duplicated facts; cross-user references possible; unlinked obligations and interest | [Versioned migrations, keys, account hierarchy](modules/database/2026-11-10-versioned-migrations-and-keys.md) | Migrations 0000–0005 **applied to Development and Production** (backups first, no rows lost); app code not deployed |
-| 2026-11-11 | Infra | Production deploy of `main` failed: 14 functions > Hobby limit of 12 | [Single-function router](modules/infra/2026-11-11-hobby-function-limit-single-router.md) | Code + tests on `claude-dev`; not deployed |
-| 2026-11-10 | Dashboard / Accounts | Spending stats ignored transactions beyond 500; broken regexes, tooltips and entry form | [Spending stats and UI fixes](modules/dashboard/2026-11-10-spending-stats-and-ui-fixes.md) | Code + tests on `claude-dev`; verified read-only on Preview; not deployed |
+| 2026-11-10 | Dashboard / Investments | US holding INR totals and row values used different fallback rules; recurrence confirmed in Development screenshot | [US holdings total mismatch](modules/dashboard/2026-11-10-us-holdings-total-mismatch.md) | Deployed to Production (fix branch merged into `main`) |
+| 2026-11-10 | Auth | Password reset with only the shared key; no password policy, rate limit or session revocation | [Auth hardening](modules/auth/2026-11-10-auth-hardening.md) | Deployed to Production 2026-11-10 (Plan 1) |
+| 2026-11-10 | Database / Market data / Investments | Deploys reset live prices; no baseline schema; duplicated facts; cross-user references possible; unlinked obligations and interest | [Versioned migrations, keys, account hierarchy](modules/database/2026-11-10-versioned-migrations-and-keys.md) | Migrations 0000–0005 applied to Development and Production; app code deployed 2026-11-10 (Plan 1) |
+| 2026-11-11 | Infra | Production deploy of `main` failed: 14 functions > Hobby limit of 12 | [Single-function router](modules/infra/2026-11-11-hobby-function-limit-single-router.md) | Deployed to Production (`696a71d`, later `2a2afde`) |
+| 2026-11-10 | Dashboard / Accounts | Spending stats ignored transactions beyond 500; broken regexes, tooltips and entry form | [Spending stats and UI fixes](modules/dashboard/2026-11-10-spending-stats-and-ui-fixes.md) | Deployed to Production 2026-11-10 (Plan 1) |
+| 2026-11-11 | Interest | A day with a correction showed only the correction (−₹7.21); month total ignored days after the statement | [Interest view totals](modules/interest/2026-11-11-interest-view-day-and-month-totals.md) | Deployed to Production |
+| 2026-11-11 | Interest / Accounts | Daily-credited interest did not raise the bank balance | [Plan 3 §14.1](plans/claude-plan-3.md) (migration 0009; estimated balance) | Deployed to Production |
+| 2026-11-11 | Infra | Every branch built on Vercel; only `main` should | [Vercel builds main only](modules/infra/2026-11-11-vercel-build-main-only.md) | Deployed |
+| 2026-11-11 | Accounts / Dashboard | Bank balances menu disagreed with the dashboard; account details used static snapshot data and other banks' rows | [Bank balances from the database](modules/accounts/2026-11-11-bank-balances-live-and-account-details.md) | Deployed to Production |
+| 2026-11-11 | Database | Audit log stored whole rows and no-op updates; unused price history; a new estimated row every night | [Store only required data (0010)](modules/database/2026-11-11-store-only-required-data.md) | Deployed to Production |
 
 ## Plans
 
 | Date | Plan | Status |
 |---|---|---|
-| 2026-11-11 | **[TSD — Claude Plan 3: data quality, in-app automation, operations](plans/claude-plan-3.md)** | Phases 1–6 built on `claude-dev`; 0008 applied to Development; not deployed ([runbook](ops/operations-runbook.md)) |
-| 2026-11-10 | **[TSD — Claude Plan 2: account model cut-over](plans/claude-plan-2.md)** | Phase B done (Development applied; Production via next deploy) |
+| 2026-11-11 | **[TSD — Claude Plan 3: data quality, in-app automation, operations](plans/claude-plan-3.md)** | **Deployed to Production 2026-11-11** (`2a2afde`, migrations 0008–0010); owner settings open — see §14.6 ([runbook](ops/operations-runbook.md)) |
+| 2026-11-10 | **[TSD — Claude Plan 2: account model cut-over](plans/claude-plan-2.md)** | In progress: A.3, B, G, D.1 in Production; C done via Plan 3; D.2 (switch to v2), E, F not started |
 | 2026-11-10 | **[TSD — Claude Plan 1: stabilisation, security and account hierarchy](plans/claude-plan-1.md)** (master technical specification; links the plans below) | **Deployed to Production 2026-11-10** (data model still v1) |
 | 2026-11-10 | [Database optimization](plans/2026-11-10-database-optimization-plan.md) | Superseded by the TSD |
-| 2026-11-10 | [Data normalization — no duplicates, PK/FK](plans/2026-11-10-data-normalization-design.md) | Implemented as migrations 0002 and repairs |
+| 2026-11-10 | [Data normalization — no duplicates, PK/FK](plans/2026-11-10-data-normalization-design.md) | Implemented as migration 0002; Stage-2 repair script ready, not run |
 | 2026-11-10 | [Account hierarchy model — user → account (CASA/Investment/Liability) → subtype → data](plans/2026-11-10-account-hierarchy-model.md) | Implemented as migrations 0003–0004 and the v2 dashboard |
 
 ## Reliability project
