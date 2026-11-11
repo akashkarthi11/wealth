@@ -402,3 +402,17 @@ Code is on `claude-dev` with tests passing (102). Migration **0008** is **applie
 | 4 — Data-quality report | **Done** (earlier); now also reports price holds, FD terms, interest links, nightly jobs, backup and ingest configuration | `reconcile-dq.test.mjs` |
 | 5 — Obligations read model | **Done**: triggers keep obligations/occurrences in step with legacy bills and mandates; `GET /api/obligations` (grouped by account); alerts de-duplicate by obligation id | `plan3.test.mjs` |
 | 6 — Operations | **Done in code; owner settings pending**: encrypted nightly backup to a private Blob store, restore tool + drill (passed on Development data: 29 tables, 1,218 rows), `wealth_audit_log` with actor, [runbook](../ops/operations-runbook.md) for environments and key rotation. Needs `WEALTH_BACKUP_KEY`, a private Blob store, `WEALTH_INGEST_SECRET`, and Preview → Development database | `plan3.test.mjs` (backup round trip, tamper, restore) |
+
+### 14.1 Change 2026-11-11 — daily-credited interest raises the balance (owner decision: "Estimated")
+
+- Products that the bank credits daily (`wealth_interest_products.credit_frequency = 'daily'`: Slice Savings, Slice Atom — migration 0009) now behave like the bank account:
+  - each day's principal includes the interest credited since the last verified balance (compounding, rounded to paise per day);
+  - after the nightly run, an **estimated** balance is appended: last verified balance + interest credited since.
+- Where the estimate is stored:
+  - v2: a `wealth_account_balances` row with status `estimated`, counted in net worth;
+  - v1: `wealth_accounts.current_balance` with `balance_status = 'stale'`, which v1 now counts in CASA. v1 shows it as "estimated: last verified + interest".
+- The next verified balance (screenshot, `POST /api/balances`) replaces it. Estimates stay in the history.
+- Accrual still needs a verified balance no older than 2 days, so estimates stop growing when screenshots stop.
+- Accruals are never written as income transactions. Actual credits with bank evidence still go through `POST /api/interest/credits`.
+- **Old daily prompt:** it requires the newest balance row to be `verified`, so after an estimate it reports the principal as stale and writes nothing. The app's nightly run does the accrual. Switch the task to the new API prompt.
+- **Status:** migration 0009 is applied to Development; the dry run gives Slice ₹47,889.22 and Atom ₹63,429.56 for 10 Nov. Production gets 0009 with the next `main` deploy.

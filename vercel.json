@@ -1,4 +1,10 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "**": false,
+      "main": true
+    }
+  },
   "rewrites": [
     { "source": "/api/:path((?!router$).+)", "destination": "/api/router?__route=:path" }
   ],

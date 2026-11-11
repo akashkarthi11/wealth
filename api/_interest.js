@@ -15,6 +15,22 @@ export const startOfIstDay = d => Date.parse(d + 'T00:00:00+05:30');
 const leap = y => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
 export const dayCount = d => (leap(Number(d.slice(0, 4))) ? 366 : 365);
 export const round8 = x => Math.round(x * 1e8) / 1e8;
+export const round2 = x => Math.round(x * 100) / 100;   // banks credit whole paise
+export const endOfIstDay = d => Date.parse(d + 'T23:59:59+05:30');
+
+// Daily-credited products (Slice Savings, Atom): balance after day `through` = latest verified balance + interest
+// credited on each day from the verified balance's IST date through `through` (each day rounded to paise).
+// null when nothing was credited after the verified balance, or a verified balance is already newer.
+export function estimatedBalance({ balances = [], dayTotals = new Map(), through }) {
+  const base = balances.filter(b => b.status === 'verified').sort((x, y) => new Date(y.as_of) - new Date(x.as_of))[0];
+  if (!base || new Date(base.as_of).getTime() >= endOfIstDay(through)) return null;
+  const from = istDay(new Date(base.as_of).getTime());
+  const days = [...dayTotals.entries()].filter(([d]) => d >= from && d <= through).sort(([a], [b]) => a.localeCompare(b));
+  if (!days.length) return null;
+  const credited = round2(days.reduce((s, [, amt]) => s + round2(amt), 0));
+  return { balance: round2(Number(base.balance) + credited), asOf: new Date(endOfIstDay(through)).toISOString(), credited,
+    note: `estimated: verified ₹${Number(base.balance)} at ${new Date(base.as_of).toISOString()} + interest ₹${credited} for ${days[0][0]}…${days[days.length - 1][0]}` };
+}
 const monthsBetween = (a, b) => (Number(b.slice(0, 4)) - Number(a.slice(0, 4))) * 12 + Number(b.slice(5, 7)) - Number(a.slice(5, 7)) - (Number(b.slice(8, 10)) < Number(a.slice(8, 10)) ? 1 : 0);
 const PERIOD_MONTHS = { monthly: 1, quarterly: 3, half_yearly: 6, yearly: 12 };
 
@@ -41,9 +57,14 @@ export function fdPrincipal(terms, d, rate) {
 }
 
 // One source (account × product × partition): which days to accrue, and the rows or the reason each day is skipped.
-export function planAccrual({ kind, balances = [], rates = [], terms = null, ledger = [], through }) {
-  const byDay = new Map();
-  for (const r of ledger) { const l = byDay.get(r.accrual_date) || []; l.push(r); byDay.set(r.accrual_date, l); }
+// dailyCredit: the bank pays each day's interest into the account, so principal(D) also includes the interest
+// credited since the verified balance (compounding, as at the bank).
+export function planAccrual({ kind, balances = [], rates = [], terms = null, ledger = [], through, dailyCredit = false }) {
+  const byDay = new Map(), dayTotals = new Map();
+  for (const r of ledger) {
+    const l = byDay.get(r.accrual_date) || []; l.push(r); byDay.set(r.accrual_date, l);
+    dayTotals.set(r.accrual_date, (dayTotals.get(r.accrual_date) || 0) + Number(r.interest_amount));
+  }
   const last = [...byDay.keys()].sort().pop() || null;
   const rows = [], skipped = [];
 
@@ -58,6 +79,11 @@ export function planAccrual({ kind, balances = [], rates = [], terms = null, led
       const p = savingsPrincipal(balances, d);
       if (p.problem) return p;
       principal = p.principal; basis = `verified balance as of ${p.asOf}`;
+      if (dailyCredit) {
+        const from = istDay(new Date(p.asOf).getTime());
+        const credited = round2([...dayTotals.entries()].filter(([day]) => day >= from && day < d).reduce((s, [, amt]) => s + round2(amt), 0));
+        if (credited) { principal = round2(principal + credited); basis += ` + ₹${credited} interest credited since`; }
+      }
     }
     const dc = dayCount(d), annual = Number(rate.annual_rate);
     return { principal, rate, dc, interest: round8(principal * annual / dc), basis };
@@ -79,6 +105,7 @@ export function planAccrual({ kind, balances = [], rates = [], terms = null, led
   for (let d = from; d <= until; d = addDays(d, 1)) {
     const c = compute(d);
     if (c.problem) { skipped.push({ day: d, reason: c.problem }); continue; }
+    dayTotals.set(d, (dayTotals.get(d) || 0) + c.interest);
     rows.push({ accrual_date: d, principal: c.principal, annual_rate: Number(c.rate.annual_rate), day_count: c.dc, interest_amount: c.interest,
       entry_type: 'accrual', revision: 1, supersedes_id: null, source_rate_id: c.rate.id, source_url: c.rate.source_url, calculation_status: 'estimated',
       notes: `${c.basis}; ${c.principal} × ${Number(c.rate.annual_rate)} ÷ ${c.dc}` });
@@ -99,20 +126,22 @@ export function planAccrual({ kind, balances = [], rates = [], terms = null, led
       calculation_status: 'corrected', notes: `correction: was ${effective}, now ${c.interest} (${c.basis}; ${c.principal} × ${Number(c.rate.annual_rate)} ÷ ${c.dc})` });
   }
   rows.push(...corrections);
+  for (const c of corrections) dayTotals.set(c.accrual_date, (dayTotals.get(c.accrual_date) || 0) + c.interest_amount);
   const status = rows.length ? 'calculated' : skipped.some(s => s.reason === 'no rate') ? 'no_rate' : skipped.length ? 'stale_balance' : 'up_to_date';
-  return { status, rows, skipped, last, corrections: corrections.length };
+  return { status, rows, skipped, last, corrections: corrections.length, dayTotals };
 }
 
 // Run every linked source for one user, through yesterday (IST). Idempotent: unique keys make re-runs no-ops.
 export async function runAccrual(uid, { db = sql, now = Date.now(), dryRun = false, actor = 'cron' } = {}) {
   const through = addDays(istDay(now), -1);
-  const links = await db.query(`SELECT l.account_id, l.partition_key, a.account_key, a.bank_name, a.account_name, a.subtype_code,
+  const linkQuery = credit => db.query(`SELECT l.account_id, l.partition_key, a.account_key, a.bank_name, a.account_name, a.subtype_code,
       a.fd_principal::float8 AS fd_principal, a.fd_booked_on::text AS fd_booked_on, a.fd_maturity_on::text AS fd_maturity_on, a.fd_payout, a.fd_compounding,
-      p.id AS product_id, p.product_key, p.provider
+      p.id AS product_id, p.product_key, p.provider, ${credit} AS credit_frequency
     FROM wealth_interest_links l
     JOIN wealth_accounts a ON a.id = l.account_id AND a.user_id = $1 AND a.status = 'active'
     JOIN wealth_interest_products p ON p.id = l.product_id
     ORDER BY a.bank_name, a.account_name`, [uid]);
+  const links = await linkQuery('p.credit_frequency').catch(e => { if (e?.code === '42703') return linkQuery('NULL::text'); throw e; });   // before 0009
   const unlinked = await db.query(`SELECT a.account_key, a.bank_name, a.account_name FROM wealth_accounts a
     WHERE a.user_id=$1 AND a.status='active' AND a.subtype_code IN ('savings','fixed_deposit')
       AND NOT EXISTS (SELECT 1 FROM wealth_interest_links l WHERE l.account_id = a.id) ORDER BY 2, 3`, [uid]);
@@ -128,7 +157,8 @@ export async function runAccrual(uid, { db = sql, now = Date.now(), dryRun = fal
     ]);
     const kind = l.subtype_code === 'fixed_deposit' ? 'fd' : 'savings';
     const terms = kind === 'fd' ? { principal: l.fd_principal, bookedOn: l.fd_booked_on, maturityOn: l.fd_maturity_on, payout: l.fd_payout, compounding: l.fd_compounding } : null;
-    const plan = planAccrual({ kind, balances, rates, terms, ledger, through });
+    const dailyCredit = kind === 'savings' && l.credit_frequency === 'daily';
+    const plan = planAccrual({ kind, balances, rates, terms, ledger, through, dailyCredit });
     let written = 0;
     if (plan.rows.length && !dryRun) {
       const payload = plan.rows.map(r => ({ ...r, provider: l.provider, product_key: l.product_key, account_key: l.account_key, partition_key: l.partition_key, account_id: l.account_id, product_id: l.product_id }));
@@ -142,8 +172,26 @@ export async function runAccrual(uid, { db = sql, now = Date.now(), dryRun = fal
         ON CONFLICT DO NOTHING RETURNING id`, [uid, JSON.stringify(payload)]]]);
       written = ins.length;
     }
+    // Daily-credited interest raises the balance (owner decision: marked 'estimated' until a verified balance arrives).
+    let estimate = null;
+    if (dailyCredit) {
+      const lastDay = [...plan.dayTotals.keys()].sort().pop();
+      estimate = lastDay ? estimatedBalance({ balances, dayTotals: plan.dayTotals, through: lastDay }) : null;
+      if (estimate && !dryRun) {
+        const [stored] = await withActor(db, actor, [
+          [`INSERT INTO wealth_account_balances (account_id, as_of, balance, status, note) SELECT $1, $2, $3, 'estimated', $4
+            WHERE NOT EXISTS (SELECT 1 FROM wealth_account_balances WHERE account_id = $1 AND as_of >= $2)
+            ON CONFLICT (account_id, as_of) DO NOTHING RETURNING as_of`, [l.account_id, estimate.asOf, estimate.balance, estimate.note]],
+          // Legacy dashboard column ('stale' = estimated there; v1 still counts it and shows it as unverified).
+          [`UPDATE wealth_accounts SET current_balance = $3, balance_as_of = $4, balance_status = 'stale', updated_at = now()
+            WHERE user_id = $1 AND id = $2 AND balance_status IN ('verified', 'stale') AND (balance_as_of IS NULL OR balance_as_of < $4) RETURNING id`,
+            [uid, l.account_id, estimate.balance, estimate.asOf]],
+        ]);
+        estimate.stored = stored.length > 0;
+      }
+    }
     accounts.push({ accountKey: l.account_key, account: `${l.bank_name} · ${l.account_name}`, product: l.product_key, status: plan.status,
-      lastAccrual: plan.last, rowsWritten: dryRun ? 0 : written, rowsPlanned: plan.rows.length, corrections: plan.corrections || 0,
+      estimatedBalance: estimate, lastAccrual: plan.last, rowsWritten: dryRun ? 0 : written, rowsPlanned: plan.rows.length, corrections: plan.corrections || 0,
       interestTotal: round8(plan.rows.reduce((s, r) => s + r.interest_amount, 0)), skipped: plan.skipped.slice(-5) });
   }
   for (const a of unlinked) accounts.push({ accountKey: a.account_key, account: `${a.bank_name} · ${a.account_name}`, product: null, status: 'needs_link', rowsWritten: 0, corrections: 0, interestTotal: 0 });
