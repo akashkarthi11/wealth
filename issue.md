@@ -13,7 +13,7 @@
 
 ### Corrections applied
 - Updated the 11 Nov “November round-ups” ledger row from **₹159 to ₹18**.
-- Assigned that ₹18 transaction to **Slice Savings ••3731**.
+- Assigned that ₹18 transaction to **Slice Atom** (user's account naming). Do not silently map it to generic Atom Savings or another Slice account; preserve the exact product/account identity as confirmed by the user.
 - Assigned **Gullak Technologies ₹1** to **Slice Savings ••3731**, based on the payment details screenshot.
 - Confirmed **MMTC PAMP ₹21** was paid from **Slice Credit Card ••6136** and classified as an investment.
 - Atom interest **₹76.36** remains assigned to Atom Savings.
@@ -26,11 +26,12 @@
 4. For the November round-ups shown here, the month-to-date total is ₹159 and the new 11 Nov posting is only ₹18; the earlier ₹141 was already recorded.
 5. Use payment-detail screenshots to identify the source account:
    - MMTC PAMP ₹21 → Slice CC ••6136.
-   - Round-up ₹18 → Slice Savings ••3731.
+   - Round-up ₹18 on 11 Nov → **Slice Atom** (user-confirmed account label; retain this exact identity).
    - Gullak Technologies ₹1 → Slice Savings ••3731.
    - Atom interest ₹76.36 → Atom Savings.
 6. Do not guess an account for transactions where the source account is not visible. Leave it unassigned and ask for clarification if assigning it is necessary.
 7. Keep transfers/savings round-ups distinct from consumption expenses. Do not count a savings transfer as spending.
+8. **Account-name clarification:** The user explicitly clarified that “Round-ups (11 Nov)” is **Slice Atom**. This supersedes the earlier assumption that it was Slice Savings ••3731. For future imports and corrections, use the exact label “Slice Atom”; if the database does not yet have a matching account, ask before mapping it to another account.
 
 ### Verification note
 The production database was updated and verified on 11 Nov 2026. The earlier development-only corrections were not assumed to have synced automatically. This issue file is maintained in the repository's development branch for future import workflows.
