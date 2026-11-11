@@ -50,6 +50,6 @@ The production database was updated and verified on 11 Nov 2026. The earlier dev
 - **Slice Atom = Atom Savings** (database account: bank "Atom", "Atom Savings" — owner confirmed). Round-ups ₹141 (7 Nov) and ₹18 (11 Nov) moved to Atom Savings.
 
 ### Rules for future imports (ChatGPT and Claude)
-9. **Interest is a running total too.** "November savings interest ₹X" / "Atom interest earned this month ₹X" on an activity or summary screen is month-to-date. Record only the **new daily credit** (the difference from the last recorded total), or replace the earlier total — never add both.
+9. **Interest from screenshots is never saved** (owner rule, 11 Nov 2026; see rules.md §2a). Screens show interest as a full / running total; the app's nightly interest task records interest. Do not insert any interest transaction or row from a screenshot.
 10. **Slice Atom = the "Atom Savings" account** (bank "Atom"). Round-ups and Atom interest go there.
 11. Atom has **splits** (pots such as Rent). Until split tracking is added to the app, put Atom money on Atom Savings and name the split in the description; do not invent a split.
