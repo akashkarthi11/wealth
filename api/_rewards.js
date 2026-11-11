@@ -61,7 +61,8 @@ export async function rewardsOverview(uid, { db = sql, now = Date.now() } = {}) 
     const [sp] = await db.query(`SELECT coalesce(sum(t.amount) FILTER (WHERE to_char(t.occurred_on,'YYYY-MM') = $3), 0)::float8 AS month,
         coalesce(sum(t.amount) FILTER (WHERE t.occurred_on >= (now() AT TIME ZONE 'Asia/Kolkata')::date - 90), 0)::float8 AS last90
       FROM wealth_transactions t JOIN wealth_accounts a ON a.id = t.account_id
-      WHERE t.user_id = $1 AND t.kind = 'expense' AND t.duplicate_of IS NULL
+      WHERE t.user_id = $1 AND t.duplicate_of IS NULL
+        AND (t.kind = 'expense' OR (t.kind = 'investment' AND a.account_type = 'credit_card'))  -- a card purchase of gold etc. is a card spend too
         AND (CASE WHEN $4::uuid IS NOT NULL THEN t.account_id = $4 ELSE a.bank_name = $2 END)
         AND ($6::text IS NULL OR a.account_type = $6)
         AND ($5::text IS NULL OR (coalesce(t.category,'') || ' ' || coalesce(t.description,'')) ~* $5)`,
