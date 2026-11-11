@@ -46,3 +46,13 @@ Same date, same account, same amount, before the fix: 99 groups. After marking t
 - **Paytm, same payee, different UPI ref** (IRCTC ₹1,272.50 on 29 Nov 2023; Devasagayam Xavier ₹10 on 23 Jun 2024): separate payments; the ref numbers differ.
 - **Slice statement entry 1 and entry 2** (Zarivault ₹950 on 1 Jun; Awfis ₹100 on 29 Jun): the statement itself lists two payments.
 - **Workbook-only pairs** (Zarivault ₹950 on 25 May; Awfis ₹100 on 1 Jul): no statement row to compare; kept as two payments unless the owner says otherwise.
+
+## HDFC Bank ••9498 statements (2026-11-11)
+
+Owner request ("read use that", then "approve"): two password-protected HDFC statements, 1 Apr 2025 – 31 Mar 2026 (565 rows) and 1 Apr – 10 Nov 2026 (76 rows), added as normal transactions.
+- Extracted with pdfjs; every row's running balance chains, and counts, debits, credits and closing balance match the printed STATEMENT SUMMARY (closing ₹3.89 = stored balance).
+- 3 rows already stored from the other side were skipped: ₹94,000 salary (2 Nov), ₹627 card bill (6 Oct, on card ••9229), ₹80,000 (3 Nov).
+- Labels: own UPI IDs and Paytm wallet payouts → Self transfer (80, ₹14,00,426); UPI to people ≥ ₹2,000 → Transfer sent; smaller UPI and merchants → spending; GrowHigh.ai / Neenam NEFT → Salary; ₹90,000 Performance bonus; Angel One → Funds added / payout; USD 51.67 remittance → US stocks.
+- No name, PAN or phone number stored; descriptions end in "· HDFC statement · ref <bank ref>" (idempotency key).
+- Development rehearsal: 638, re-run 0. Production: backup prod-before-hdfc-import.wlb (32 tables, 4,428 rows), **INSERT 638** (income 39 ₹11,00,377.86; transfer 135 ₹16,62,553.67; investment 48 ₹1,34,962.99; liability 5 ₹18,712.98; expense 411 ₹97,858.78); re-run 0; 638 audited as owner; transactions now 2,161.
+- The 21 same-day, same-amount groups on this account are separate statement entries (each has its own bank ref and balance step), not duplicates.
