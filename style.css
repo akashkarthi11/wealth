@@ -844,3 +844,4 @@ details.rw-cats summary{cursor:pointer;font-weight:700;font-size:13px}
 .rw-k-empty{opacity:.85}
 .rw-g-sum span{display:block;text-align:right}.rw-g-head>div:first-child{min-width:0}
 .rw-acct,.rw-update,.rw-chips .rec-chip{min-height:34px}.rw-acct{padding:4px 10px;line-height:1.2}.rw-update{padding:5px 12px}
+.rw-tiers{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}.rw-tiers span{font-size:10px;border:1px solid #3a3320;border-radius:12px;padding:2px 8px;color:#bfae86}.rw-tiers span.on{background:#3a3320;color:#f2c46b;font-weight:700}.rw-gap{color:#ffb38a!important}
