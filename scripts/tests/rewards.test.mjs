@@ -96,6 +96,30 @@ test('Slice Monies scheme: % of Slice spends, progress to the 2% tier, estimate 
   assert.equal(a2.n, 1, 'second run changed nothing');
 });
 
+test('every program linked to an account; Spark keeps counting its account-less credits; link can be changed', async () => {
+  const { db, a, uid } = await setup();
+  const add = (key, bank, name, type, mi) => a.query(`INSERT INTO wealth_accounts(user_id,account_key,bank_name,account_name,account_type,subtype_code,currency,masked_identifier,status)
+    VALUES($1,$2,$3,$4,$5,$5,'INR',$6,'active') RETURNING id`, [uid, key, bank, name, type, mi]).then(r => r[0].id);
+  const slice = await add('slice-savings-3731', 'Slice', 'Slice Savings', 'savings', '••3731');
+  const gold = await add('paytm-gold', 'Paytm Gold', 'Digital gold', 'digital_gold', null);
+  const roar = await add('roarbank-cc', 'Roarbank', 'Roarbank Credit Card', 'credit_card', null);
+  const LINK = readFileSync(new URL('../db/repairs/2026-11-11-link-reward-accounts.sql', import.meta.url), 'utf8');
+  await db.exec(LINK); await db.exec(LINK);
+  const rows = await a.query(`SELECT program_key, account_id, cash_any_account FROM wealth_reward_programs ORDER BY program_key`);
+  const by = Object.fromEntries(rows.map(r => [r.program_key, r]));
+  assert.equal(rows.filter(r => !r.account_id).length, 0, 'all six linked');
+  assert.deepEqual([by['paytm-gold-coins'].account_id, by['slice-monies'].account_id, by['slice-spark'].account_id, by['roarbank-rewards'].account_id], [gold, slice, slice, roar]);
+  assert.equal(by['slice-spark'].cash_any_account, true);
+  const o = await rewardsOverview(uid, { db: a, now: NOW });
+  const spark = o.programs.find(p => p.program_key === 'slice-spark');
+  assert.deepEqual([spark.cashEarned.month, spark.account_bank, spark.account_mask], [400, 'Slice', '••3731'], 'Spark credits without an account still count');
+  const prog = o.programs.find(p => p.program_key === 'roarbank-rewards');
+  await upsertRewardProgram(uid, { programId: prog.id, accountId: slice }, { db: a });
+  const [after] = await a.query(`SELECT account_id FROM wealth_reward_programs WHERE id=$1`, [prog.id]);
+  assert.equal(after.account_id, slice);
+  await assert.rejects(upsertRewardProgram(uid, { programId: prog.id, accountId: '00000000-0000-4000-8000-000000000000' }, { db: a }), /Account not found/);
+});
+
 test('reward alerts (ready / near / expiring) and the dashboard tile', () => {
   const src = readFileSync(new URL('../../app.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   const block = src.slice(src.indexOf('// Rewards page (2026-11-11'), src.indexOf('// Activity page (2026-11-11)'));
@@ -120,33 +144,46 @@ test('reward alerts (ready / near / expiring) and the dashboard tile', () => {
   assert.match(src, /if\(d\.rewards\)rewardsData=d\.rewards;/, 'dashboard payload feeds rewards');
 });
 
-test('Rewards page: points card with progress and ₹ value, cash card with totals, unpriced card, update form', () => {
+test('Rewards page: grouped by bank/app, account chips, compact cards, filters, scheme, update form with account select', () => {
   const src = readFileSync(new URL('../../app.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   const block = src.slice(src.indexOf('// Rewards page (2026-11-11'), src.indexOf('// Activity page (2026-11-11)'));
-  const ctx = { esc: s => String(s ?? ''), money: v => '₹' + Number(v).toFixed(2), $: () => null, api: async () => ({}), Number, String, Date, Math, Object, JSON, Array, FormData: class {} };
-  vm.runInNewContext(block + ';globalThis.t={rewardsPageHtml,setOpen:id=>{rewardsOpen=id}};', ctx);
-  const d = { month: '2026-11', totals: { value: 1428.14, valuedPrograms: 2, unvaluedPrograms: 4 }, cashback: { month: 450, year: 3692.85, all_time: 3698.55, count: 46, categories: [{ category: 'Cashback', n: 19, amount: 732.7, last: '2026-11-06' }] },
+  const ctx = { esc: s => String(s ?? ''), money: v => '₹' + Number(v).toFixed(2), $: () => null, api: async () => ({}), Number, String, Date, Math, Object, JSON, Array, Set, FormData: class {},
+    accounts: [{ id: 'acc-slice', bank_name: 'Slice', account_name: 'Slice Savings', masked_identifier: '••3731' }, { id: 'acc-roar', bank_name: 'Roarbank', account_name: 'Roarbank Credit Card' }] };
+  vm.runInNewContext(block + ';globalThis.t={rewardsPageHtml,rewardsForBankHtml,set:d=>{rewardsData=d},setOpen:id=>{rewardsOpen=id},setFilter:f=>{rewardsFilter=f}};', ctx);
+  const d = { month: '2026-11', totals: { value: 1428.14, valuedPrograms: 2, unvaluedPrograms: 2 }, cashback: { month: 450, year: 3692.85, all_time: 3698.55, count: 46, categories: [{ category: 'Cashback', n: 19, amount: 732.7, last: '2026-11-06' }] },
     programs: [
-      { id: 'g', provider: 'Paytm', name: 'Paytm Gold Coins', unit: 'Gold Coins', units: 436, value: 4.36, min_redeem: 500, toRedeem: 64, as_of: '2026-11-09T06:30:00Z', balance_status: 'verified', redeem_note: 'Convert at 500' },
-      { id: 's', provider: 'Slice', name: 'Slice Spark cashback', unit: '₹ cashback', units: null, value: null, cashEarned: { month: 450, year: 450, all_time: 450, count: 3, last: '2026-11-07' } },
+      { id: 'g', provider: 'Paytm', name: 'Paytm Gold Coins', unit: 'Gold Coins', units: 436, value: 4.36, min_redeem: 500, toRedeem: 64, as_of: '2026-11-09T06:30:00Z', balance_status: 'verified', redeem_note: 'Convert at 500', account_id: 'acc-gold', account_bank: 'Paytm Gold', account_name: 'Digital gold', account_type: 'digital_gold' },
+      { id: 's', provider: 'Slice', name: 'Slice Spark cashback', unit: '₹ cashback', units: null, value: null, account_id: 'acc-slice', account_bank: 'Slice', account_name: 'Slice Savings', account_mask: '••3731', account_type: 'savings', cashEarned: { month: 450, year: 450, all_time: 450, count: 3, last: '2026-11-07' } },
+      { id: 'm', provider: 'Slice', name: 'Slice Monies', unit: 'Monies', units: 142378, value: 1423.78, account_id: 'acc-slice', account_bank: 'Slice', account_name: 'Slice Savings', account_mask: '••3731', account_type: 'savings',
+        schemeInfo: { rate: 0.01, spendBank: 'Slice', unitsPerRupee: 1, next: { at: 500000, rate: 0.02, label: 'Locked rate 2%' }, progressPct: 28.48, toNext: 357622, toNextSpend: 357622, monthSpend: 2000, monthUnitsEst: 2000, avgMonthlySpend: 30000, monthsToNext: 12 } },
       { id: 'r', provider: 'Roarbank', name: 'Roarbank rewards', unit: 'points', units: null, value: null } ] };
   let html = ctx.t.rewardsPageHtml(d);
-  assert.match(html, /Rewards &amp; points/);
-  assert.match(html, /<strong>₹1428\.14<\/strong><small>points value · 2 of 6 programs priced/);
-  assert.match(html, /<b>436<\/b><span>Gold Coins<\/span><\/div><div class="rw-value">≈ ₹4\.36/);
-  assert.match(html, /64 more to redeem \(500\)/);
-  assert.match(html, /<small>This month<\/small><b>₹450\.00<\/b>/);
-  assert.match(html, /3 credits · last .* · from your transactions/);
-  assert.match(html, /<em>₹ value not set<\/em>/);
-  assert.match(html, /No balance recorded yet/);
-  assert.doesNotMatch(html, /data-reward-update="s"/, 'cash programs have no points to update');
-  assert.match(html, /Cashback by type/);
-  d.programs.push({ id: 'm', provider: 'Slice', name: 'Slice Monies', unit: 'Monies', units: 142378, value: 1423.78,
-    schemeInfo: { rate: 0.01, spendBank: 'Slice', unitsPerRupee: 1, next: { at: 500000, rate: 0.02, label: 'Locked rate 2%' }, progressPct: 28.48, toNext: 357622, toNextSpend: 357622, monthSpend: 2000, monthUnitsEst: 2000, avgMonthlySpend: 30000, monthsToNext: 12 } });
-  html = ctx.t.rewardsPageHtml(d);
+  assert.match(html, /<strong>₹1428\.14<\/strong><small>points value · 2 of 4 priced/);
+  assert.match(html, /4 programs · each linked to its account/);
+  const order = [...html.matchAll(/<section class="rw-group"><div class="rw-g-head"><div><h4>([^<]+)<\/h4>/g)].map(m => m[1]);
+  assert.equal(order.join(','), 'Slice,Paytm,Roarbank', 'largest group first');
+  assert.match(html, /<h4>Slice<\/h4><small>Slice Savings ••3731<\/small>/);
+  assert.match(html, /data-reward-account="Slice" data-reward-acct-type="savings" title="Open this account">Slice Savings ••3731/);
+  assert.match(html, /<span class="rw-acct rw-acct-none">Not linked to an account<\/span>/);
+  assert.match(html, /<div class="rw-fig"><b>436<\/b><span>Gold Coins<\/span><em class="">≈ ₹4\.36<\/em>/);
+  assert.match(html, /64 more to redeem at 500/);
+  assert.match(html, /<div class="rw-fig"><b>₹450\.00<\/b><span>this year<\/span><em>₹450\.00 this month · ₹450\.00 all time<\/em>/);
+  assert.match(html, /No balance yet — tap <b>Add<\/b>/);
+  assert.match(html, /data-reward-update="r" aria-expanded="false">Add</);
   assert.match(html, /<b>Earn 1% of Slice spends<\/b><small>≈ 1 Monies per ₹1 · 2% at 5,00,000<\/small>/);
   assert.match(html, /Locked rate 2%: 3,57,622 Monies to go \(28\.5%\) ≈ ₹357622\.00 of spends · about 12 months at your pace/);
-  assert.match(html, /<small>Est\. Monies earned<\/small><b>2,000<\/b>/);
-  ctx.t.setOpen('g'); html = ctx.t.rewardsPageHtml(d);
-  assert.match(html, /<form class="rw-form" data-reward-form="g">/);
+  assert.match(html, /<details class="rw-cats"><summary>Cashback by type/);
+  ctx.t.setFilter('cash'); html = ctx.t.rewardsPageHtml(d);
+  assert.match(html, /Slice Spark cashback/); assert.doesNotMatch(html, /Paytm Gold Coins/);
+  assert.match(html, /data-reward-filter="cash" aria-pressed="true">Cashback <em>1<\/em>/);
+  ctx.t.setFilter('all'); ctx.t.setOpen('m'); html = ctx.t.rewardsPageHtml(d);
+  assert.match(html, /<form class="rw-form" data-reward-form="m" data-reward-account-was="acc-slice">/);
+  assert.match(html, /<option value="acc-slice" selected>Slice · Slice Savings ••3731<\/option>/);
+  ctx.t.setOpen('s'); html = ctx.t.rewardsPageHtml(d);
+  assert.doesNotMatch(html.slice(html.indexOf('data-reward-form="s"')), /name="units"/, 'cash programs: account only, no units field');
+  ctx.t.set(d);
+  const bank = ctx.t.rewardsForBankHtml('Slice');
+  assert.match(bank, /<h4>Rewards<\/h4><p>Points and cashback linked to Slice<\/p>/);
+  assert.match(bank, /<b>Slice Monies<\/b><small>Slice Savings ••3731<\/small><\/span><span class="acct-amt"><b>1,42,378 Monies<\/b><small>≈ ₹1423\.78/);
+  assert.equal(ctx.t.rewardsForBankHtml('HDFC Bank'), '');
 });

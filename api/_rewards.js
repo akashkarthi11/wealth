@@ -15,7 +15,7 @@ export function rewardValue(program, units) {
 
 export async function rewardsOverview(uid, { db = sql, now = Date.now() } = {}) {
   const programs = await db.query(`SELECT p.id, p.program_key, p.provider, p.name, p.unit, p.account_id, p.inr_per_unit::float8 AS inr_per_unit,
-      p.rate_source, p.rate_as_of::text AS rate_as_of, p.min_redeem::float8 AS min_redeem, p.redeem_note, p.expiry_note, p.status, p.cash_match, p.scheme,
+      p.rate_source, p.rate_as_of::text AS rate_as_of, p.min_redeem::float8 AS min_redeem, p.redeem_note, p.expiry_note, p.status, p.cash_match, p.scheme, p.cash_any_account, a.account_type AS account_type, a.masked_identifier AS account_mask,
       a.bank_name AS account_bank, a.account_name AS account_name,
       b.units::float8 AS units, b.as_of, b.status AS balance_status, b.expires_on::text AS expires_on, b.note AS balance_note
     FROM wealth_reward_programs p
@@ -43,8 +43,8 @@ export async function rewardsOverview(uid, { db = sql, now = Date.now() } = {}) 
         coalesce(sum(amount) FILTER (WHERE to_char(occurred_on,'YYYY') = $4), 0)::float8 AS year, coalesce(sum(amount), 0)::float8 AS all_time,
         count(*)::int AS count, max(occurred_on)::text AS last
       FROM wealth_transactions WHERE user_id = $1 AND kind = 'income' AND duplicate_of IS NULL
-        AND (coalesce(category,'') || ' ' || coalesce(description,'')) ~* $2 AND ($5::uuid IS NULL OR account_id = $5)`,
-      [uid, p.cash_match, month, year, p.account_id]).catch(() => [null]);
+        AND (coalesce(category,'') || ' ' || coalesce(description,'')) ~* $2 AND ($5::uuid IS NULL OR $6 OR account_id = $5)`,
+      [uid, p.cash_match, month, year, p.account_id, !!p.cash_any_account]).catch(() => [null]);
     if (c) cashEarned.set(p.id, c);
   }
   // Spend-based schemes (0016): units earned ≈ spend × rate ÷ ₹ per unit; progress to the next tier.
@@ -131,9 +131,10 @@ export async function upsertRewardProgram(uid, b, { db = sql, actor = 'owner', d
   if (b.programId) {
     const p = await ownProgram(db, uid, b.programId);
     if (dryRun) return { dryRun, programId: p.id };
-    await withActor(db, actor, [[`UPDATE wealth_reward_programs SET inr_per_unit = coalesce($2, inr_per_unit), rate_source = coalesce($3, rate_source),
+    if (b.accountId) { const [own] = await db.query(`SELECT 1 FROM wealth_accounts WHERE id = $1 AND user_id = $2`, [b.accountId, uid]); if (!own) throw httpError(404, 'Account not found'); }
+    await withActor(db, actor, [[`UPDATE wealth_reward_programs SET account_id = coalesce($8::uuid, account_id), inr_per_unit = coalesce($2, inr_per_unit), rate_source = coalesce($3, rate_source),
       rate_as_of = coalesce($4::date, rate_as_of), min_redeem = coalesce($5, min_redeem), redeem_note = coalesce($6, redeem_note),
-      expiry_note = coalesce($7, expiry_note), updated_at = now() WHERE id = $1`, [p.id, ...fields]]]);
+      expiry_note = coalesce($7, expiry_note), updated_at = now() WHERE id = $1`, [p.id, ...fields, b.accountId || null]]]);
     return { stored: true, programId: p.id };
   }
   const key = String(b.programKey || '').trim().toLowerCase();
