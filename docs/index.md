@@ -83,6 +83,7 @@ Each module fix note should include:
 | 2026-11-11 | Investments | Investments menu showed ₹20,272 (money put in + FD) vs dashboard ₹3,83,641; holdings came from snapshots | [Investments page from holdings](modules/investments/2026-11-11-investments-page-from-holdings.md) | Deployed to Production (`041fc03`) |
 | 2026-11-11 | Accounts | Activity page had no totals, raw dates, a delete button on every row, filters that reset during background loading | [Activity page redesign](modules/accounts/2026-11-11-activity-page-redesign.md) | Deployed to Production (`041fc03`) |
 | 2026-11-11 | Investments / Market data | Dashboard Angel One "Today's gain" showed ₹0; invested and P&L came from the 10 Nov snapshot | [Angel One today's gain](modules/investments/2026-11-11-angel-one-today-gain.md) | Deployed to Production (`041fc03`) |
+| 2026-11-11 | Integrations / Investments | Angel One ledger statement had nowhere to go; no lifetime "money put in" or broker charges | [Angel One ledger history (0011)](modules/integrations/2026-11-11-angel-one-ledger-history.md) | Code + tests on `claude-dev`; 0011 + import on Development; Production pending approval |
 
 ## Plans
 
