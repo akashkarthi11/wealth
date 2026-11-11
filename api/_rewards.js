@@ -47,20 +47,34 @@ export async function rewardsOverview(uid, { db = sql, now = Date.now() } = {}) 
       [uid, p.cash_match, month, year, p.account_id, !!p.cash_any_account]).catch(() => [null]);
     if (c) cashEarned.set(p.id, c);
   }
-  // Spend-based schemes (0016): units earned ≈ spend × rate ÷ ₹ per unit; progress to the next tier.
+  // Spend-based schemes (0016): units earned ≈ spend × rate ÷ ₹ per unit; tiers raise the rate at a unit balance.
+  // scheme: {basis:"spend", rate, spend_bank?, spend_scope?: "bank"|"account", merchant?: regex, label?, tiers:[{at, rate, label}]}
+  //  - spend_scope "account": only spends on the program's linked account (e.g. Swiggy on the HDFC Swiggy card).
+  //  - merchant: only spends whose category/description match (e.g. "swiggy").
+  //  - spend_account_type: only that kind of account at the bank (e.g. "credit_card": Slice Monies come from card spends only).
+  //  - cash programs (no ₹ rate per unit) earn ₹ directly: 1 unit = ₹1.
   const schemeInfo = new Map();
   for (const p of programs.filter(x => x.scheme && x.scheme.basis === 'spend')) {
-    const s = p.scheme, rate = Number(s.rate), perUnit = Number(p.inr_per_unit);
-    if (!(rate > 0) || !(perUnit > 0)) continue;
+    const s = p.scheme, baseRate = Number(s.rate), perUnit = p.inr_per_unit == null ? 1 : Number(p.inr_per_unit), cashProgram = p.inr_per_unit == null;
+    if (!(baseRate > 0) || !(perUnit > 0)) continue;
+    const byAccount = s.spend_scope === 'account' && p.account_id, merchant = s.merchant ? String(s.merchant) : null;
     const [sp] = await db.query(`SELECT coalesce(sum(t.amount) FILTER (WHERE to_char(t.occurred_on,'YYYY-MM') = $3), 0)::float8 AS month,
         coalesce(sum(t.amount) FILTER (WHERE t.occurred_on >= (now() AT TIME ZONE 'Asia/Kolkata')::date - 90), 0)::float8 AS last90
       FROM wealth_transactions t JOIN wealth_accounts a ON a.id = t.account_id
-      WHERE t.user_id = $1 AND t.kind = 'expense' AND t.duplicate_of IS NULL AND a.bank_name = $2`, [uid, String(s.spend_bank || p.provider), month]).catch(() => [null]);
-    const tiers = (Array.isArray(s.tiers) ? s.tiers : []).filter(t => Number(t.at) > 0).sort((a, b) => a.at - b.at);
+      WHERE t.user_id = $1 AND t.kind = 'expense' AND t.duplicate_of IS NULL
+        AND (CASE WHEN $4::uuid IS NOT NULL THEN t.account_id = $4 ELSE a.bank_name = $2 END)
+        AND ($6::text IS NULL OR a.account_type = $6)
+        AND ($5::text IS NULL OR (coalesce(t.category,'') || ' ' || coalesce(t.description,'')) ~* $5)`,
+      [uid, String(s.spend_bank || p.provider), month, byAccount ? p.account_id : null, merchant, s.spend_account_type ? String(s.spend_account_type) : null]).catch(() => [null]);
+    const tiers = (Array.isArray(s.tiers) ? s.tiers : []).filter(t => Number(t.at) > 0 && Number(t.rate) > 0).sort((x, y) => x.at - y.at);
+    const reached = p.units == null ? [] : tiers.filter(t => p.units >= Number(t.at));
+    const rate = reached.length ? Number(reached[reached.length - 1].rate) : baseRate;
     const next = p.units == null ? null : tiers.find(t => Number(t.at) > p.units) || null;
     const unitsPerRupee = rate / perUnit, avgMonth = sp ? r2(sp.last90 / 3) : null;
     const toNext = next ? r2(Number(next.at) - p.units) : null;
-    schemeInfo.set(p.id, { basis: 'spend', rate, spendBank: String(s.spend_bank || p.provider), unitsPerRupee: r2(unitsPerRupee),
+    schemeInfo.set(p.id, { basis: 'spend', rate, baseRate, cash: cashProgram, spendBank: String(s.spend_bank || p.provider),
+      spendLabel: String(s.label || (merchant ? merchant.charAt(0).toUpperCase() + merchant.slice(1) + ' orders' : (s.spend_bank || p.provider) + ' spends')), unitsPerRupee: r2(unitsPerRupee),
+      tiers: [{ at: 0, rate: baseRate }].concat(tiers.map(t => ({ at: Number(t.at), rate: Number(t.rate), label: t.label || null }))),
       next: next ? { at: Number(next.at), rate: Number(next.rate), label: next.label || 'Next tier' } : null,
       progressPct: next && p.units != null ? r2(p.units / Number(next.at) * 100) : null, toNext, toNextSpend: toNext == null ? null : r2(toNext / unitsPerRupee),
       monthSpend: sp ? r2(sp.month) : null, monthUnitsEst: sp ? r2(sp.month * unitsPerRupee) : null, avgMonthlySpend: avgMonth,

@@ -96,6 +96,31 @@ test('Slice Monies scheme: % of Slice spends, progress to the 2% tier, estimate 
   assert.equal(a2.n, 1, 'second run changed nothing');
 });
 
+test('Monies tiers (1% → 1.5% at 3,00,000 → 2% at 5,00,000) and HDFC 5% on Swiggy with the card: expected vs credited', async () => {
+  const { db, a, uid } = await setup();
+  const REPAIR = readFileSync(new URL('../db/repairs/2026-11-11-reward-schemes-tiers-and-swiggy.sql', import.meta.url), 'utf8');
+  await db.exec(REPAIR); await db.exec(REPAIR);
+  let o = await rewardsOverview(uid, { db: a, now: NOW });
+  const m = o.programs.find(p => p.program_key === 'slice-monies').schemeInfo;
+  assert.deepEqual([m.rate, m.next.at, m.next.rate, m.toNext], [0.01, 300000, 0.015, 157622], 'next tier is 3,00,000 at 1.5%');
+  // Monies come from Slice CREDIT CARD spends only: a Slice savings spend does not count
+  const [cc] = await a.query(`SELECT id FROM wealth_accounts WHERE bank_name='Slice' AND account_type='credit_card'`);
+  const [sv] = await a.query(`INSERT INTO wealth_accounts(user_id,account_key,bank_name,account_name,account_type,subtype_code,currency,masked_identifier) VALUES($1,'slice-sv','Slice','Slice Savings','savings','savings','INR','••3731') RETURNING id`, [uid]);
+  await a.query(`INSERT INTO wealth_transactions(user_id,kind,category,description,amount,account,account_id,occurred_on) VALUES
+    ($1,'expense','Investment','MMTC PAMP',21,'',$2,'2026-11-11'),($1,'expense','Transfer','Arun S',5000,'',$3,'2026-11-11')`, [uid, cc.id, sv.id]);
+  const mm = (await rewardsOverview(uid, { db: a, now: NOW })).programs.find(p => p.program_key === 'slice-monies').schemeInfo;
+  assert.deepEqual([mm.spendLabel, mm.monthSpend, mm.monthUnitsEst], ['Slice card spends', 21, 21], '₹21 card spend = 21 Monies; the ₹5,000 savings transfer earns none');
+  assert.equal(JSON.stringify(m.tiers.map(t => [t.at, t.rate])), JSON.stringify([[0, 0.01], [300000, 0.015], [500000, 0.02]]));
+  const h = o.programs.find(p => p.program_key === 'hdfc-swiggy-orange').schemeInfo;
+  assert.deepEqual([h.cash, h.rate, h.monthSpend, h.monthUnitsEst, h.spendLabel], [true, 0.05, 500, 25, 'Swiggy orders on this card'], '5% of the ₹500 Swiggy spend on the HDFC card');
+  // reaching a tier raises the current rate
+  const [mp] = await a.query(`SELECT id FROM wealth_reward_programs WHERE program_key='slice-monies'`);
+  await recordRewardBalance(uid, { programId: mp.id, units: 320000, asOf: '2026-11-11T08:00:00Z' }, { db: a, now: NOW });
+  o = await rewardsOverview(uid, { db: a, now: NOW });
+  const m2 = o.programs.find(p => p.program_key === 'slice-monies').schemeInfo;
+  assert.deepEqual([m2.rate, m2.next.at, m2.unitsPerRupee], [0.015, 500000, 1.5]);
+});
+
 test('every program linked to an account; Spark keeps counting its account-less credits; link can be changed', async () => {
   const { db, a, uid } = await setup();
   const add = (key, bank, name, type, mi) => a.query(`INSERT INTO wealth_accounts(user_id,account_key,bank_name,account_name,account_type,subtype_code,currency,masked_identifier,status)
@@ -170,8 +195,8 @@ test('Rewards page: grouped by bank/app, account chips, compact cards, filters, 
   assert.match(html, /<div class="rw-fig"><b>₹450\.00<\/b><span>this year<\/span><em>₹450\.00 this month · ₹450\.00 all time<\/em>/);
   assert.match(html, /No balance yet — tap <b>Add<\/b>/);
   assert.match(html, /data-reward-update="r" aria-expanded="false">Add</);
-  assert.match(html, /<b>Earn 1% of Slice spends<\/b><small>≈ 1 Monies per ₹1 · 2% at 5,00,000<\/small>/);
-  assert.match(html, /Locked rate 2%: 3,57,622 Monies to go \(28\.5%\) ≈ ₹357622\.00 of spends · about 12 months at your pace/);
+  assert.match(html, /<b>Earn 1% of Slice spends<\/b><small>≈ 1 Monies per ₹1<\/small>/);
+  assert.match(html, /2% from 5,00,000: 3,57,622 Monies to go \(28\.5%\) ≈ ₹357622\.00 of spends · about 12 months at your pace/);
   assert.match(html, /<details class="rw-cats"><summary>Cashback by type/);
   ctx.t.setFilter('cash'); html = ctx.t.rewardsPageHtml(d);
   assert.match(html, /Slice Spark cashback/); assert.doesNotMatch(html, /Paytm Gold Coins/);

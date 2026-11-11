@@ -229,3 +229,33 @@ Development (real data): points value ₹1,428.14 (2 of 6 programs priced); cash
 ### Deployed (2026-11-11, owner: "ok use it now", "approve rewards links")
 - Backup `prod-before-0016.wlb` (35 tables, 5,802 rows); `main` `35b2934` (build `4a`) applied 0016, 0017, 0018 (19 migrations).
 - Backup `prod-before-reward-links.wlb` (36 tables, 5,806 rows); Monies scheme UPDATE 1 (re-run 0); account links UPDATE 4 (re-run 0). All six programs linked: HDFC Swiggy Orange ••9229, Paytm Gold, Roarbank Credit Card, Slice Credit Card ••6136, Slice Savings ••3731 (Monies, Spark — Spark counts credits from any account).
+
+### Spark merged into Slice card cashback (2026-11-11, owner: "merge it 1")
+Repair [`2026-11-11-merge-slice-spark-cashback.sql`](../../scripts/db/repairs/2026-11-11-merge-slice-spark-cashback.sql): program `slice-card-cashback` renamed "Slice cashback (card + Spark)", `cash_match` = `credit card cashback|spark`, counted from any account (checked: matches only the Slice card's 24 cashback credits and the 3 Spark credits); program `slice-spark` closed (hidden, kept). No transaction changed. Development and Production: UPDATE 1 + 1, re-run 0; backup `prod-before-spark-merge.wlb` (36 tables, 5,842 rows). Production now: 5 programs; Slice cashback ₹3,115.85 all time (card ₹2,665.85 May–Jul + Spark ₹450 Nov). Note: no card cashback is recorded for Aug–Oct 2026 although ₹2.2 lakh was spent on the card — owner to send a statement if cashback was paid.
+
+### Reward schemes: Monies tiers and HDFC Swiggy 5% (build `4c`, owner: "after reach 300000 monies its 1.5 % after 5l its 2%", "hdfc provide 5% when i buy in swiggy with hdfc card")
+- Scheme engine: tiers set the current rate (highest tier reached); `spend_scope: "account"` counts only spends on the linked account; `merchant` filters spends (regex on category/description); cash programs earn ₹ directly (1 unit = ₹1).
+- Card: tier chips with the current rate highlighted; progress to the next tier; cash schemes show spends this month, expected cashback and credited this month, with a note when expected exceeds credited.
+- Repair [`2026-11-11-reward-schemes-tiers-and-swiggy.sql`](../../scripts/db/repairs/2026-11-11-reward-schemes-tiers-and-swiggy.sql): Slice Monies 1% → 1.5% from 3,00,000 → 2% from 5,00,000 (next tier now 3,00,000: 1,57,622 Monies to go, about 4 months at the current pace); HDFC Swiggy Orange 5% of Swiggy orders on the card. Development: UPDATE 2 then 0 (label fix UPDATE 1 then 0). **Production: waiting for owner approval and deploy.** Monthly HDFC offers to be added when the owner shares them.
+
+### November interest and round-ups (2026-11-11, from `issue.md`; owner: "yes, approve interest fix")
+Repair [`2026-11-11-november-interest-and-roundups.sql`](../../scripts/db/repairs/2026-11-11-november-interest-and-roundups.sql): six interest rows inside the 11 Nov month-to-date totals marked `duplicate_of` (Slice ₹35.53, ₹42.74, ₹7.20, ₹7.21 → ₹71.57; Atom ₹9.55, ₹9.56 → ₹76.36) — ₹111.79 of double-counted income removed; round-ups ₹141 and ₹18 moved to Atom Savings ("Slice Atom", owner confirmed). Stops unless exactly 6 + 2 rows match; re-run 0. Backup `prod-before-interest-fix.wlb` (36 tables, 5,855 rows). `issue.md` updated with the resolution and rules 9–11.
+**Next (owner):** Atom splits (pots, e.g. Rent) — screenshot with split names, balances and targets; which split takes round-ups; rent amount, due day and split.
+
+### Monies from card spends only (owner: "every card spend it add against monis")
+Checked against screenshots: Monies 1,42,378 (9 Nov) → 1,42,399 (11 Nov) = +21 = 1% of the ₹21 Slice card spend (MMTC PAMP); Slice Savings spends (Gullak ₹1, ₹5,000 to Arun S) earned none. Scheme engine: `spend_account_type` filter; Monies scheme now `spend_account_type: "credit_card"`, label "Slice card spends". Development: UPDATE 1 then 0. Production waits for "approve schemes" (with "main" for the code).
+
+### Atom splits (build `4d`, owner: "this is splits", Atom screen 11 Nov 5:21 PM)
+- Migration [`0019_account_splits.sql`](../../scripts/migrations/0019_account_splits.sql): `wealth_account_splits` (name, kind goal/roundups/general, goal, purpose), `wealth_account_split_balances` (verified/estimated history), `wealth_account_split_moves` (signed: + into, − out of the split; optional transaction link, one move per transaction per split). Audited; bumps the data version. Splits never change account balances or totals.
+- `api/_splits.js`: estimated split balance = latest split balance + moves after it; `GET /api/splits?accountId=`, `POST /api/splits/balances`, `POST /api/splits/moves` (owner or ingest secret; a move cannot point at a transaction on another account). Account detail includes `splits`.
+- Account page (e.g. Atom): "Splits" — share bar (tap to read), each split with balance, verified/estimated (with the change since the screenshot), goal progress when a goal exists, last moves, and a check that the splits add up to the account balance.
+- Seed [`2026-11-11-atom-splits.sql`](../../scripts/db/repairs/2026-11-11-atom-splits.sql): Invest later ₹30,036 · Rent ₹8,209 · Emergency fund ₹25,030 · Round ups ₹172 (verified 11 Nov 5:21 PM; Atom ₹63,448.36); November round-ups ₹141 and ₹18 linked to Round ups as history. Development: 0019 applied (20 migrations), seed INSERT 4+4 then 0. **Production: waiting for "main" and "approve splits".**
+- Also fixed: the hidden tap readout under share bars showed as an empty box (`.share-readout[hidden]`).
+- Tests: `splits.test.mjs` (4). Full suite 178/178.
+- Next: rent — amount and due day, then rent payments create a − move on the Rent split; ChatGPT rule to post Atom movements with their split.
+
+### Applied in Production (owner: "approve schemes", "approve balances")
+- Backup `prod-before-balances-schemes.wlb` (36 tables, 5,863 rows).
+- Schemes: UPDATE 2 — Slice Monies 1% of Slice card spends → 1.5% from 3,00,000 → 2% from 5,00,000; HDFC Swiggy Orange 5% of Swiggy orders on the card. (The full card-only / Swiggy display needs build `4c`/`4d` deployed.)
+- Verified balances via the app's own path (account record and history in step): Slice Savings ₹42,871 (11 Nov 5:19 PM), Atom Savings ₹63,448.36 (5:21 PM), Slice Monies 1,42,399 (≈ ₹1,423.99). Slice Savings record and history now both ₹42,871 — the ₹5,018 mismatch (D0) is closed.
+- "approve splits" received; the splits need migration 0019, which reaches Production with the next deploy ("main") — applied after it.

@@ -39,6 +39,10 @@ export const ROUTES = {
   'rewards/balances': () => import('./_routes/rewards.js'),
   'rewards/events': () => import('./_routes/rewards.js'),
   'rewards/programs': () => import('./_routes/rewards.js'),
+  // Account splits (0019)
+  'splits': () => import('./_routes/splits.js'),
+  'splits/balances': () => import('./_routes/splits.js'),
+  'splits/moves': () => import('./_routes/splits.js'),
 };
 
 // The route comes from the rewrite's __route parameter, or from the path when the router is called directly.
