@@ -213,3 +213,9 @@ Development (real data): points value ₹1,428.14 (2 of 6 programs priced); cash
 **Part A complete in code** (build `3y`, 165/165 tests). Production still needs: deploy (`main`) and the owner-approved seed. Owner inputs: which Slice Monies cash value is withdrawable (₹1,423.78 vs ₹0); a Roarbank rewards balance.
 
 **Seed in Production** (owner: "approve rewards seed", 2026-11-11): backup `prod-before-rewards-seed.wlb` (35 tables, 5,778 rows); INSERT 6 programs + 6 balances; re-run 0. Production overview: points value ₹1,428.14 (Paytm 436 coins, Slice 1,42,378 Monies), cashback ₹3,698.55 all time (Spark ₹450, Slice card ₹2,665.85, HDFC Swiggy ₹577). Audited as owner.
+
+### Slice Monies reward scheme (build `3z`, owner: "for monis there are reward scheme" → basis "% of my spends")
+- Migration [`0016_reward_scheme.sql`](../../scripts/migrations/0016_reward_scheme.sql): `wealth_reward_programs.scheme` (jsonb object): `{basis:"spend", rate, spend_bank, tiers:[{at, rate, label}]}`.
+- Repair [`2026-11-11-slice-monies-scheme.sql`](../../scripts/db/repairs/2026-11-11-slice-monies-scheme.sql): Slice Monies earn 1% of spends (≈ 1 Monie per ₹1 at ₹0.01/Monie); locked rate 2% from 5,00,000 Monies (9 Nov screenshot). Spends counted: expenses on Slice accounts (assumption, shown on the card).
+- Monies card: scheme line, progress to the 2% tier (1,42,378 / 5,00,000 = 28.5%, 3,57,622 to go ≈ ₹3.58 lakh of spends), Slice spends this month, estimated Monies earned, average monthly spend (90 days), months to the tier at that pace.
+- Development: 0016 applied (17 migrations), repair UPDATE 1 then 0; card checked visually (₹829 spent this month ≈ 829 Monies; average ₹40,456.83/month → about 9 months). Tests 166/166.

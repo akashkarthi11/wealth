@@ -78,6 +78,24 @@ test('record a balance (newest wins), validation, events and program rate need a
   assert.equal(rewardValue({ inr_per_unit: null }, 100), null);
 });
 
+test('Slice Monies scheme: % of Slice spends, progress to the 2% tier, estimate from this month (repair is idempotent)', async () => {
+  const { db, a, uid } = await setup();
+  const [cc] = await a.query(`SELECT id FROM wealth_accounts WHERE bank_name='Slice'`);
+  await a.query(`INSERT INTO wealth_transactions(user_id,kind,category,description,amount,account,account_id,occurred_on) VALUES
+    ($1,'expense','Food','Swiggy',1200,'',$2,'2026-11-05'),($1,'expense','Travel','Redbus',800,'',$2,'2026-11-08'),($1,'transfer','Card payment','Bill',5000,'',$2,'2026-11-09')`, [uid, cc.id]);
+  const REPAIR = readFileSync(new URL('../db/repairs/2026-11-11-slice-monies-scheme.sql', import.meta.url), 'utf8');
+  await db.exec(REPAIR); await db.exec(REPAIR);
+  const o = await rewardsOverview(uid, { db: a, now: NOW });
+  const m = o.programs.find(p => p.program_key === 'slice-monies');
+  assert.equal(m.scheme.rate, 0.01);
+  const si = m.schemeInfo;
+  assert.deepEqual([si.unitsPerRupee, si.next.at, si.next.rate, si.toNext, si.toNextSpend], [1, 500000, 0.02, 357622, 357622]);
+  assert.equal(si.progressPct, 28.48);
+  assert.deepEqual([si.monthSpend, si.monthUnitsEst], [2000, 2000], 'expenses only — the card bill transfer is not a spend');
+  const [a2] = await a.query(`SELECT count(*)::int n FROM wealth_audit_log WHERE table_name='wealth_reward_programs' AND action='update'`);
+  assert.equal(a2.n, 1, 'second run changed nothing');
+});
+
 test('reward alerts (ready / near / expiring) and the dashboard tile', () => {
   const src = readFileSync(new URL('../../app.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   const block = src.slice(src.indexOf('// Rewards page (2026-11-11'), src.indexOf('// Activity page (2026-11-11)'));
@@ -123,6 +141,12 @@ test('Rewards page: points card with progress and ₹ value, cash card with tota
   assert.match(html, /No balance recorded yet/);
   assert.doesNotMatch(html, /data-reward-update="s"/, 'cash programs have no points to update');
   assert.match(html, /Cashback by type/);
+  d.programs.push({ id: 'm', provider: 'Slice', name: 'Slice Monies', unit: 'Monies', units: 142378, value: 1423.78,
+    schemeInfo: { rate: 0.01, spendBank: 'Slice', unitsPerRupee: 1, next: { at: 500000, rate: 0.02, label: 'Locked rate 2%' }, progressPct: 28.48, toNext: 357622, toNextSpend: 357622, monthSpend: 2000, monthUnitsEst: 2000, avgMonthlySpend: 30000, monthsToNext: 12 } });
+  html = ctx.t.rewardsPageHtml(d);
+  assert.match(html, /<b>Earn 1% of Slice spends<\/b><small>≈ 1 Monies per ₹1 · 2% at 5,00,000<\/small>/);
+  assert.match(html, /Locked rate 2%: 3,57,622 Monies to go \(28\.5%\) ≈ ₹357622\.00 of spends · about 12 months at your pace/);
+  assert.match(html, /<small>Est\. Monies earned<\/small><b>2,000<\/b>/);
   ctx.t.setOpen('g'); html = ctx.t.rewardsPageHtml(d);
   assert.match(html, /<form class="rw-form" data-reward-form="g">/);
 });
