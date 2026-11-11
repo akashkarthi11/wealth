@@ -29,6 +29,7 @@ This file contains the user's instructions to the AI assistant. Read and follow 
   rows, `wealth_interest_ledger` rows, or interest statements. The nightly job keeps exactly one "interest this month" income
   row per account (Slice Savings, Atom) and updates that same row every night; a new row starts each month.
 - If an older scheduled prompt has an "interest accrual" or "interest credit" step, skip it — report only.
+- The current scheduled-task prompts are in [`task.md`](task.md) (daily check). Use those, not older copies.
 
 ## 3. Production and Development database safety
 - Treat Production as protected. Do not alter Production during a Development migration or test.
