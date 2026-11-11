@@ -49,6 +49,9 @@ export const ROUTES = {
   'loans/entries': () => import('./_routes/loans.js'),
   'loans/splits': () => import('./_routes/loans.js'),
   'loans/splits/cancel': () => import('./_routes/loans.js'),
+  'loans/entries/move': () => import('./_routes/loans.js'),
+  'loans/shares/paid': () => import('./_routes/loans.js'),
+  'loans/roundoff': () => import('./_routes/loans.js'),
 };
 
 // The route comes from the rewrite's __route parameter, or from the path when the router is called directly.

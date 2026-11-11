@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { migratedDb } from './helpers/pglite.mjs';
-import { loansOverview, savePerson, addPersonEntry, createSplit, cancelSplit, computeShares, personOf, personFigures } from '../../api/_loans.js';
+import { loansOverview, savePerson, addPersonEntry, createSplit, cancelSplit, computeShares, personOf, personFigures, moveEntry, markSharePaid, roundOff } from '../../api/_loans.js';
 
 const NOW = Date.parse('2026-11-11T12:00:00Z');
 const J = x => JSON.stringify(x);
@@ -117,7 +117,7 @@ test('page: split sheet maths match the server (GST by part), people cards, spli
   const block = src.slice(src.indexOf('// Money lent & split bills (Plan 4 Part B'), src.indexOf('// Reward alerts (Plan 4, TR4-A.8)'));
   const ctx = { esc: s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'), money: v => '₹' + Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 }),
     user: { role: 'admin' }, activeView: 'lending', api: async () => ({}), Number, String, Date, Math, JSON, Array, Set, Map, Object };
-  vm.runInNewContext(block + ';globalThis.t={splitCompute,lendingPageHtml,lendActivityButtonHtml,setData:d=>{lendingData=d}};', ctx);
+  vm.runInNewContext(block + ';globalThis.t={splitCompute,lendingPageHtml,lendActivityButtonHtml,lendRowTag,setData:d=>{lendingData=d}};', ctx);
   const c = ctx.t.splitCompute({ total: 1180, taxMode: 'pct', taxVal: 18, includeMe: true, mode: 'amounts', sel: [{ name: 'Arun S', base: 300 }, { name: 'Priya', base: 200 }] });
   const server = computeShares({ total: 1180, tax: 180, mode: 'amounts', includeMe: true, people: [{ key: 'a', base: 300 }, { key: 'b', base: 200 }] });
   assert.equal(J(c.rows.map(r => r.amount)), J(server.map(s => s.amount)));
@@ -132,6 +132,58 @@ test('page: split sheet maths match the server (GST by part), people cards, spli
   assert.match(html, /₹590<\/strong><small>owed to you · 2 people/);
   assert.match(html, /Sangeetha dinner<\/b><small>[^<]*₹1,180 incl\. ₹180 GST · by amount/);
   assert.match(ctx.t.lendActivityButtonHtml({ id: ids.dinner, kind: 'expense', amount: 1180 }), /Split · you ₹590 · Arun S ₹354 · Priya ₹236/);
+  assert.match(ctx.t.lendRowTag({ id: ids.dinner }), /act-tag split">Split · 2 people · 2 to pay/);
   assert.match(ctx.t.lendActivityButtonHtml({ id: ids.taxi, kind: 'expense', amount: 600, description: 'Uber', occurred_on: '2026-11-09' }), /data-split-tx="[^"]+"[^>]*>Split bill</);
-  assert.match(ctx.t.lendActivityButtonHtml({ id: ids.arun, kind: 'transfer', category: 'Transfer sent', description: 'UPI transfer to Arun S', amount: 5000 }), /data-lend-name="Arun S"[^>]*>Lent to a person</);
+  assert.match(ctx.t.lendActivityButtonHtml({ id: ids.arun, kind: 'transfer', category: 'Transfer sent', description: 'UPI transfer to Arun S', amount: 5000 }), /data-lend-quick[^>]*data-lend-guess="Arun S">Lent to Arun S<\/button>/);
+  assert.match(ctx.t.lendActivityButtonHtml({ id: ids.arun, kind: 'transfer', category: 'Transfer sent', description: 'UPI transfer to Arun S', amount: 5000 }), /data-lend-choose[^>]*>Someone else \/ several people</);
+});
+
+test('mark a bill share paid, move a transfer to another person, links for Activity', async () => {
+  const { a, uid, ids } = await setup();
+  const sp = await createSplit(uid, { transactionId: ids.dinner, mode: 'equal', people: [{ name: 'Priya' }] }, { db: a, now: NOW });
+  await addPersonEntry(uid, { name: 'Arun', transactionIds: [ids.arun] }, { db: a, now: NOW });
+  let o = await loansOverview(uid, { db: a, now: NOW });
+  const priya = o.people.find(p => p.name === 'Priya'), arun = o.people.find(p => p.name === 'Arun');
+  assert.deepEqual([priya.owed, priya.unpaidShares], [590, 1]);
+  assert.deepEqual(o.links[ids.arun], { type: 'lent', personId: arun.id, name: 'Arun', entryId: arun.items[0].entryId });
+  assert.equal(o.links[ids.dinner].type, 'split');
+  await markSharePaid(uid, { splitId: sp.splitId, personId: priya.id }, { db: a, now: NOW });
+  assert.equal((await markSharePaid(uid, { splitId: sp.splitId, personId: priya.id }, { db: a, now: NOW })).already, 'paid');
+  // move the ₹5,000 transfer from "Arun" to "Arun S"
+  await moveEntry(uid, { entryId: arun.items[0].entryId, name: 'Arun S' }, { db: a, now: NOW });
+  o = await loansOverview(uid, { db: a, now: NOW });
+  const by = Object.fromEntries(o.people.map(p => [p.name, p]));
+  assert.deepEqual([by.Priya.owed, by.Priya.unpaidShares, by.Arun.owed, by['Arun S'].owed], [0, 0, 0, 5000]);
+  assert.equal(o.splits[0].shares.find(x => x.name === 'Priya').paid, true);
+  assert.equal(o.links[ids.arun].name, 'Arun S');
+  // a transfer sent for several people can be split; but not when already linked to one person
+  const sp2 = await createSplit(uid, { transactionId: ids.anOut, mode: 'equal', includeMe: false, people: [{ name: 'A1' }, { name: 'A2' }] }, { db: a, now: NOW });
+  assert.equal(sp2.othersOwe, 12000);
+  await assert.rejects(createSplit(uid, { transactionId: ids.arun, mode: 'equal', people: [{ name: 'X' }] }, { db: a, now: NOW }), /already linked/);
+  await assert.rejects(addPersonEntry(uid, { name: 'X', transactionIds: [ids.anOut] }, { db: a, now: NOW }), /split among people/);
+});
+
+test('round off: closes every open entry and share, owner decides what is already back, one new amount carried with reference', async () => {
+  const { a, uid, ids } = await setup();
+  await createSplit(uid, { transactionId: ids.dinner, taxPercent: 18, mode: 'amounts', people: [{ name: 'Arun S', base: 300 }] }, { db: a, now: NOW });   // share ₹354
+  await addPersonEntry(uid, { name: 'Arun S', transactionIds: [ids.arun, ids.arunBack] }, { db: a, now: NOW });                                        // +5000 −300
+  let p = (await loansOverview(uid, { db: a, now: NOW })).people[0];
+  assert.equal(p.owed, 5054);
+  const dry = await roundOff(uid, { personId: p.id, alreadyBack: 54, newAmount: 4900 }, { db: a, now: NOW, dryRun: true });
+  assert.deepEqual([dry.closedItems, dry.totalOwed, dry.alreadyBack, dry.newAmount, dry.roundedBy], [3, 5054, 54, 4900, 100]);
+  const r = await roundOff(uid, { personId: p.id, alreadyBack: 54, newAmount: 4900 }, { db: a, now: NOW });
+  assert.deepEqual([r.stored, r.closed], [true, 3]);
+  p = (await loansOverview(uid, { db: a, now: NOW })).people[0];
+  assert.deepEqual([p.owed, p.items.length, p.items[0].type, p.items[0].label], [4900, 1, 'carried', 'Carried from round-off']);
+  assert.deepEqual([p.rollups.length, p.rollups[0].items.length, p.rollups[0].totalOwed, p.rollups[0].alreadyBack], [1, 3, 5054, 54]);
+  // closed entries cannot be moved; the transactions stay linked (no double linking)
+  await assert.rejects(moveEntry(uid, { entryId: p.rollups[0].items.find(i => i.entryId).entryId, name: 'Z' }, { db: a, now: NOW }), /round-off/);
+  await assert.rejects(addPersonEntry(uid, { name: 'Z', transactionIds: [ids.arun] }, { db: a, now: NOW }), /already linked/);
+  // default new amount = total − already back; zero closes everything
+  await addPersonEntry(uid, { personId: p.id, direction: 'in', amount: 900, occurredOn: '2026-11-11' }, { db: a, now: NOW });
+  const z = await roundOff(uid, { personId: p.id, alreadyBack: 4000 }, { db: a, now: NOW });
+  assert.equal(z.newAmount, 0);
+  p = (await loansOverview(uid, { db: a, now: NOW })).people[0];
+  assert.deepEqual([p.owed, p.items.length, p.rollups.length], [0, 0, 2]);
+  await assert.rejects(roundOff(uid, { personId: p.id }, { db: a, now: NOW }), /Nothing open/);
 });
