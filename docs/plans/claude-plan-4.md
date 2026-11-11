@@ -11,7 +11,7 @@
 | Version | 0.1 (draft) |
 | Date | 2026-11-11 |
 | Author | Claude (Claude Code), prepared for the project owner |
-| Status | **Draft — waiting for owner decisions (§12)**. Nothing built yet |
+| Status | **Draft** — Part 0 built (§13), Parts A–C waiting for owner decisions (§12) |
 | Predecessor | [Claude Plan 3](claude-plan-3.md) v1.3 (deployed, `main` `f27100f`) |
 | Owner request | "next plan points include cb, cc point, slice monies, coin point in gold, slice spark, roarbank reward, hdfc cc reward · 2 - lending amount · 3 - where i need to buy voucher" |
 | Standing rules | [rules.md](../../rules.md): transactions go to `wealth_transactions` only; balances only with evidence; never `pending_reconciliation`. **No data is deleted.** Production only for routine operations; Development for rehearsal. Every deployment and production write needs explicit owner approval. `v2` is never merged into |
@@ -178,3 +178,16 @@ Part 0 → A → B → C, each: `claude-dev` → Development rehearsal → owner
 | D4 | Voucher platforms you use or would use | e.g. Gyftr / HDFC SmartBuy, Amazon Pay, Paytm vouchers, super.money — owner to list |
 | D5 | Which "Transfer sent" people are loans | owner reviews the suggestion list (TR4-B.5) |
 | D6 | NDX P2P ₹15,000 (Nov 2023): still invested, withdrawn, or lost? | owner |
+
+---
+
+## 13. Implementation status
+
+### Part 0 — balance-write guard (2026-11-11, owner: "Part 0 solve it")
+| ID | State | Evidence |
+|---|---|---|
+| TR4-0.1 | **Built** — migration [`0012_external_balance_guard.sql`](../../scripts/migrations/0012_external_balance_guard.sql): when `wealth.actor` is not set (direct SQL, audit actor `external`), the database refuses (a) `pending_reconciliation` on `wealth_accounts.balance_status` or `wealth_account_balances.status`, and (b) moving `wealth_accounts.balance_as_of` back in time. Newer `stale` / `verified` balances are still allowed, as rules.md §2 says. The app, owner repairs, agents and cron set an actor and are unaffected | `balance-guard.test.mjs` (4); Development: migration applied (13 total); live check in rolled-back transactions — both bad writes refused, newer stale balance and owner write allowed |
+| TR4-0.2 | **Built** — data-quality issue `balance_mismatch` (high) when the dashboard balance differs from the newest balance-history row, or the history is newer | `balance-guard.test.mjs` (flags the Slice case, clears when they agree) |
+| TR4-0.3 | **Waiting for D0** — the owner confirms the real Slice Savings balance; then one owner-approved repair records it so both places agree | — |
+
+Production: needs deploy (`main` build applies 0012) after an encrypted backup. Full suite 151/151.
