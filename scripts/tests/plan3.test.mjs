@@ -323,3 +323,39 @@ test('daily refresh leaves held instruments and (by default) metal futures alone
   assert.equal(refreshSkipReason({ symbol: 'GC=F' }, { WEALTH_METAL_PRICE_SOURCE: 'futures' }), null);
   assert.equal(refreshSkipReason({ symbol: 'LT.NS' }, {}), null);
 });
+
+test('interest view: a day with correction revisions shows the sum of its rows (9 Nov 2026 Slice Savings = 7.21)', async () => {
+  const vm = await import('node:vm');
+  const src = readFileSync(new URL('../../app.js', import.meta.url), 'utf8');
+  const s = src.indexOf('function interestLatestLedger(');
+  let i = src.indexOf('{', s), d = 0; for (; i < src.length; i++) { if (src[i] === '{') d++; else if (src[i] === '}' && --d === 0) break; }
+  const row = (rev, amt) => ({ product_key: 'slice-savings', account_key: 'slice-savings-3731', accrual_date: '2026-11-09', revision: rev, interest_amount: amt });
+  const ctx = { interestRows: [row(1, '7.21404110'), row(2, '7.21000000'), row(3, '-7.21404110')], Map, Number, Math };
+  vm.runInNewContext(src.slice(s, i + 1) + ';globalThis.out=interestLatestLedger();', ctx);
+  assert.equal(ctx.out.length, 1);
+  assert.equal(ctx.out[0].interest_amount, 7.21);
+  assert.equal(ctx.out[0].revision, 3);
+});
+
+test('interest month total = statement through its end date + ledger days after it (Nov 2026 real figures)', async () => {
+  const vm = await import('node:vm');
+  const src = readFileSync(new URL('../../app.js', import.meta.url), 'utf8');
+  const fn = name => { const s = src.indexOf('function ' + name + '('); let i = src.indexOf('{', s), d = 0; for (; i < src.length; i++) { if (src[i] === '{') d++; else if (src[i] === '}' && --d === 0) break; } return src.slice(s, i + 1); };
+  const led = (p, a, d, amt, rev = 1) => ({ product_key: p, account_key: a, accrual_date: d, revision: rev, interest_amount: amt });
+  const ctx = {
+    interestStatements: [
+      { product_key: 'slice-savings', period_start: '2026-11-01', period_end: '2026-11-09', statement_total: '64.36' },
+      { product_key: 'atom-savings', period_start: '2026-11-01', period_end: '2026-11-09', statement_total: '66.80' }],
+    interestRows: [led('slice-savings', 's', '2026-11-08', '7.20'), led('slice-savings', 's', '2026-11-09', '7.21404110'), led('slice-savings', 's', '2026-11-09', '7.21', 2),
+      led('slice-savings', 's', '2026-11-09', '-7.21404110', 3), led('slice-savings', 's', '2026-11-10', '7.21509589'),
+      led('atom-savings', 'a', '2026-11-09', '9.56'), led('atom-savings', 'a', '2026-11-10', '9.55643836')],
+    Map, Number, Math, String,
+  };
+  vm.runInNewContext([fn('interestStatementFor'), fn('interestLatestLedger'), fn('interestMonthTotal')].join('\n') +
+    ";globalThis.s=interestMonthTotal('slice-savings');globalThis.a=interestMonthTotal('atom-savings');", ctx);
+  assert.deepEqual({ ...ctx.s }, { month: '2026-11', statementThrough: '2026-11-09', total: 71.58 }, '64.36 + 7.21509589');
+  assert.equal(ctx.a.total, 76.36, '66.80 + 9.55643836');
+  ctx.interestRows.push(led('slice-savings', 's', '2026-12-01', '7.30'));
+  vm.runInNewContext(";globalThis.s=interestMonthTotal('slice-savings');", ctx);
+  assert.deepEqual({ ...ctx.s }, { month: '2026-12', statementThrough: null, total: 7.3 }, 'a new month starts from the ledger');
+});

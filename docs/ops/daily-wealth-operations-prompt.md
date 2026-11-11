@@ -12,7 +12,8 @@ PRODUCTION ONLY · WRITES THROUGH THE API ONLY
 
 0) PREFLIGHT (stop and report if it fails)
 - GET $WEALTH_API_BASE/api/health → database.reachable is true and database.latestMigration is 0008_plan3_data_quality_interest_obligations_audit or later.
-  If not, stop: this prompt needs Plan 3.
+- GET $WEALTH_API_BASE/api/interest with the Bearer token → must be 200. 404 = the Plan 3 code is not deployed yet; 401 = WEALTH_INGEST_SECRET
+  is missing or wrong. In either case stop and report: this prompt needs the Plan 3 deployment (the database alone is not enough).
 
 1) INTEREST SOURCES (read)
 - GET /api/interest → sources[] lists every linked account with its product, current rate (decimal), rate start date, last accrual date,
