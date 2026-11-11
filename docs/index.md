@@ -94,7 +94,7 @@ Each module fix note should include:
 
 | Date | Plan | Status |
 |---|---|---|
-| 2026-11-11 | **[TSD — Claude Plan 3: data quality, in-app automation, operations](plans/claude-plan-3.md)** | **Deployed to Production 2026-11-11** (`2a2afde`, migrations 0008–0010); owner settings open — see §14.6 ([runbook](ops/operations-runbook.md)) |
+| 2026-11-11 | **[TSD — Claude Plan 3: data quality, in-app automation, operations](plans/claude-plan-3.md)** | **v1.3 — deployed to Production 2026-11-11** (`b8d040a`, migrations 0008–0011); changes after v1.2 in §14.7–14.16; owner settings open — see §14.6 ([runbook](ops/operations-runbook.md)) |
 | 2026-11-10 | **[TSD — Claude Plan 2: account model cut-over](plans/claude-plan-2.md)** | In progress: A.3, B, G, D.1 in Production; C done via Plan 3; D.2 (switch to v2), E, F not started |
 | 2026-11-10 | **[TSD — Claude Plan 1: stabilisation, security and account hierarchy](plans/claude-plan-1.md)** (master technical specification; links the plans below) | **Deployed to Production 2026-11-10** (data model still v1) |
 | 2026-11-10 | [Database optimization](plans/2026-11-10-database-optimization-plan.md) | Superseded by the TSD |

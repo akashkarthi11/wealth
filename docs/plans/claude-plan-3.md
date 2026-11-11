@@ -8,10 +8,10 @@
 |---|---|
 | Document | TSD — Claude Plan 3 |
 | Project | Wealth Ledger (`akashkarthi11/wealth`), Vercel project `wealth` |
-| Version | 1.2 |
+| Version | 1.3 |
 | Date | 2026-11-11 |
 | Author | Claude (Claude Code), prepared for the project owner |
-| Status | **Implemented and deployed to Production** (`main` `2a2afde`, 2026-11-11; migrations 0008–0010). Owner settings still open — see §14 |
+| Status | **Implemented and deployed to Production** (`main` `b8d040a`, build `20261111-claude-plan-3p`, 2026-11-11; migrations 0008–0011). Owner settings still open — see §14.6 |
 | Predecessors | [Claude Plan 1](claude-plan-1.md) (deployed) · [Claude Plan 2](claude-plan-2.md) (Phase B done; cut-over in progress) |
 | Companion PSD / FSD | Not created. Technical change only |
 | Standing rules | **No data is deleted** (runner guard + test). **Production only** for routine operations; Development is for rehearsal. Every deployment and production write needs explicit owner approval |
@@ -23,6 +23,7 @@
 | 1.0 | 2026-11-11 | First draft |
 | 1.1 | 2026-11-11 | Phases 1–6 implemented (§14); single-function router; daily-credited interest raises the balance (§14.1, 0009) |
 | 1.2 | 2026-11-11 | Deployed to Production; interest view fixes (§14.2); bank balances from the database (§14.3); audit stores changed fields only (§14.4, 0010); only `main` builds on Vercel (§14.5); open owner actions (§14.6) |
+| 1.3 | 2026-11-11 | Menu, Investments, Activity and Records pages (§14.7, §14.15); Angel One today's gain (§14.8); broker ledger and P&L (§14.9, 0011); statement imports (§14.10); duplicates and self transfers (§14.11–14.12); FD interest (§14.13); external-writer rules (§14.14); `v2` frozen; §14.6 refreshed |
 
 ### Approvals
 
@@ -393,7 +394,7 @@ About 6 working days plus owner input. Phase 1 needs decisions DV3-1 … DV3-3 a
 
 ## 14. Implementation status (2026-11-11)
 
-**Deployed to Production** (`main` `2a2afde`, app build `20261111-claude-plan-3h`). Tests: 110 passing. Migrations 0008, 0009 and 0010 are applied to Development and Production, each after an encrypted backup and a passing restore drill. `/api/health` reports 11 migrations (latest `0010_audit_changed_fields_only`); its `ok` is `false` only because `WEALTH_INGEST_SECRET` and the backup store are not set yet (§14.6).
+**Deployed to Production** (`main` `b8d040a`, app build `20261111-claude-plan-3p`; v1.2 baseline was `2a2afde`, build `3h`). Tests: 147 passing. Migrations 0008, 0009, 0010 and 0011 are applied to Development and Production, each after an encrypted backup and a passing restore drill. `/api/health` reports 12 migrations (latest `0011_broker_ledger`); its `ok` is `false` only because `WEALTH_INGEST_SECRET` and the backup store are not set yet (§14.6).
 The earlier failed `main` deploy (Hobby 12-function limit) is fixed by the single-function router (see [fix record](../modules/infra/2026-11-11-hobby-function-limit-single-router.md)).
 
 | Phase | Status | Evidence |
@@ -444,14 +445,98 @@ The earlier failed `main` deploy (Hobby 12-function limit) is fixed by the singl
 
 - `vercel.json` `git.deploymentEnabled = {"**": false, "main": true}`. Pushes to `claude-dev`, `development` and `v2` no longer create deployments.
 - Fix record: [Vercel builds main only](../modules/infra/2026-11-11-vercel-build-main-only.md). Commits `77768a8`, `20a5b21`.
-- Branch `v2` was created from `main` and is kept identical to it (`2a2afde`).
+- Branch `v2` was created from `main`. **Owner rule (2026-11-11): never merge into `v2`** — it stays at `06df8a5`. Releases go `claude-dev` → `development` → `main` only.
 
-### 14.6 Open owner actions
+### 14.6 Open owner actions (refreshed for v1.3)
 
-| Action | Why |
+| Action | Why | State |
+|---|---|---|
+| Set `WEALTH_INGEST_SECRET` in Production, then move the scheduled agents to the [daily](../ops/daily-wealth-operations-prompt.md) and [hourly](../ops/hourly-wealth-operations-prompt.md) API prompts | The hourly prompt still in use (ChatGPT) writes SQL directly, including `wealth_price_history`, which §14.4 stopped using | Open |
+| Hourly cloud routine (Claude) | Prepared (8 AM–10 PM IST, cron `30 2-16 * * *`, Gmail connector, paused) but **not created**: claude.ai has no GitHub access, and `WEALTH_DATABASE_URL` is not in the cloud environment. Owner: "leave this now" | Parked |
+| Create a private Vercel Blob store and set `WEALTH_BACKUP_KEY` | Nightly backup is skipped until both are set (`/api/health` `ok:false`) | Open |
+| Nippon India Large Cap units (29.02 stored vs ≈ 69.7 implied) | DV3-1; NAV not stored until confirmed | Open |
+| FD maturity dates (Slice FD, Angel One FD) | Interest accrues with no end date until given (§14.13) | Open |
+| Preview deployments → Development database | Preview uses the Production database | Open |
+| Stock Advisor report retention (hourly, on change, or daily) | Decision pending | Open |
+| Workbook-only look-alike pairs (Zarivault ₹950 on 25 May, Awfis ₹100 on 1 Jul) | Kept as two payments unless the owner says otherwise (§14.11) | Open |
+| Crypto (CoinDCX ₹3,59,251 in 2023-24), NDX P2P ₹15,000, monthly ₹21,600 to HDFC ••7649 | Seen in statements; not modelled (§14.10) | Owner to raise |
+| ~~FD terms~~, ~~duplicate pairs~~ | Done in §14.13 and §14.11 | Closed |
+
+### 14.7 Change 2026-11-11 — menu grouping, Investments and Activity pages
+
+- **Menu:** grouped as Money (Overview, Banks, Investments, Interest) · Activity (Transactions, Alerts, Subscriptions) · Tools ▾ (Stock Advisor, Angel One, Records, Data quality — owner only). Mobile bar: Home · Banks · Invest · Activity · More (alert badge). Owner choice "grouping better". Commit in `06df8a5`.
+- **Investments page** is built from holdings (`investmentsPageModel`), so its total equals the dashboard's investments figure; groups INR / US / FD / PF with price time and P&L per holding. Fix record: [Investments from holdings](../modules/investments/2026-11-11-investments-page-from-holdings.md).
+- **Activity page:** period presets (opens on this month), money in / out / net / transfers summary (out = spending + investments + card payments; transfers apart), day and month groups, search and filters kept across re-render, "Show more" paging. Fix record: [Activity redesign](../modules/accounts/2026-11-11-activity-page-redesign.md).
+- **More menu:** the "Financial overview" item (same as Home) is removed; the balance summary stays. Commit `44c3f6f` on `claude-dev` — **not yet deployed**.
+- Tests: `menu.test.mjs`, `investments.test.mjs`, `activity.test.mjs`. In Production from `041fc03` (Investments, Activity).
+
+### 14.8 Change 2026-11-11 — Angel One "today's gain"
+
+- `legacyPositionRows` returns `market_price_as_of`, `market_previous_close`, `market_previous_close_at` (LATERAL join on `wealth_instruments` / `wealth_instrument_prices`, with fallbacks).
+- Previous close = the last price before the latest price's IST trading day, so holidays (10 Nov 2026, NSE closed) and weekends work. The dashboard card shows "Today's gain" or "Day change · date", and "—" when unknown.
+- Fix record: [Angel One today's gain](../modules/investments/2026-11-11-angel-one-today-gain.md). Test: `daychange.test.mjs`. In Production from `041fc03`.
+
+### 14.9 Change 2026-11-11 — Angel One funds ledger and P&L (migration 0011)
+
+- New table `wealth_broker_ledger` (unique on user, broker, ledger, voucher, entry type, date, debit, credit). Kinds: `funds_added`, `funds_withdrawn` (incl. quarterly settlement), `trade`, `charge`, `mtf_transfer`, `credit_other`.
+- `api/_broker.js`: `parseLedgerSheet` (checks the sheet's totals and closing balance), `importBrokerLedger` (bulk, idempotent), `matchBrokerFunds` (funds-added rows matched to bank transactions within ±3 days; "pending/verify" categories renamed "Funds added to Angel One"), `brokerSummary`; `parsePnlSheet` / `pnlSourceKey` for the P&L report.
+- Scripts: `scripts/db/xlsx-lib.mjs` (no-dependency xlsx reader), `import-broker-ledger.mjs`, `import-broker-pnl.mjs` (check-only by default; `--apply --yes`).
+- Production: 952 ledger entries — net put in ₹2,12,232.98, charges ₹4,442.10, MTF closed 5 Dec 2025; 3 transfers matched. P&L snapshot: net ₹24,173. The broker panel sits inside the equity group on Investments.
+- Fix record: [Angel One ledger history](../modules/integrations/2026-11-11-angel-one-ledger-history.md). Test: `broker.test.mjs`. In Production from `4d2a262` (0011) and `080521c` (P&L).
+
+### 14.10 Change 2026-11-11 — statement imports (super.money, Paytm, HDFC)
+
+All imports: extracted with a parser and checked against the statement's printed totals; Development rehearsal; encrypted Production backup; idempotent (a re-run adds nothing); audited as owner; no name, PAN, phone or email stored.
+
+| Source | Result in Production |
 |---|---|
-| Set `WEALTH_INGEST_SECRET` in Production, then switch both scheduled agents to the new [daily](../ops/daily-wealth-operations-prompt.md) and [hourly](../ops/hourly-wealth-operations-prompt.md) prompts | The old hourly prompt still writes `wealth_price_history`. The old daily prompt reports "principal stale" after an estimated balance and writes nothing |
-| Create a private Vercel Blob store and set `WEALTH_BACKUP_KEY` | The nightly backup is skipped until both are set (`/api/health` `config.backup = false`) |
-| Nippon units, FD terms (rate, start, maturity), duplicate pairs | Phase 1 data-quality decisions DV3-1 … DV3-3 |
-| Preview deployments → Development database | Today Preview uses the Production database |
-| Stock Advisor report retention (hourly, only on change, or one per day) | Decision pending |
+| super.money UPI history (PDF) | 8 missing Slice Savings payments added; reference record kept |
+| Paytm UPI statement, Nov 2023 – Nov 2024 (151-page PDF) | Summary record + **1,014 transactions** (846 paid ₹10,70,611.47, 117 received ₹6,73,561.70, 53 self-transfers; 2 printed twice kept once) |
+| HDFC ••9498 statements, Apr 2025 – 10 Nov 2026 (2 password-protected PDFs) | **638 transactions**; every running balance chains and the STATEMENT SUMMARY matches; 3 rows already stored skipped; self transfers (80, ₹14,00,426) labelled as transfers |
+
+- Months before 21 May 2026 hold only these sources, so long-range spending averages read low.
+- Fix record: [account history](../modules/accounts/2026-11-11-supermoney-upi-history.md).
+
+### 14.11 Change 2026-11-11 — duplicate spending removed
+
+- Check: rows with the same date, account and amount (99 groups). The Slice credit card had 93 payments stored twice (workbook import + Slice statement import), ₹1,26,297.54.
+- Repair [`2026-11-11-mark-slice-card-duplicates.sql`](../../scripts/db/repairs/2026-11-11-mark-slice-card-duplicates.sql) marked each plain row `duplicate_of` its statement twin (one-to-one by `row_number`). On the owner's explicit request ("delete") the 93 marked rows were then **deleted** — a one-off exception to the no-deletion rule, run from outside `scripts/db/repairs` so the guard test stays strict; backup `prod-before-dupe-delete.wlb`; the script refused to run unless exactly 93 unreferenced marked rows matched.
+- 12 look-alike groups are kept (different payees, different UPI references, or two entries on the statement itself).
+
+### 14.12 Change 2026-11-11 — self transfers never count as money in / out
+
+- Money in / out counts only `income` and `expense` (+ `investment`, `liability` for out); `transfer` is shown apart (Activity, dashboard cash flow, monthly totals).
+- An audit of every non-transfer row found 2 own-account credits stored as income (₹80,000 and ₹800, 3 Nov 2026). Repair [`2026-11-11-self-transfers-not-income.sql`](../../scripts/db/repairs/2026-11-11-self-transfers-not-income.sql) relabelled them `transfer` / Self transfer.
+
+### 14.13 Change 2026-11-11 — FD interest calculated and shown
+
+- **Cause:** both FDs were linked with rates but had no terms, so `planAccrual` returned `pending_terms`; their rate periods also started after booking.
+- **Data** ([`2026-11-11-fd-terms.sql`](../../scripts/db/repairs/2026-11-11-fd-terms.sql)): Slice FD ₹3,001 @ 7.75%, Angel One FD (Unity SFB) ₹1,000 @ 8%; booked 5 Nov 2026 (from interest-to-date evidence); payout cumulative, quarterly compounding (owner); no maturity (owner: "don't know"); rate periods from 5 Nov; current values ₹3,005.04 and ₹1,001.30 (owner). Accrual 5–10 Nov written (₹3.82 and ₹1.32); the nightly job continues.
+- **UI:** `interestSeriesKey` maps product keys ending in `fd` to one "Fixed deposits" series (summed per day) — before this, an FD row overwrote the Slice Savings value for that day. Interest by day (Interest page and dashboard) has an amber FD line, legend and month total; the daily list has an FD entry; the FD box shows app-reported interest (or current − invested) and the app's calculated total.
+- Fix record: [FD interest](../modules/interest/2026-11-11-fd-interest-in-interest-view.md). Test: `interest-fd.test.mjs`. In Production from `8edae9b`.
+
+### 14.14 Change 2026-11-11 — external writer rules (`rules.md`)
+
+- **Incident:** an external writer (ChatGPT; audit actor `external`) added a ₹5,000 transaction and also set Slice Savings to `pending_reconciliation`. Totals count only `verified` and `stale` balances, so the account left the bank total. Repair [`2026-11-11-slice-savings-status.sql`](../../scripts/db/repairs/2026-11-11-slice-savings-status.sql) set it to `stale` / `estimated` (amount unchanged).
+- **Rules:** the owner added [`rules.md`](../../rules.md) (on `development`): a transaction goes to `wealth_transactions` only; never touch `wealth_accounts` / `wealth_account_balances` as a side effect; `verified` needs bank evidence, `stale` for estimates, never `pending_reconciliation`; no implicit Production/Development switch; leave `v2` alone; spending defaults to BOI. [`CLAUDE.md`](../../CLAUDE.md) now tells Claude Code to read it first, so both assistants work to the same rules.
+- **Not enforced in code yet:** the database still accepts `pending_reconciliation` from any writer. A follow-up could reject it for actor `external` or count it with a "needs check" flag.
+
+### 14.15 Change 2026-11-11 — Records page (was "Other records")
+
+- Menu **Records**, page **Statements & records**. Lists every `wealth_snapshots` record (30 in Production; the old page showed only records with `sections`, hiding 13), newest first by month, with a type badge (Statement / Screenshot / Holdings / Report / Note), counts, up to 3 key figures, and all stored data on open (sections, key/value tiles, tables for item lists, notes). Search across all stored values; type chips. `client_code` and internal keys hidden. Read-only; no API change (data comes from the dashboard payload).
+- Fix record: [Records page](../modules/accounts/2026-11-11-records-page.md). Test: `records.test.mjs`. In Production from `b8d040a` (build `3p`).
+
+### 14.16 Production data operations log (2026-11-11, after v1.2)
+
+Every write below had explicit owner approval and an encrypted backup first (`*.wlb` in the session scratchpad, key in `backup-key.env`).
+
+| Operation | Backup | Result |
+|---|---|---|
+| Migration 0011 + Angel One ledger import | `prod-before-0011.wlb` | 952 entries |
+| super.money payments + reference | `prod-before-supermoney.wlb` | +8 transactions |
+| Paytm summary / transactions | `prod-before-paytm-summary.wlb`, `prod-before-paytm-import.wlb` | +1 record, +1,014 transactions |
+| Slice duplicates marked, then deleted | `prod-before-dupes.wlb`, `prod-before-dupe-delete.wlb` | −93 transactions |
+| HDFC ••9498 statements | `prod-before-hdfc-import.wlb` | +638 transactions (total 2,161) |
+| Self transfers relabelled | `prod-before-self-transfers.wlb` | 2 rows |
+| FD terms, values, accrual | `prod-before-fd-terms.wlb` | 2 accounts, 2 rate periods, 2 values, 12 ledger rows |
+| Slice Savings status | `prod-before-slice-status.wlb` | 1 account, 1 balance row |
