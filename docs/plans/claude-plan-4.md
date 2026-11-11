@@ -193,3 +193,19 @@ Part 0 → A → B → C, each: `claude-dev` → Development rehearsal → owner
 **Refinement 0013** (owner: "my chatgpt run the task so it need to write in db"): a back-dated balance is allowed when it is `verified` (bank evidence, e.g. a late-recorded screenshot); only back-dated estimates are refused. ChatGPT's normal writes — prices, Gmail transactions, email imports, advisor reports, newer stale/verified balances — were never affected. Development: 0013 applied (14 migrations), live check passed.
 
 Production: needs deploy (`main` build applies 0012 and 0013) after an encrypted backup. Full suite 154/154.
+
+### Part 0 — in Production (2026-11-11)
+Owner "main": backup `prod-before-0012.wlb` (32 tables, 5,774 rows); `main` `f344277` (build `3u`) applied 0012 and 0013 (14 migrations). Live check in rolled-back transactions on Production: external `pending_reconciliation` refused, external back-dated estimate refused, back-dated verified allowed, newer stale allowed, owner allowed; nothing changed.
+
+### Part A — Rewards & points (2026-11-11, owner: "a")
+Defaults taken without an answer: D1 = all programs; D2 = shown apart from net worth; D3 = ₹ value only where a rate with a source exists.
+| ID | State | Evidence |
+|---|---|---|
+| TR4-A.1–A.3 | **Built** — migration [`0014_rewards.sql`](../../scripts/migrations/0014_rewards.sql): `wealth_reward_programs` (rate needs `rate_source`; `cash_match` for programs paid as money), `wealth_reward_balances` (append-only, verified / estimated), `wealth_reward_events`; audited. [`0015`](../../scripts/migrations/0015_rewards_drop_duplicate_index.sql) drops a redundant index | `rewards.test.mjs` |
+| TR4-A.4 | **Built** — cash rewards (Spark, card cashback) are summed from income transactions by `cash_match` (scoped to the linked card); nothing is copied | test: HDFC card cashback counted, the Swiggy expense on the same card not |
+| TR4-A.5 | **Seed ready** — [`2026-11-11-seed-reward-programs.sql`](../../scripts/db/repairs/2026-11-11-seed-reward-programs.sql): Paytm Gold Coins (430 → 431 → 436, ₹0.01/coin, redeem at 500), Slice Monies (1,30,954 → 1,42,378; ₹0.01/Monie from the 9 Nov screen "₹1,423.78" — another screen showed ₹0, owner to confirm), Slice Spark (cash), Slice card cashback (cash, card ••6136), HDFC Swiggy Orange (0 points on 8 Nov + 5% Swiggy cashback on ••9229), Roarbank rewards (no balance yet). Development: 6 + 6 rows, re-run 0 | — |
+| TR4-A.6 | **Built** — `GET /api/rewards`, `POST /api/rewards/balances`, `/api/rewards/events`, `/api/rewards/programs` (owner or ingest secret, `?dryRun=1`; a ₹ rate requires its source) | `rewards.test.mjs` |
+| TR4-A.7 | **Built** — Rewards page (Money menu and More): points value total, cashback this month / year / all time, one card per program (units, ≈ ₹ value or "₹ value not set", progress to redemption, verified date, notes, "Update" form), cash programs with month / year / all-time totals, cashback by type, "How this works" | page test; visual check at 540 px with Development data |
+| TR4-A.8 | Not built — redemption / expiry alerts (needs expiry dates) | — |
+
+Development (real data): points value ₹1,428.14 (2 of 6 programs priced); cashback ₹450 this month, ₹3,698.55 all time (44 credits); HDFC Swiggy cashback ₹577; Slice card cashback ₹2,665.85; Spark ₹450. Build `20261111-claude-plan-3v`; full suite 164/164.
