@@ -105,7 +105,42 @@ export async function accountHierarchyRows(uid, db = sql) {
     db.query(`SELECT fx_to_inr::float8 AS rate, fetched_at AS as_of FROM wealth_instrument_prices
       WHERE fx_to_inr > 0 ORDER BY fetched_at DESC LIMIT 1`),
   ]);
-  return { accounts, balances, holdings, marketFx: fx[0] || null };
+  const moves = await cardMovesSinceBalance(uid, db).catch(() => []);
+  return { accounts, balances: applyCardMoves(balances, moves), holdings, marketFx: fx[0] || null };
+}
+
+// Credit cards (2026-11-11, owner: "if i spent from card it need to add liability"): the owed amount shown is the last
+// recorded balance + card movements after it — spends and investments add, cashback / refunds / bill payments on the card
+// subtract. Nothing is written (rules.md §1: a transaction never changes a stored balance); the figure is marked
+// "estimated" until the next recorded balance. A movement counts when its day is after the balance day, or the same day
+// but entered after the balance was recorded, so nothing is counted twice.
+export async function cardMovesSinceBalance(uid, db = sql) {
+  return db.query(`SELECT t.account_id,
+      sum(CASE WHEN t.kind IN ('expense','investment') THEN t.amount
+               WHEN t.kind = 'income' THEN -t.amount
+               WHEN t.kind = 'transfer' AND coalesce(t.category,'') ~* 'payment' THEN -t.amount ELSE 0 END)::float8 AS delta,
+      count(*) FILTER (WHERE t.kind IN ('expense','investment'))::int AS spends,
+      coalesce(sum(t.amount) FILTER (WHERE t.kind IN ('expense','investment')), 0)::float8 AS spent
+    FROM wealth_transactions t
+    JOIN wealth_accounts a ON a.id = t.account_id AND a.user_id = $1 AND a.subtype_code = 'credit_card'
+    JOIN wealth_v_latest_balances b ON b.account_id = t.account_id
+    WHERE t.user_id = $1 AND t.duplicate_of IS NULL
+      AND (t.occurred_on > (b.as_of AT TIME ZONE 'Asia/Kolkata')::date
+           OR (t.occurred_on = (b.as_of AT TIME ZONE 'Asia/Kolkata')::date AND t.created_at > b.as_of))
+    GROUP BY t.account_id`, [uid]);
+}
+
+export function applyCardMoves(balances, moves) {
+  const by = new Map(moves.filter(m => m.delta).map(m => [m.account_id, m]));
+  const inr = v => '₹' + Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+  return balances.map(b => {
+    const m = by.get(b.account_id);
+    if (!m || b.balance == null) return b;
+    const recorded = Number(b.balance), est = Math.round((recorded + Number(m.delta)) * 100) / 100;
+    const day = new Date(new Date(b.as_of).getTime() + 5.5 * 3600e3).toISOString().slice(0, 10);
+    return { ...b, balance: est, status: 'estimated', recordedBalance: recorded,
+      note: `${inr(recorded)} recorded ${day} ${m.delta >= 0 ? '+' : '−'} ${inr(Math.abs(m.delta))} card activity since${m.spends ? ` (${m.spends} spend${m.spends > 1 ? 's' : ''})` : ''}` };
+  });
 }
 
 // v2 "add fixed deposit": account + first balance in one statement (TR-5.6). Throws 23505 on a duplicate.
