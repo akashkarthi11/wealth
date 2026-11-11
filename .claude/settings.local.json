@@ -2,7 +2,16 @@
   "permissions": {
     "allow": [
       "Bash(git push -u origin claude-dev)",
-      "Bash(git push origin claude-dev)"
+      "Bash(git push origin claude-dev)",
+      "Bash(git *)",
+      "Bash(cd /c/Users/acer/wealth && git *)",
+      "Bash(npx vercel *)",
+      "Bash(npx --yes vercel *)",
+      "Bash(vercel *)",
+      "PowerShell(git *)",
+      "PowerShell(npx vercel *)",
+      "PowerShell(npx --yes vercel *)",
+      "PowerShell(vercel *)"
     ]
   }
 }
