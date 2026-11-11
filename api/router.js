@@ -43,6 +43,12 @@ export const ROUTES = {
   'splits': () => import('./_routes/splits.js'),
   'splits/balances': () => import('./_routes/splits.js'),
   'splits/moves': () => import('./_routes/splits.js'),
+  // TSD Claude Plan 4, Part B — money lent (0020)
+  'loans': () => import('./_routes/loans.js'),
+  'loans/people': () => import('./_routes/loans.js'),
+  'loans/entries': () => import('./_routes/loans.js'),
+  'loans/splits': () => import('./_routes/loans.js'),
+  'loans/splits/cancel': () => import('./_routes/loans.js'),
 };
 
 // The route comes from the rewrite's __route parameter, or from the path when the router is called directly.
