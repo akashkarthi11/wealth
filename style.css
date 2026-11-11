@@ -617,3 +617,71 @@ button.dashboard-alert-banner:focus-visible{outline:2px solid #8bb5ff;outline-of
 @media(max-width:900px) and (min-width:701px){.menu-nav button{padding:7px 7px;gap:5px;font-size:12px}.menu-nav button i{display:none}.nav-tools-toggle i{display:inline}}
 #mobileMore{position:relative}
 .mobile-nav .nav-badge{position:absolute;top:5px;left:calc(50% + 6px);min-width:16px;height:16px;font-size:9px}
+
+/* Investments page (2026-11-11): groups of holdings from the database */
+.inv-list{display:grid;gap:10px}
+.inv-group{border:1px solid #2a3d57;border-radius:15px;background:linear-gradient(145deg,#142238,#101a2a);overflow:hidden}
+.inv-group>summary{display:flex;align-items:center;gap:12px;padding:13px 14px;cursor:pointer;list-style:none}
+.inv-group>summary::-webkit-details-marker{display:none}
+.inv-group>summary:hover{background:#17263b}
+.inv-group>summary:after{content:'›';color:#7f93ad;font-size:22px;transition:transform .15s;margin-left:2px}
+.inv-group[open]>summary:after{transform:rotate(90deg)}
+.inv-group-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.inv-group-main b{font-size:14px}
+.inv-group-main small,.inv-row small{margin:0;font-size:11px;letter-spacing:0;color:#8fa2bd;overflow-wrap:anywhere}
+.inv-rows{border-top:1px solid #26364e;padding:2px 14px 6px}
+.inv-row{display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-top:1px solid #22324a}
+.inv-row:first-child{border-top:0}
+.inv-row-main{min-width:0;display:flex;flex-direction:column;gap:4px}
+.inv-row-main b{font-size:13px}
+.inv-row-amt{flex:0 0 auto;text-align:right;display:flex;flex-direction:column;gap:3px}
+.inv-row-amt b{font-variant-numeric:tabular-nums;white-space:nowrap}
+.inv-row-amt small{white-space:nowrap}
+.inv-empty{margin:10px 0;font-size:12px}
+.inv-activity{margin-top:10px}
+@media(max-width:700px){.inv-group>summary{padding:12px 11px;gap:10px}.inv-rows{padding:2px 11px 6px}.inv-row-amt b{font-size:13px}}
+.inv-row-amt small{letter-spacing:0;margin:0;font-size:11px}
+
+/* Activity page (2026-11-11): period totals, month/day groups, expandable rows */
+.act-page{padding:0}
+.act-toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+.act-toolbar .primary{padding:9px 14px;font-size:13px}
+.act-periods{display:flex;gap:4px;margin:14px 0 2px;padding:4px;background:#0c1626;border:1px solid #26364e;border-radius:13px;overflow-x:auto;scrollbar-width:none}
+.act-periods::-webkit-scrollbar{display:none}
+.act-periods button{flex:1 0 auto;background:transparent;border:0;border-radius:9px;color:#9fb1c9;padding:9px 12px;font-size:13px;font-weight:600;white-space:nowrap}
+.act-periods button.active{background:#20344f;color:#fff;box-shadow:inset 0 0 0 1px #34507a}
+.act-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:6px 0 4px}
+.act-tile{background:#0d1929;border:1px solid #26364e;border-radius:13px;padding:12px 13px;min-width:0}
+.act-tile small{display:block;margin:0;font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:#8fa2bd}
+.act-tile b{display:block;margin-top:6px;font-size:18px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.act-tile em{display:block;margin-top:4px;font-style:normal;font-size:10px;color:#7f93ad;line-height:1.35}
+.act-tile.in b{color:var(--green)}.act-tile.out b{color:#ff9b9b}.act-tile.net.pos b{color:var(--green)}.act-tile.net.neg b{color:#ff9b9b}.act-tile.tr b{color:#c7d3e4}
+.act-tile.net{border-color:#34507a;background:#132339}
+.act-month{margin-top:18px}
+.act-month-head{position:sticky;top:64px;z-index:5;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 12px;background:#15243a;border:1px solid #2a3d57;border-radius:11px}
+.act-month-head b{font-size:13px}
+.act-month-head span,.act-day-head span:last-child{display:flex;gap:10px;font-size:11px;font-variant-numeric:tabular-nums}
+.act-month-head em,.act-day-head em{font-style:normal}
+em.in{color:var(--green)}em.out{color:#ff9b9b}
+.act-day{margin-top:8px}
+.act-day-head{display:flex;justify-content:space-between;gap:10px;padding:8px 4px 6px;font-size:11px;font-weight:700;color:#8fa2bd;border-bottom:1px solid #22324a}
+.act-row{border-bottom:1px solid #1f2e44}
+.act-row>summary{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:11px;align-items:center;padding:11px 4px;cursor:pointer;list-style:none;border-radius:10px}
+.act-row>summary::-webkit-details-marker{display:none}
+.act-row>summary:hover,.act-row[open]>summary{background:#132238}
+.act-icon{width:36px;height:36px;display:grid;place-items:center;border-radius:11px;font-size:16px;background:#1c3045;color:#c7d3e4}
+.act-icon.in{background:#173a33;color:var(--green)}.act-icon.out{background:#3a1f27;color:#ff9b9b}.act-icon.inv{background:#1f2c4d;color:#9fbaff}
+.act-copy{min-width:0;display:flex;flex-direction:column;gap:3px}
+.act-copy b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.act-copy small{margin:0;font-size:11px;letter-spacing:0;color:#8fa2bd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.act-noacct{color:#f5c26b}
+.act-amt{font-size:14px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums;color:#c7d3e4}
+.act-amt.in{color:var(--green)}.act-amt.out{color:#ff9b9b}
+.act-more{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;padding:4px 4px 14px 51px}
+.act-more dl{margin:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 18px;font-size:12px;flex:1}
+.act-more dt{color:#7f93ad;font-size:10px;letter-spacing:.5px;text-transform:uppercase}
+.act-more dd{margin:2px 0 0;color:#dce6f4;overflow-wrap:anywhere}
+.act-delete.delete{flex:0 0 auto;font-size:12px;color:#ff9b9b;border:1px solid #5a2f38;border-radius:9px;padding:7px 11px;background:#2a161c}
+.act-more-btn{display:block;width:100%;margin:16px 0 4px}
+@media(max-width:700px){.act-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.act-tile b{font-size:16px}.act-month-head{top:0}.act-more{flex-direction:column;align-items:stretch;padding-left:4px}.act-delete.delete{align-self:flex-end}}
+.inv-day{font-size:11px!important;letter-spacing:0!important;white-space:nowrap}
