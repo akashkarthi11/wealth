@@ -78,6 +78,30 @@ test('record a balance (newest wins), validation, events and program rate need a
   assert.equal(rewardValue({ inr_per_unit: null }, 100), null);
 });
 
+test('reward alerts (ready / near / expiring) and the dashboard tile', () => {
+  const src = readFileSync(new URL('../../app.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+  const block = src.slice(src.indexOf('// Rewards page (2026-11-11'), src.indexOf('// Activity page (2026-11-11)'));
+  const ctx = { esc: s => String(s ?? ''), money: v => '₹' + Number(v).toFixed(2), $: () => null, api: async () => ({}), Number, String, Date, Math, Object, JSON, Array, FormData: class {} };
+  const soon = new Date(Date.now() + 10 * 864e5).toISOString().slice(0, 10);
+  vm.runInNewContext(block + ';globalThis.t={rewardAlertItems,rewardAlertsHtml,rewardsTileHtml,set:d=>{rewardsData=d}};', ctx);
+  assert.equal(ctx.t.rewardsTileHtml(), '', 'no tile before data');
+  ctx.t.set({ totals: { value: 1428.14 }, cashback: { month: 450 }, programs: [
+    { id: 'a', name: 'Paytm Gold Coins', unit: 'Gold Coins', units: 436, min_redeem: 500, toRedeem: 64, value: 4.36 },      // 12.8 % away → no alert
+    { id: 'b', name: 'Near', unit: 'points', units: 460, min_redeem: 500, toRedeem: 40, value: null },                     // 8 % away
+    { id: 'c', name: 'Ready', unit: 'coins', units: 502, min_redeem: 500, toRedeem: 0, value: 5.02 },
+    { id: 'd', name: 'Expiring', unit: 'points', units: 1200, expires_on: soon, value: null } ] });
+  const kinds = ctx.t.rewardAlertItems().map(a => a.p.id + ':' + a.kind);
+  assert.equal(JSON.stringify(kinds), JSON.stringify(['b:near', 'c:ready', 'd:expiring']));
+  const html = ctx.t.rewardAlertsHtml();
+  assert.match(html, /<h4>Rewards<\/h4>/);
+  assert.match(html, /Ready to redeem — 502 coins ≈ ₹5\.02/);
+  assert.match(html, /40 points more to redeem \(460 of 500\)/);
+  assert.match(html, /1,200 points expire in 10 days/);
+  assert.match(ctx.t.rewardsTileHtml(), /data-view="rewards"><small>REWARDS &amp; CASHBACK<\/small><strong>₹1428\.14<\/strong><span>points value · cashback this month ₹450\.00/);
+  assert.match(src, /n=alertPaymentItems\(\)\.length\+rewardAlertItems\(\)\.length/, 'badge counts reward alerts');
+  assert.match(src, /if\(d\.rewards\)rewardsData=d\.rewards;/, 'dashboard payload feeds rewards');
+});
+
 test('Rewards page: points card with progress and ₹ value, cash card with totals, unpriced card, update form', () => {
   const src = readFileSync(new URL('../../app.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   const block = src.slice(src.indexOf('// Rewards page (2026-11-11'), src.indexOf('// Activity page (2026-11-11)'));

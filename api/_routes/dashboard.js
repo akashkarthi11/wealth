@@ -2,6 +2,7 @@ import {sql,schema,json,sessionUser,dashboardModel} from '../_lib.js';
 import {pageTransactions,spendingRows,accountHierarchyRows,legacyPositionRows} from '../_queries.js';
 import {valuePortfolio} from '../_valuation.js';
 import {brokerSummary} from '../_broker.js';
+import {rewardsOverview} from '../_rewards.js';
 
 async function readDashboard(uid){
  const [users,page,spending,templates,accounts,positions,interest,interestStatements]=await Promise.all([
@@ -43,6 +44,8 @@ export default async function handler(req,res){
   }
   // Broker funds ledger (0011): money put in / withdrawn / charges per broker. Never blocks the dashboard.
   const broker=await brokerSummary(uid).catch(e=>{console.warn('[wealth-dashboard:broker]',e?.message||e);return []});
-  return json(res,200,{broker,transactions:payload.transactions,nextCursor:payload.nextCursor,spending:payload.spending,snapshots:payload.snapshots,template:payload.template,accounts:payload.accounts,positions:payload.positions,interest:payload.interest,interestStatements:payload.interestStatements,categorySymbols,model});
+  // Rewards & points (0014, owner only): tile and alerts. Never blocks the dashboard.
+  const rewards=payload.role==='admin'?await rewardsOverview(uid).catch(e=>{console.warn('[wealth-dashboard:rewards]',e?.message||e);return null}):null;
+  return json(res,200,{broker,rewards,transactions:payload.transactions,nextCursor:payload.nextCursor,spending:payload.spending,snapshots:payload.snapshots,template:payload.template,accounts:payload.accounts,positions:payload.positions,interest:payload.interest,interestStatements:payload.interestStatements,categorySymbols,model});
  }catch(e){console.error('[wealth-dashboard]',e?.message||e);return json(res,500,{error:'Unable to load dashboard.'})}
 }
