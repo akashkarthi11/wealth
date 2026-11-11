@@ -906,3 +906,7 @@ button.lend-share{cursor:pointer;color:inherit;font:inherit;font-size:12px}butto
 .lend-assign-or{display:flex;align-items:center;gap:10px;margin:2px 0 8px}.lend-assign-or span{font-size:11px;color:var(--muted)}.lend-assign-or .ghost{padding:9px 13px;font-size:13px}
 body.signing-out{cursor:progress}body.signing-out main{opacity:.55;pointer-events:none;transition:opacity .2s}
 .lend-item-act{justify-self:start;display:flex;gap:10px}.lend-item-act .link-btn{text-align:left;padding:2px 0}
+/* One record at a time (build 4i) */
+.lend-item-act{flex-wrap:wrap;gap:4px 12px}.link-btn.danger{color:#ff9b9b}.lend-off-tag{font-size:11px;color:#ffcf8a;padding:1px 7px;border:1px solid #6b5230;border-radius:12px}
+.lend-pay.is-off>b{opacity:.5;text-decoration:line-through}.lend-pay.is-off>span>b{opacity:.75}
+.lend-hist{opacity:.92}.lend-hist .rw-fig b{color:#c8d6ea}.act-tag.off{color:#c8b48a;border-color:#4d4433;background:#1e1b16;text-decoration:none}
