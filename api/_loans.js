@@ -70,8 +70,8 @@ export function personFigures(moves, { annualRate = null, dueOn = null, status =
 
 export async function loansOverview(uid, { db = sql, now = Date.now() } = {}) {
   const today = istToday(now);
-  const [people, entries, shares, splits, rollups] = await Promise.all([
-    db.query(`SELECT id, name, kind, due_on::text AS due_on, annual_rate::float8 AS annual_rate, status, note FROM wealth_people WHERE user_id = $1 AND status <> 'removed' ORDER BY lower(name)`, [uid]),
+  const [people, entries, shares, splits, rollups, requests] = await Promise.all([
+    db.query(`SELECT id, name, kind, due_on::text AS due_on, annual_rate::float8 AS annual_rate, status, note, share_created_at FROM wealth_people WHERE user_id = $1 AND status <> 'removed' ORDER BY lower(name)`, [uid]),
     db.query(`SELECT e.id, e.person_id, e.direction, e.amount::float8 AS amount, e.occurred_on::text AS on, e.transaction_id, e.note, e.split_id, e.rollup_id, e.rollup_ref, e.status,
         t.description AS tx_description, coalesce(a.account_name, nullif(t.account, '')) AS account
       FROM wealth_person_entries e JOIN wealth_people p ON p.id = e.person_id AND p.user_id = $1
@@ -85,6 +85,9 @@ export async function loansOverview(uid, { db = sql, now = Date.now() } = {}) {
     db.query(`SELECT r.id, r.person_id, r.closed_on::text AS on, r.total_owed::float8 AS total_owed, r.already_back::float8 AS already_back,
         r.new_amount::float8 AS new_amount, r.closed_items, r.note
       FROM wealth_person_rollups r JOIN wealth_people p ON p.id = r.person_id AND p.user_id = $1 ORDER BY r.closed_on DESC, r.created_at DESC`, [uid]),
+    db.query(`SELECT r.id, r.person_id, p.name, r.amount::float8 AS amount, r.paid_on::text AS paid_on, r.method, r.note, r.created_at
+      FROM wealth_lend_requests r JOIN wealth_people p ON p.id = r.person_id AND p.user_id = $1 WHERE r.status = 'pending' ORDER BY r.created_at DESC LIMIT 50`, [uid])
+      .catch(e => { if (e?.code === '42P01') return []; throw e; }),
   ]);
   const splitById = new Map(splits.map(s => [s.id, s]));
   const nameById = new Map(people.map(p => [p.id, p.name]));
@@ -103,7 +106,8 @@ export async function loansOverview(uid, { db = sql, now = Date.now() } = {}) {
     const open = all.filter(i => !i.rollupId);                 // closed by a round-off → history only
     const rolls = rollups.filter(r => r.person_id === p.id).map(r => ({ id: r.id, on: r.on, totalOwed: r.total_owed, alreadyBack: r.already_back,
       newAmount: r.new_amount, closedItems: r.closed_items, note: r.note, items: all.filter(i => i.rollupId === r.id) }));
-    const person = { id: p.id, name: p.name, kind: p.kind, dueOn: p.due_on, annualRate: p.annual_rate, status: p.status, note: p.note,
+    const person = { id: p.id, name: p.name, kind: p.kind, sharedSince: p.share_created_at || null,
+      requests: requests.filter(q => q.person_id === p.id).length, dueOn: p.due_on, annualRate: p.annual_rate, status: p.status, note: p.note,
       ...personFigures(open.filter(i => !i.writtenOff), { annualRate: p.annual_rate, dueOn: p.due_on, status: p.status, today }),
       bills: open.filter(i => i.type === 'bill').length, unpaidShares: open.filter(i => i.type === 'bill' && !i.paid && !i.writtenOff).length,
       writtenOff: r2(open.filter(i => i.writtenOff && i.direction === 'out').reduce((n, i) => n + i.amount, 0)), items: open, rollups: rolls };
@@ -130,6 +134,7 @@ export async function loansOverview(uid, { db = sql, now = Date.now() } = {}) {
     totals: { owed: r2(active.reduce((n, p) => n + p.owed, 0)), lent: r2(out.reduce((n, p) => n + p.lent, 0)),
       repaid: r2(out.reduce((n, p) => n + p.repaid, 0)), people: active.filter(p => p.owed > 0).length, overdue: active.filter(p => p.overdue).length,
       splits: splits.length },
+    requests: requests.map(q => ({ id: q.id, personId: q.person_id, name: q.name, amount: q.amount, paidOn: q.paid_on, method: q.method, note: q.note, sentAt: q.created_at })),
     people: out, splits: splitList, links, suggestions: await loanSuggestions(uid, { db, people: out }) };
 }
 
@@ -266,6 +271,7 @@ export async function addPersonEntry(uid, b, { db = sql, actor = 'owner', dryRun
     SELECT $1, m.direction, m.amount, m.on, m.transaction_id, $3 FROM jsonb_to_recordset($2::jsonb) AS m(direction text, amount numeric, "on" date, transaction_id uuid)
     ON CONFLICT DO NOTHING RETURNING id`, [person.id, JSON.stringify(moves), text(b.note)]]]);
   if (ins.length !== moves.length) throw httpError(409, 'A transaction is already linked to a person');
+  if (moves.some(m => m.direction === 'out')) await db.query(`UPDATE wealth_people SET status = 'open', updated_at = now() WHERE id = $1 AND status = 'settled'`, [person.id]);
   return { stored: true, personId: person.id, person: person.name, entries: ins.length };
 }
 
@@ -313,6 +319,8 @@ export async function createSplit(uid, b, { db = sql, actor = 'owner', dryRun = 
     SELECT (SELECT id FROM s) AS id, (SELECT count(*)::int FROM sh) AS shares`,
     [uid, txId, title, summary.occurredOn, summary.total, summary.tax, b.mode, text(b.note), JSON.stringify(named.map(s => ({ person_id: s.personId, base: s.base, tax: s.tax, amount: s.amount })))]]])
     .catch(e => { if (e?.code === '23505') throw httpError(409, 'This bill is already split'); throw e; });
+  const reopen = named.filter(x => x.personId).map(x => x.personId);
+  if (reopen.length) await db.query(`UPDATE wealth_people SET status = 'open', updated_at = now() WHERE id = ANY($1::uuid[]) AND status = 'settled'`, [reopen]);
   return { stored: true, splitId: ins[0].id, ...summary };
 }
 
