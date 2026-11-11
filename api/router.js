@@ -26,6 +26,7 @@ export const ROUTES = {
   'balances': () => import('./_routes/balances.js'),
   'holdings': () => import('./_routes/holdings.js'),
   'accounts': () => import('./_routes/accounts.js'),
+  'account-detail': () => import('./_routes/account-detail.js'),
   'transaction-review': () => import('./_routes/transaction-review.js'),
   'interest': () => import('./_routes/interest.js'),
   'interest/rates': () => import('./_routes/interest.js'),

@@ -52,23 +52,20 @@ export async function storePrices(uid, items, { db = sql, actor = 'agent', dryRu
       [`INSERT INTO wealth_instrument_prices (instrument_id, as_of, source, price, fx_to_inr, fetched_at)
         VALUES ($1,$2,$3,$4,$5,now()) ON CONFLICT (instrument_id, as_of, source) DO NOTHING RETURNING instrument_id`,
         [ins.id, asOf, it.source, num(it.price), fx]],
-      // Legacy table (until Plan 2 Phase F): every live position of this user that maps to the instrument.
+      // Legacy latest-price table (read by the v1 dashboard; one row per asset, updated in place). The old
+      // wealth_price_history table is no longer written: nothing reads it, and wealth_instrument_prices keeps the history.
       [`WITH assets AS (
           SELECT ia.id, ia.user_id FROM wealth_investment_assets ia
           JOIN wealth_positions p ON p.id = ia.position_id
           JOIN wealth_instruments i ON i.asset_class = ia.asset_class
            AND i.symbol = coalesce(p.ticker, CASE WHEN ia.asset_class = 'precious_metal' THEN upper(p.record_type) ELSE p.name END)
           WHERE i.id = $1 AND p.user_id = $2 AND p.record_type NOT LIKE '%_ARCHIVED'
-        ), up AS (
-          INSERT INTO wealth_market_prices (asset_id, user_id, unit_price, currency, source, source_timestamp, fetched_at, status, metadata)
-          SELECT id, user_id, $3, $4, $5, $6, now(), 'fresh', $7::jsonb FROM assets
-          ON CONFLICT (asset_id) DO UPDATE SET unit_price = EXCLUDED.unit_price, currency = EXCLUDED.currency, source = EXCLUDED.source,
-            source_timestamp = EXCLUDED.source_timestamp, fetched_at = now(), status = 'fresh', metadata = EXCLUDED.metadata
-          WHERE wealth_market_prices.source_timestamp IS NULL OR EXCLUDED.source_timestamp > wealth_market_prices.source_timestamp
-          RETURNING asset_id
         )
-        INSERT INTO wealth_price_history (asset_id, user_id, unit_price, currency, source, source_timestamp, metadata)
-        SELECT a.id, a.user_id, $3, $4, $5, $6, $7::jsonb FROM assets a WHERE a.id IN (SELECT asset_id FROM up)
+        INSERT INTO wealth_market_prices (asset_id, user_id, unit_price, currency, source, source_timestamp, fetched_at, status, metadata)
+        SELECT id, user_id, $3, $4, $5, $6, now(), 'fresh', $7::jsonb FROM assets
+        ON CONFLICT (asset_id) DO UPDATE SET unit_price = EXCLUDED.unit_price, currency = EXCLUDED.currency, source = EXCLUDED.source,
+          source_timestamp = EXCLUDED.source_timestamp, fetched_at = now(), status = 'fresh', metadata = EXCLUDED.metadata
+        WHERE wealth_market_prices.source_timestamp IS NULL OR EXCLUDED.source_timestamp > wealth_market_prices.source_timestamp
         RETURNING asset_id`,
         [ins.id, uid, num(it.price), it.currency, it.source, asOf, meta]],
     ]);
