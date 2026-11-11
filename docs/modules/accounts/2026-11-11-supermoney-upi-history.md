@@ -56,3 +56,7 @@ Owner request ("read use that", then "approve"): two password-protected HDFC sta
 - No name, PAN or phone number stored; descriptions end in "· HDFC statement · ref <bank ref>" (idempotency key).
 - Development rehearsal: 638, re-run 0. Production: backup prod-before-hdfc-import.wlb (32 tables, 4,428 rows), **INSERT 638** (income 39 ₹11,00,377.86; transfer 135 ₹16,62,553.67; investment 48 ₹1,34,962.99; liability 5 ₹18,712.98; expense 411 ₹97,858.78); re-run 0; 638 audited as owner; transactions now 2,161.
 - The 21 same-day, same-amount groups on this account are separate statement entries (each has its own bank ref and balance step), not duplicates.
+
+## Self transfers out of money in and out (2026-11-11)
+
+Owner request: self transfers must not count as money in or out. The app counts only income/expense (+ investment, liability); `transfer` rows are shown apart. Audit of every non-transfer row found 2 own-account credits stored as income (workbook import, 3 Nov 2026: ₹80,000 "Karthikeyan Subramanian", ₹800 "Karthikeyan S", both "Unconfirmed credit — verify"). Repair [`2026-11-11-self-transfers-not-income.sql`](../../../scripts/db/repairs/2026-11-11-self-transfers-not-income.sql): backup `prod-before-self-transfers.wlb` (32 tables, 5,704 rows), UPDATE 2 → kind `transfer`, category Self transfer; re-run 0. November money in drops by ₹80,800.
