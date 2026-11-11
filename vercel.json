@@ -1,4 +1,9 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "claude-dev": false
+    }
+  },
   "rewrites": [
     { "source": "/api/:path((?!router$).+)", "destination": "/api/router?__route=:path" }
   ],
