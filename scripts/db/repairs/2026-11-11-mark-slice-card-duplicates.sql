@@ -4,6 +4,7 @@
 -- the plain row is MARKED (duplicate_of → the statement row) and drops out of totals. Nothing is deleted or rewritten.
 -- Pairs where both rows come from the same import are left for the owner to review (7 pairs on 2026-11-11).
 -- Idempotent: rows already marked are skipped.
+-- Applied to Production 2026-11-11 (owner approval): UPDATE 93, ₹1,26,297.54; re-run marks 0. The 93 marked rows were later deleted on owner request (one-off, outside this folder).
 BEGIN;
 SELECT set_config('wealth.actor', 'owner', true);
 
