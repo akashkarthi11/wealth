@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { migratedDb } from './helpers/pglite.mjs';
-import { loansOverview, savePerson, addPersonEntry, createSplit, cancelSplit, computeShares, personOf, personFigures, moveEntry, markSharePaid, roundOff } from '../../api/_loans.js';
+import { loansOverview, savePerson, addPersonEntry, createSplit, cancelSplit, computeShares, personOf, personFigures, moveEntry, markSharePaid, roundOff, setRecordStatus } from '../../api/_loans.js';
 
 const NOW = Date.parse('2026-11-11T12:00:00Z');
 const J = x => JSON.stringify(x);
@@ -145,7 +145,7 @@ test('mark a bill share paid, move a transfer to another person, links for Activ
   let o = await loansOverview(uid, { db: a, now: NOW });
   const priya = o.people.find(p => p.name === 'Priya'), arun = o.people.find(p => p.name === 'Arun');
   assert.deepEqual([priya.owed, priya.unpaidShares], [590, 1]);
-  assert.deepEqual(o.links[ids.arun], { type: 'lent', personId: arun.id, name: 'Arun', entryId: arun.items[0].entryId });
+  assert.deepEqual(o.links[ids.arun], { type: 'lent', personId: arun.id, name: 'Arun', entryId: arun.items[0].entryId, writtenOff: false });
   assert.equal(o.links[ids.dinner].type, 'split');
   await markSharePaid(uid, { splitId: sp.splitId, personId: priya.id }, { db: a, now: NOW });
   assert.equal((await markSharePaid(uid, { splitId: sp.splitId, personId: priya.id }, { db: a, now: NOW })).already, 'paid');
@@ -186,4 +186,71 @@ test('round off: closes every open entry and share, owner decides what is alread
   p = (await loansOverview(uid, { db: a, now: NOW })).people[0];
   assert.deepEqual([p.owed, p.items.length, p.rollups.length], [0, 0, 2]);
   await assert.rejects(roundOff(uid, { personId: p.id }, { db: a, now: NOW }), /Nothing open/);
+});
+
+test('one record at a time: write off (shown, not counted), undo, remove a mistaken link (transaction can be linked again); history with ₹0', async () => {
+  const { a, uid, ids } = await setup();
+  await addPersonEntry(uid, { name: 'Arun S', transactionIds: [ids.arun] }, { db: a, now: NOW });                          // lent 5,000
+  await addPersonEntry(uid, { name: 'Arun S', direction: 'out', amount: 1000, occurredOn: '2026-07-09' }, { db: a, now: NOW }); // lent 1,000
+  const sp = await createSplit(uid, { transactionId: ids.dinner, mode: 'equal', people: [{ name: 'Arun S' }] }, { db: a, now: NOW }); // share 590
+  let p = (await loansOverview(uid, { db: a, now: NOW })).people[0];
+  assert.equal(p.owed, 6590);
+  const thousand = p.items.find(i => i.amount === 1000), five = p.items.find(i => i.amount === 5000);
+  await setRecordStatus(uid, { entryId: thousand.entryId, status: 'written_off' }, { db: a, now: NOW });
+  await setRecordStatus(uid, { splitId: sp.splitId, personId: p.id, status: 'written_off' }, { db: a, now: NOW });
+  p = (await loansOverview(uid, { db: a, now: NOW })).people[0];
+  assert.deepEqual([p.owed, p.writtenOff, p.items.filter(i => i.writtenOff).length, p.unpaidShares, p.history], [5000, 1590, 2, 0, false]);
+  await setRecordStatus(uid, { entryId: thousand.entryId, status: 'active' }, { db: a, now: NOW });   // undo
+  assert.equal((await loansOverview(uid, { db: a, now: NOW })).people[0].owed, 6000);
+  // the ₹5,000 was linked by mistake → remove: hidden, not counted, the transfer is free again and shows in suggestions
+  await setRecordStatus(uid, { entryId: five.entryId, status: 'removed' }, { db: a, now: NOW });
+  let o = await loansOverview(uid, { db: a, now: NOW });
+  assert.deepEqual([o.people[0].owed, o.people[0].items.length, o.links[ids.arun]], [1000, 2, undefined]);
+  assert.ok(o.suggestions.some(s => s.person === 'Arun S'));
+  await addPersonEntry(uid, { name: 'Ravi', transactionIds: [ids.arun] }, { db: a, now: NOW });           // can be linked again, correctly
+  const [tx] = await a.query(`SELECT kind, amount::float8 AS amount FROM wealth_transactions WHERE id = $1`, [ids.arun]);
+  assert.deepEqual({ ...tx }, { kind: 'transfer', amount: 5000 });
+  await assert.rejects(setRecordStatus(uid, { entryId: five.entryId, status: 'active' }, { db: a, now: NOW }), /not found/);
+  // paid back in full → History with ₹0, still listing the entries
+  await addPersonEntry(uid, { name: 'Arun S', direction: 'in', amount: 1000, occurredOn: '2026-11-11' }, { db: a, now: NOW });
+  o = await loansOverview(uid, { db: a, now: NOW });
+  const arun = o.people.find(x => x.name === 'Arun S');
+  assert.deepEqual([arun.owed, arun.history, arun.items.length], [0, true, 3]);
+  // a person can be removed only when nothing is left on them
+  await assert.rejects(savePerson(uid, { personId: arun.id, status: 'removed' }, { db: a, now: NOW }), /entries first/);
+  const ghost = await savePerson(uid, { name: 'Typo Name' }, { db: a, now: NOW });
+  await savePerson(uid, { personId: ghost.personId, status: 'removed' }, { db: a, now: NOW });
+  o = await loansOverview(uid, { db: a, now: NOW });
+  assert.ok(!o.people.some(x => x.name === 'Typo Name'));
+  const [rows] = await a.query(`SELECT (SELECT count(*) FROM wealth_person_entries)::int e, (SELECT count(*) FROM wealth_people)::int p`);
+  assert.deepEqual({ ...rows }, { e: 4, p: 3 }, 'nothing deleted');
+});
+
+test('page: write off / undo / remove buttons per record; people who owe nothing are in History with ₹0', async () => {
+  const { readFileSync } = await import('node:fs');
+  const vm = await import('node:vm');
+  const src = readFileSync(new URL('../../app.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+  const block = src.slice(src.indexOf('// Money lent & split bills (Plan 4 Part B'), src.indexOf('// Reward alerts (Plan 4, TR4-A.8)'));
+  const ctx = { esc: s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'), money: v => '₹' + Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 }),
+    user: { role: 'admin' }, activeView: 'lending', api: async () => ({}), Number, String, Date, Math, JSON, Array, Set, Map, Object };
+  vm.runInNewContext(block + ';globalThis.t={lendingPageHtml,lendRowTag,setData:d=>{lendingData=d}};', ctx);
+  const { a, uid, ids } = await setup();
+  await addPersonEntry(uid, { name: 'Arun S', transactionIds: [ids.arun] }, { db: a, now: NOW });
+  await addPersonEntry(uid, { name: 'Arun S', direction: 'out', amount: 1000, occurredOn: '2026-07-09' }, { db: a, now: NOW });
+  await addPersonEntry(uid, { name: 'Priya', direction: 'out', amount: 200, occurredOn: '2026-11-01' }, { db: a, now: NOW });
+  await addPersonEntry(uid, { name: 'Priya', direction: 'in', amount: 200, occurredOn: '2026-11-05' }, { db: a, now: NOW });
+  let d = await loansOverview(uid, { db: a, now: NOW });
+  const thousand = d.people.find(p => p.name === 'Arun S').items.find(i => i.amount === 1000);
+  await setRecordStatus(uid, { entryId: thousand.entryId, status: 'written_off' }, { db: a, now: NOW });
+  d = await loansOverview(uid, { db: a, now: NOW });
+  ctx.t.setData(d);
+  const html = ctx.t.lendingPageHtml(d);
+  const top = html.slice(0, html.indexOf('lend-history'));
+  assert.match(top, /Arun S<\/h4>/);
+  assert.ok(!top.includes('Priya</h4>'), 'Priya owes nothing → not at the top');
+  assert.match(html, /History · 1 · owe ₹0<\/summary>[\s\S]*Priya<\/h4><span class="bank-chip ok">All paid<\/span>[\s\S]*<b class="">₹0<\/b>/);
+  assert.match(html, /written off ₹1,000/);
+  assert.match(html, /lend-pay out is-off[\s\S]*?Written off<\/span><button type="button" class="link-btn" data-rec-entry="[^"]+" data-rec-status="active">Undo<\/button>/);
+  assert.match(html, /data-rec-status="written_off">Write off<\/button><button type="button" class="link-btn danger" data-rec-entry="[^"]+" data-rec-status="removed">Remove \(mistake\)<\/button>/);
+  assert.match(ctx.t.lendRowTag({ id: ids.arun }), /act-tag lent">Lent · Arun S</);
 });
