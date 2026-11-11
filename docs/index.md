@@ -84,7 +84,7 @@ Each module fix note should include:
 | 2026-11-11 | Accounts | Activity page had no totals, raw dates, a delete button on every row, filters that reset during background loading | [Activity page redesign](modules/accounts/2026-11-11-activity-page-redesign.md) | Deployed to Production (`041fc03`) |
 | 2026-11-11 | Investments / Market data | Dashboard Angel One "Today's gain" showed ₹0; invested and P&L came from the 10 Nov snapshot | [Angel One today's gain](modules/investments/2026-11-11-angel-one-today-gain.md) | Deployed to Production (`041fc03`) |
 | 2026-11-11 | Integrations / Investments | Angel One ledger statement had nowhere to go; no lifetime "money put in" or broker charges | [Angel One ledger history (0011)](modules/integrations/2026-11-11-angel-one-ledger-history.md) | In Production (`4d2a262`; 0011 applied, statement imported) |
-| 2026-11-11 | Accounts | super.money UPI history: 8 Slice Savings payments missing; 93 Slice card payments stored twice (₹1,26,297.54) | [super.money UPI history](modules/accounts/2026-11-11-supermoney-upi-history.md) | 8 payments, super.money and Paytm reference records, and 1,014 Paytm 2023-24 transactions applied to Production; 93 duplicates marked (nothing deleted) |
+| 2026-11-11 | Accounts | super.money UPI history: 8 Slice Savings payments missing; 93 Slice card payments stored twice (₹1,26,297.54) | [super.money UPI history](modules/accounts/2026-11-11-supermoney-upi-history.md) | 8 payments, super.money and Paytm reference records, and 1,014 Paytm 2023-24 transactions applied to Production; 93 duplicates marked, then deleted on owner request (backup taken) |
 
 ## Plans
 

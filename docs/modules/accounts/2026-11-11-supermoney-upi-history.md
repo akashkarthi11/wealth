@@ -20,7 +20,7 @@ Backup first: `prod-before-supermoney.wlb` (32 tables, 2,288 rows). Transactions
 
 ## Prepared, not run
 
-- (c) [`2026-11-11-mark-slice-card-duplicates.sql`](../../../scripts/db/repairs/2026-11-11-mark-slice-card-duplicates.sql): marks each plain row `duplicate_of` its statement twin (the 1st plain row pairs with the 1st statement row of the same date, amount and merchant, and so on). It never deletes; it can be undone by clearing `duplicate_of`. **Applied 2026-11-11** (owner: "dublicate record in spending find and solve"): backup `prod-before-dupes.wlb` (32 tables, 4,335 rows), UPDATE 93 (₹1,26,297.54); a re-run marks 0.
+- (c) [`2026-11-11-mark-slice-card-duplicates.sql`](../../../scripts/db/repairs/2026-11-11-mark-slice-card-duplicates.sql): marks each plain row `duplicate_of` its statement twin (the 1st plain row pairs with the 1st statement row of the same date, amount and merchant, and so on). It never deletes; it can be undone by clearing `duplicate_of`. **Applied 2026-11-11** (owner: "dublicate record in spending find and solve"): backup `prod-before-dupes.wlb` (32 tables, 4,335 rows), UPDATE 93 (₹1,26,297.54); a re-run marks 0. **Then deleted on owner request ("delete")**, an exception to the no-deletion rule: backup `prod-before-dupe-delete.wlb` (32 tables, 4,428 rows); only marked rows that no other table references; the script refused to run unless exactly 93 matched; DELETE 93; transactions now 1,523; deletes recorded in the audit log. The one-off script is not in `scripts/db/repairs`, so the repository guard against deleting data stays strict.
 
 ## Addition 2026-11-11 — Paytm UPI statement, 11 Nov 2023 – 10 Nov 2024
 
