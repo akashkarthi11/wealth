@@ -617,3 +617,27 @@ button.dashboard-alert-banner:focus-visible{outline:2px solid #8bb5ff;outline-of
 @media(max-width:900px) and (min-width:701px){.menu-nav button{padding:7px 7px;gap:5px;font-size:12px}.menu-nav button i{display:none}.nav-tools-toggle i{display:inline}}
 #mobileMore{position:relative}
 .mobile-nav .nav-badge{position:absolute;top:5px;left:calc(50% + 6px);min-width:16px;height:16px;font-size:9px}
+
+/* Investments page (2026-11-11): groups of holdings from the database */
+.inv-list{display:grid;gap:10px}
+.inv-group{border:1px solid #2a3d57;border-radius:15px;background:linear-gradient(145deg,#142238,#101a2a);overflow:hidden}
+.inv-group>summary{display:flex;align-items:center;gap:12px;padding:13px 14px;cursor:pointer;list-style:none}
+.inv-group>summary::-webkit-details-marker{display:none}
+.inv-group>summary:hover{background:#17263b}
+.inv-group>summary:after{content:'›';color:#7f93ad;font-size:22px;transition:transform .15s;margin-left:2px}
+.inv-group[open]>summary:after{transform:rotate(90deg)}
+.inv-group-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.inv-group-main b{font-size:14px}
+.inv-group-main small,.inv-row small{margin:0;font-size:11px;letter-spacing:0;color:#8fa2bd;overflow-wrap:anywhere}
+.inv-rows{border-top:1px solid #26364e;padding:2px 14px 6px}
+.inv-row{display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-top:1px solid #22324a}
+.inv-row:first-child{border-top:0}
+.inv-row-main{min-width:0;display:flex;flex-direction:column;gap:4px}
+.inv-row-main b{font-size:13px}
+.inv-row-amt{flex:0 0 auto;text-align:right;display:flex;flex-direction:column;gap:3px}
+.inv-row-amt b{font-variant-numeric:tabular-nums;white-space:nowrap}
+.inv-row-amt small{white-space:nowrap}
+.inv-empty{margin:10px 0;font-size:12px}
+.inv-activity{margin-top:10px}
+@media(max-width:700px){.inv-group>summary{padding:12px 11px;gap:10px}.inv-rows{padding:2px 11px 6px}.inv-row-amt b{font-size:13px}}
+.inv-row-amt small{letter-spacing:0;margin:0;font-size:11px}
