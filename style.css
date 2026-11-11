@@ -706,3 +706,31 @@ em.in{color:var(--green)}em.out{color:#ff9b9b}
 .broker-pnl small{display:block;margin:0;font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:#8fa2bd}
 .broker-pnl b{display:block;margin-top:4px;font-size:15px;font-variant-numeric:tabular-nums}
 .broker-pnl em{display:block;margin-top:3px;font-style:normal;font-size:10px;color:#7f93ad}
+/* Records page (2026-11-11) */
+.rec-page{display:flex;flex-direction:column;gap:14px}
+.rec-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.rec-head h3{margin:6px 0 4px;font-size:20px}.rec-head p{margin:0;color:var(--muted);font-size:13px;max-width:560px;line-height:1.5}
+.rec-stats{display:flex;gap:10px}.rec-stats span{background:#0d1929;border:1px solid var(--line);border-radius:13px;padding:10px 14px;min-width:92px}
+.rec-stats b{display:block;font-size:17px}.rec-stats small{margin:2px 0 0;letter-spacing:.6px}
+.rec-toolbar{display:flex;flex-direction:column;gap:10px}
+.rec-chips{display:flex;gap:7px;overflow-x:auto;padding-bottom:2px}
+.rec-chip{flex:0 0 auto;background:#121e30;border:1px solid #2a3b54;color:#aebed4;border-radius:20px;padding:7px 12px;font-size:12px}
+.rec-chip em{font-style:normal;color:#7f93ae;margin-left:3px}.rec-chip.active{background:#263a56;color:#fff;border-color:#3d5578}
+.rec-group h4{margin:10px 2px 8px;font-size:12px;color:#9fb1c9;letter-spacing:.8px;text-transform:uppercase}.rec-group h4 em{font-style:normal;color:#6f84a1;margin-left:4px}
+.rec-card{border:1px solid var(--line);border-radius:14px;background:#101a2a;margin-bottom:8px;overflow:hidden}
+.rec-card summary{list-style:none;display:grid;grid-template-columns:auto 1fr auto auto;gap:12px;align-items:center;padding:13px 14px;cursor:pointer}
+.rec-card summary::-webkit-details-marker{display:none}
+.rec-card[open] summary{border-bottom:1px solid var(--line);background:#132036}
+.rec-type{font-size:10px;font-weight:800;letter-spacing:.6px;border-radius:8px;padding:5px 8px;background:#1d2d44;color:#b9c9de;white-space:nowrap}
+.rec-statement{background:#16324a;color:#8cc4ff}.rec-screenshot{background:#2c2648;color:#c4b5ff}.rec-holdings{background:#163a33;color:#7fe3bf}.rec-report{background:#3a2f17;color:#f2c46b}.rec-note{background:#2a2f3a;color:#c8d2e0}
+.rec-main{min-width:0}.rec-main b{display:block;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rec-main small{display:block;letter-spacing:0;margin-top:3px;font-size:11px}
+.rec-facts{display:flex;gap:14px}.rec-facts span{text-align:right}.rec-facts small{display:block;margin:0;letter-spacing:0;font-size:10px}.rec-facts b{font-size:13px}
+.rec-chev{font-style:normal;color:#7f93ae;font-size:20px;transition:transform .15s}.rec-card[open] .rec-chev{transform:rotate(90deg)}
+.rec-body{padding:6px 14px 14px}
+.rec-section h5,.rec-block h5{margin:14px 0 4px;font-size:12px;color:#dbe6f6}
+.rec-nested{padding-left:10px;border-left:2px solid #24344b}
+.rec-kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;margin:10px 0 0}
+.rec-kv div{background:#0d1726;border:1px solid #223249;border-radius:10px;padding:8px 10px;min-width:0}
+.rec-kv dt{font-size:10px;color:var(--muted)}.rec-kv dd{margin:3px 0 0;font-size:13px;overflow-wrap:anywhere}
+.rec-body code{font-size:11px;color:#9fb1c9;overflow-wrap:anywhere}
+@media(max-width:620px){.rec-card summary{grid-template-columns:auto 1fr auto;gap:9px;padding:12px}.rec-facts{grid-column:1/-1;grid-row:2;justify-content:flex-start;flex-wrap:wrap}.rec-facts span{text-align:left}.rec-stats{width:100%}.rec-stats span{flex:1}}
