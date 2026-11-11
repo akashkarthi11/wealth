@@ -336,3 +336,26 @@ test('interest view: a day with correction revisions shows the sum of its rows (
   assert.equal(ctx.out[0].interest_amount, 7.21);
   assert.equal(ctx.out[0].revision, 3);
 });
+
+test('interest month total = statement through its end date + ledger days after it (Nov 2026 real figures)', async () => {
+  const vm = await import('node:vm');
+  const src = readFileSync(new URL('../../app.js', import.meta.url), 'utf8');
+  const fn = name => { const s = src.indexOf('function ' + name + '('); let i = src.indexOf('{', s), d = 0; for (; i < src.length; i++) { if (src[i] === '{') d++; else if (src[i] === '}' && --d === 0) break; } return src.slice(s, i + 1); };
+  const led = (p, a, d, amt, rev = 1) => ({ product_key: p, account_key: a, accrual_date: d, revision: rev, interest_amount: amt });
+  const ctx = {
+    interestStatements: [
+      { product_key: 'slice-savings', period_start: '2026-11-01', period_end: '2026-11-09', statement_total: '64.36' },
+      { product_key: 'atom-savings', period_start: '2026-11-01', period_end: '2026-11-09', statement_total: '66.80' }],
+    interestRows: [led('slice-savings', 's', '2026-11-08', '7.20'), led('slice-savings', 's', '2026-11-09', '7.21404110'), led('slice-savings', 's', '2026-11-09', '7.21', 2),
+      led('slice-savings', 's', '2026-11-09', '-7.21404110', 3), led('slice-savings', 's', '2026-11-10', '7.21509589'),
+      led('atom-savings', 'a', '2026-11-09', '9.56'), led('atom-savings', 'a', '2026-11-10', '9.55643836')],
+    Map, Number, Math, String,
+  };
+  vm.runInNewContext([fn('interestStatementFor'), fn('interestLatestLedger'), fn('interestMonthTotal')].join('\n') +
+    ";globalThis.s=interestMonthTotal('slice-savings');globalThis.a=interestMonthTotal('atom-savings');", ctx);
+  assert.deepEqual({ ...ctx.s }, { month: '2026-11', statementThrough: '2026-11-09', total: 71.58 }, '64.36 + 7.21509589');
+  assert.equal(ctx.a.total, 76.36, '66.80 + 9.55643836');
+  ctx.interestRows.push(led('slice-savings', 's', '2026-12-01', '7.30'));
+  vm.runInNewContext(";globalThis.s=interestMonthTotal('slice-savings');", ctx);
+  assert.deepEqual({ ...ctx.s }, { month: '2026-12', statementThrough: null, total: 7.3 }, 'a new month starts from the ledger');
+});
