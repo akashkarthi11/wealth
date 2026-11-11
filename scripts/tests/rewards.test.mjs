@@ -103,6 +103,13 @@ test('Monies tiers (1% → 1.5% at 3,00,000 → 2% at 5,00,000) and HDFC 5% on S
   let o = await rewardsOverview(uid, { db: a, now: NOW });
   const m = o.programs.find(p => p.program_key === 'slice-monies').schemeInfo;
   assert.deepEqual([m.rate, m.next.at, m.next.rate, m.toNext], [0.01, 300000, 0.015, 157622], 'next tier is 3,00,000 at 1.5%');
+  // Monies come from Slice CREDIT CARD spends only: a Slice savings spend does not count
+  const [cc] = await a.query(`SELECT id FROM wealth_accounts WHERE bank_name='Slice' AND account_type='credit_card'`);
+  const [sv] = await a.query(`INSERT INTO wealth_accounts(user_id,account_key,bank_name,account_name,account_type,subtype_code,currency,masked_identifier) VALUES($1,'slice-sv','Slice','Slice Savings','savings','savings','INR','••3731') RETURNING id`, [uid]);
+  await a.query(`INSERT INTO wealth_transactions(user_id,kind,category,description,amount,account,account_id,occurred_on) VALUES
+    ($1,'expense','Investment','MMTC PAMP',21,'',$2,'2026-11-11'),($1,'expense','Transfer','Arun S',5000,'',$3,'2026-11-11')`, [uid, cc.id, sv.id]);
+  const mm = (await rewardsOverview(uid, { db: a, now: NOW })).programs.find(p => p.program_key === 'slice-monies').schemeInfo;
+  assert.deepEqual([mm.spendLabel, mm.monthSpend, mm.monthUnitsEst], ['Slice card spends', 21, 21], '₹21 card spend = 21 Monies; the ₹5,000 savings transfer earns none');
   assert.equal(JSON.stringify(m.tiers.map(t => [t.at, t.rate])), JSON.stringify([[0, 0.01], [300000, 0.015], [500000, 0.02]]));
   const h = o.programs.find(p => p.program_key === 'hdfc-swiggy-orange').schemeInfo;
   assert.deepEqual([h.cash, h.rate, h.monthSpend, h.monthUnitsEst, h.spendLabel], [true, 0.05, 500, 25, 'Swiggy orders on this card'], '5% of the ₹500 Swiggy spend on the HDFC card');

@@ -1,5 +1,6 @@
 // Shared, named queries (TSD §11). Handlers call these instead of repeating SQL.
 import { sql } from './_lib.js';
+import { splitsForAccount } from './_splits.js';
 
 const TX_COLUMNS = `t.id,t.kind,t.category,t.description,t.amount,t.account_id,
   COALESCE(NULLIF(trim(a.account_name || ' ' || COALESCE(a.masked_identifier,'')),''),NULLIF(t.account,''),'Unassigned') AS account,
@@ -241,5 +242,7 @@ export async function accountDetail(uid, accountId, db = sql, { now = Date.now()
   const sum = (m, kinds) => flows.filter(f => f.month === m && kinds.includes(f.kind)).reduce((s, f) => s + f.total, 0);
   const months = [...new Set(flows.map(f => f.month))].sort().reverse().map(m => ({ month: m, moneyIn: sum(m, IN), moneyOut: sum(m, OUT), transfers: sum(m, ['transfer']) }));
   return { account: acc, month, thisMonth: months.find(m => m.month === month) || { month, moneyIn: 0, moneyOut: 0, transfers: 0 }, months,
-    balanceHistory: history, interest, upcoming, transactions, transactionCount: counts[0]?.n || 0 };
+    balanceHistory: history, interest, upcoming, transactions, transactionCount: counts[0]?.n || 0,
+    // Splits inside this account (0019), e.g. Atom → Rent; never part of totals.
+    splits: await splitsForAccount(uid, accountId, { db }).catch(() => []) };
 }

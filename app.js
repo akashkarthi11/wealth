@@ -1,4 +1,4 @@
-const APP_BUILD_ID='20261111-claude-plan-4c';
+const APP_BUILD_ID='20261111-claude-plan-4d';
 (function promptForUpdatedApp(){
   try {
     const key='wealth-ledger:app-build';
@@ -607,6 +607,18 @@ function liveBankCardsHtml(){
 // ---- Account details page: every figure comes from /api/account-detail (database tables), nothing static. ----
 const V2_CHIP={verified:'verified',estimated:'stale',reported:'reported',pending_reconciliation:'pending_reconciliation'};
 function monthName(m){const d=new Date(m+'-01T00:00:00');return Number.isFinite(d.getTime())?d.toLocaleDateString('en-IN',{month:'short',year:'numeric'}):m}
+// Splits inside an account (0019): pots such as Atom → Rent. Shown on the account page; never added to totals.
+const SPLIT_COLORS=['#85aaff','#f2c46b','#66dcb8','#c4b5ff','#ff9b9b','#7fd6f0'];
+function splitsHtml(d){const list=d.splits||[];if(!list.length)return '';
+ const acct=Number(d.account.current_balance),sum=Math.round(list.reduce((n,x)=>n+(Number(x.balance)||0),0)*100)/100,diff=Number.isFinite(acct)?Math.round((acct-sum)*100)/100:null;
+ const total=sum||1,day=t=>t?new Date(t).toLocaleDateString('en-IN',{day:'numeric',month:'short'}):'';
+ const bar='<div class="bank-share" role="group" aria-label="Splits — tap a segment">'+list.filter(x=>x.balance>0).map((x,i)=>'<i style="width:'+Math.max(x.balance/total*100,0.6).toFixed(2)+'%;background:'+SPLIT_COLORS[i%SPLIT_COLORS.length]+'" tabindex="0" role="button" data-share="'+esc(x.name+' · '+money(x.balance)+' · '+(x.balance/total*100).toFixed(1)+'%')+'"></i>').join('')+'</div><div class="share-readout" aria-live="polite" hidden></div>';
+ const rows=list.map((x,i)=>'<div class="split-row"><i style="background:'+SPLIT_COLORS[i%SPLIT_COLORS.length]+'"></i><span class="split-main"><b>'+esc(x.name)+'</b><small>'+esc(x.kind==='roundups'?'Round-ups':x.goal?'Goal '+money(x.goal):'Goal not set')+' · '+(x.status==='estimated'?'estimated ('+(x.movedSince>=0?'+':'−')+money(Math.abs(x.movedSince))+' since '+day(x.verifiedAt)+')':'verified '+day(x.verifiedAt))+'</small>'
+  +(x.goalPct!=null?'<span class="split-goal"><em style="width:'+x.goalPct+'%"></em></span>':'')
+  +(x.recentMoves&&x.recentMoves.length?'<small class="split-moves">'+x.recentMoves.slice(0,3).map(m=>(m.amount>0?'+':'−')+money(Math.abs(m.amount))+' '+day(m.at)+(m.note?' · '+esc(String(m.note).split(' (')[0]):'')).join(' · ')+'</small>':'')
+  +'</span><b class="split-amt">'+(x.balance==null?'—':money(x.balance))+'</b></div>').join('');
+ const check=diff==null?'':Math.abs(diff)<2?'<small class="split-check ok">Splits add up to the account balance (difference '+money(Math.abs(diff))+' — rounding/interest)</small>':'<small class="split-check">Splits total '+money(sum)+' vs account '+money(acct)+' — '+money(Math.abs(diff))+' '+(diff>0?'not in any split':'more than the account')+'</small>';
+ return '<section class="chart-card splits-card"><div class="chart-head"><div><h4>Splits</h4><p>Pots inside this account · money in (+) and out (−) per split</p></div><span class="pill">'+list.length+'</span></div>'+bar+'<div class="split-list">'+rows+'</div>'+check+'</section>'}
 function accountDetailHtml(d){
  const a=d.account,cur=a.currency||'INR',m=v=>cur==='INR'?money(Number(v)):cur+' '+Number(v).toFixed(2);
  const head='<section class="bank-summary bank-detail"><span class="bank-kicker">'+esc((a.account_name||'Account')+(a.masked_identifier?' '+a.masked_identifier:''))+' · '+esc(a.subtype_label||a.account_type||'')+'</span><div class="bank-total">'+(a.current_balance==null?'—':esc(m(a.current_balance)))+'</div><p class="bank-sub">'+bankChip(a.balance_status)+' as of '+esc(bankAsOf(a))+' IST'+(a.balance_status==='stale'?' · last verified balance + interest credited since':'')+'</p>'
@@ -617,7 +629,7 @@ function accountDetailHtml(d){
  const months=d.months.length>1?'<section class="chart-card"><div class="chart-head"><div><h4>Last months</h4><p>Money in and out of this account</p></div></div><div class="acct-table">'+d.months.map(x=>'<div class="acct-row"><span><b>'+esc(monthName(x.month))+'</b>'+(x.transfers?'<small>transfers '+esc(m(x.transfers))+'</small>':'')+'</span><span class="acct-amt"><b class="income">+'+esc(m(x.moneyIn))+'</b><small class="expense">−'+esc(m(x.moneyOut))+'</small></span></div>').join('')+'</div></section>':'';
  const sign=k=>k==='income'?'+':k==='transfer'?'':'−',cls=k=>k==='income'?'income':k==='transfer'?'':'expense';
  const tx='<section class="chart-card"><div class="chart-head"><div><h4>Recent transactions</h4><p>'+(d.transactionCount?'Latest '+d.transactions.length+' of '+d.transactionCount+' recorded for this account':'No transactions recorded for this account yet')+'</p></div></div>'+(d.transactions.length?'<div class="acct-table">'+d.transactions.map(t=>'<div class="acct-row"><span><b>'+esc(t.description||t.category)+'</b><small>'+esc(new Date(t.occurred_on+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}))+' · '+esc(t.category)+' · '+esc(t.kind)+'</small></span><span class="acct-amt"><b class="'+cls(t.kind)+'">'+sign(t.kind)+esc(m(t.amount))+'</b></span></div>').join('')+'</div>':'')+'</section>';
- return head+interest+hist+upcoming+months+tx;
+ return head+splitsHtml(d)+interest+hist+upcoming+months+tx;
 }
 async function loadBankDetail(bank){
  const box=document.getElementById('bankDetail');if(!box)return;
