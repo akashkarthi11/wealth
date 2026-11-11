@@ -1,6 +1,6 @@
 # Faster pages: versioned Redis cache — 2026-11-11
 
-**Status:** code on `claude-dev`, not deployed. Owner: "use redis more efficiently to increase speed of project".
+**Status:** in Production — `main` `35b2934` (build `4a`), migration 0018 applied; data version counting (4 after the reward repairs). Owner: "use redis more efficiently to increase speed of project".
 
 ## Before
 - `/api/dashboard` (the heaviest call, ~12 queries in several sequential stages) was **never cached**: a stale-while-revalidate cache had once served totals that disagreed with the holdings list.
@@ -35,3 +35,8 @@ The IST day in a key makes month-to-date / "today" figures roll over at midnight
 
 ## Tests
 `scripts/tests/cache.test.mjs` (version bumps once per write statement from any writer, reads and log tables do not; routes use the helpers; one-query session+version; served only on a version match; write after response). `dashboard-model.test.mjs` updated. Full suite 170/170. Development: 0018 applied (19 migrations).
+
+## Redis location (2026-11-11)
+- Store `redis-chestnut-brush` (Redis Cloud, Free 30 MB) is in **Mumbai (`bom1`)**; Vercel functions run in **Singapore (`sin1`)**, Neon in ap-southeast-1. Each Redis call crosses Singapore↔Mumbai (~30–60 ms).
+- Upstash in Singapore was tried from the CLI but needs a paid checkout — owner: "not free"; not created.
+- Free option left to the owner: a Redis Cloud Free store in Singapore from the Vercel dashboard, then move `wealth` to it (the old store stays for `growx-mindrelax`). Until then the cache runs on the Mumbai store.
