@@ -15,6 +15,8 @@ export function personOf(description) {
   s = s.replace(/^(upi\s+)?(transfer|payment|money)\s+(to|from)\s+/i, '').replace(/^(paid\s+to|received\s+from|sent\s+to)\s+/i, '');
   return s.replace(/^(mr|mrs|ms|miss|dr)\.?\s+/i, '').replace(/\s+/g, ' ').trim();
 }
+// The key a name is matched on: "Mr Arun S · UPI · ref" and "ARUN S" → "arun s".
+export const nameKey = v => personOf(v).toLowerCase();
 const directionOf = t => (/received|from/i.test(String(t.category || '')) ? 'in' : 'out');
 
 // Split paise across weights with largest-remainder rounding so the parts add up exactly.
@@ -70,8 +72,8 @@ export function personFigures(moves, { annualRate = null, dueOn = null, status =
 
 export async function loansOverview(uid, { db = sql, now = Date.now() } = {}) {
   const today = istToday(now);
-  const [people, entries, shares, splits, rollups, requests] = await Promise.all([
-    db.query(`SELECT id, name, kind, due_on::text AS due_on, annual_rate::float8 AS annual_rate, status, note, share_created_at FROM wealth_people WHERE user_id = $1 AND status <> 'removed' ORDER BY lower(name)`, [uid]),
+  const [people, entries, shares, splits, rollups, requests, aliases, unlinked] = await Promise.all([
+    db.query(`SELECT id, name, kind, due_on::text AS due_on, annual_rate::float8 AS annual_rate, status, note, share_created_at, hidden FROM wealth_people WHERE user_id = $1 AND status <> 'removed' ORDER BY lower(name)`, [uid]),
     db.query(`SELECT e.id, e.person_id, e.direction, e.amount::float8 AS amount, e.occurred_on::text AS on, e.transaction_id, e.note, e.split_id, e.rollup_id, e.rollup_ref, e.status,
         t.description AS tx_description, coalesce(a.account_name, nullif(t.account, '')) AS account
       FROM wealth_person_entries e JOIN wealth_people p ON p.id = e.person_id AND p.user_id = $1
@@ -88,7 +90,15 @@ export async function loansOverview(uid, { db = sql, now = Date.now() } = {}) {
     db.query(`SELECT r.id, r.person_id, p.name, r.amount::float8 AS amount, r.paid_on::text AS paid_on, r.method, r.note, r.created_at
       FROM wealth_lend_requests r JOIN wealth_people p ON p.id = r.person_id AND p.user_id = $1 WHERE r.status = 'pending' ORDER BY r.created_at DESC LIMIT 50`, [uid])
       .catch(e => { if (e?.code === '42P01') return []; throw e; }),
+    db.query(`SELECT person_id, alias FROM wealth_person_aliases WHERE user_id = $1 ORDER BY created_at`, [uid]).catch(e => { if (e?.code === '42P01') return []; throw e; }),
+    unlinkedTransfers(db, uid),
   ]);
+  // Every name a person goes by → that person (their own name and their other names).
+  const keyToPerson = new Map();
+  for (const p of people) keyToPerson.set(nameKey(p.name), p);
+  const byPid = new Map(people.map(p => [p.id, p]));
+  for (const a of aliases) { const p = byPid.get(a.person_id); if (p && !keyToPerson.has(nameKey(a.alias))) keyToPerson.set(nameKey(a.alias), p); }
+  const matchOf = t => keyToPerson.get(nameKey(t.description)) || null;
   const splitById = new Map(splits.map(s => [s.id, s]));
   const nameById = new Map(people.map(p => [p.id, p.name]));
   // A share counts as paid when a payment back is linked to it ("Mark paid").
@@ -106,7 +116,10 @@ export async function loansOverview(uid, { db = sql, now = Date.now() } = {}) {
     const open = all.filter(i => !i.rollupId);                 // closed by a round-off → history only
     const rolls = rollups.filter(r => r.person_id === p.id).map(r => ({ id: r.id, on: r.on, totalOwed: r.total_owed, alreadyBack: r.already_back,
       newAmount: r.new_amount, closedItems: r.closed_items, note: r.note, items: all.filter(i => i.rollupId === r.id) }));
-    const person = { id: p.id, name: p.name, kind: p.kind, sharedSince: p.share_created_at || null,
+    const mine = unlinked.filter(t => matchOf(t)?.id === p.id);
+    const person = { id: p.id, name: p.name, kind: p.kind, sharedSince: p.share_created_at || null, hidden: !!p.hidden,
+      aliases: aliases.filter(a => a.person_id === p.id).map(a => a.alias),
+      unlinked: mine.slice(-40).reverse().map(t => ({ id: t.id, direction: directionOf(t), amount: t.amount, day: t.day, description: t.description })), unlinkedCount: mine.length,
       requests: requests.filter(q => q.person_id === p.id).length, dueOn: p.due_on, annualRate: p.annual_rate, status: p.status, note: p.note,
       ...personFigures(open.filter(i => !i.writtenOff), { annualRate: p.annual_rate, dueOn: p.due_on, status: p.status, today }),
       bills: open.filter(i => i.type === 'bill').length, unpaidShares: open.filter(i => i.type === 'bill' && !i.paid && !i.writtenOff).length,
@@ -115,7 +128,11 @@ export async function loansOverview(uid, { db = sql, now = Date.now() } = {}) {
     person.history = person.status !== 'open' || !(person.owed > 0);
     return person;
   });
-  const active = out.filter(p => p.status === 'open');
+  // Hidden people: kept and counted in the database, but not shown — not in totals, lists, the bell or Activity.
+  const shown = out.filter(p => !p.hidden), hiddenIds = new Set(out.filter(p => p.hidden).map(p => p.id));
+  const active = shown.filter(p => p.status === 'open');
+  const hiddenTransactionIds = [...new Set([...entries.filter(e => hiddenIds.has(e.person_id) && e.transaction_id).map(e => e.transaction_id),
+    ...unlinked.filter(t => hiddenIds.has(matchOf(t)?.id)).map(t => t.id)])];
   const splitList = splits.map(s => {
     const mine = shares.filter(x => x.split_id === s.id);
     const me = mine.find(x => x.person_id == null);
@@ -131,21 +148,24 @@ export async function loansOverview(uid, { db = sql, now = Date.now() } = {}) {
   for (const s of splitList) if (s.transactionId) links[s.transactionId] = { type: 'split', splitId: s.id, myShare: s.myShare, othersOwe: s.othersOwe,
     people: s.shares.filter(x => x.personId).map(x => ({ name: x.name, amount: x.amount, paid: x.paid })) };
   return { asOf: today, countedInNetWorth: false,
-    totals: { owed: r2(active.reduce((n, p) => n + p.owed, 0)), lent: r2(out.reduce((n, p) => n + p.lent, 0)),
-      repaid: r2(out.reduce((n, p) => n + p.repaid, 0)), people: active.filter(p => p.owed > 0).length, overdue: active.filter(p => p.overdue).length,
+    totals: { owed: r2(active.reduce((n, p) => n + p.owed, 0)), lent: r2(shown.reduce((n, p) => n + p.lent, 0)),
+      repaid: r2(shown.reduce((n, p) => n + p.repaid, 0)), hidden: hiddenIds.size, people: active.filter(p => p.owed > 0).length, overdue: active.filter(p => p.overdue).length,
       splits: splits.length },
-    requests: requests.map(q => ({ id: q.id, personId: q.person_id, name: q.name, amount: q.amount, paidOn: q.paid_on, method: q.method, note: q.note, sentAt: q.created_at })),
-    people: out, splits: splitList, links, suggestions: await loanSuggestions(uid, { db, people: out }) };
+    requests: requests.filter(q => !hiddenIds.has(q.person_id)).map(q => ({ id: q.id, personId: q.person_id, name: q.name, amount: q.amount, paidOn: q.paid_on, method: q.method, note: q.note, sentAt: q.created_at })),
+    people: out, splits: splitList, links, hiddenTransactionIds, suggestions: await loanSuggestions(uid, { db, rows: unlinked.filter(t => !matchOf(t)) }) };
 }
 
 // People with both sent and received transfers that are not linked yet, plus P2P platforms (TR4-B.5).
-export async function loanSuggestions(uid, { db = sql, people = [] } = {}) {
-  const rows = await db.query(`SELECT t.id, t.description, t.category, t.amount::float8 AS amount, t.occurred_on::text AS day
+export function unlinkedTransfers(db, uid) {
+  return db.query(`SELECT t.id, t.description, t.category, t.amount::float8 AS amount, t.occurred_on::text AS day
     FROM wealth_transactions t
     WHERE t.user_id = $1 AND t.kind = 'transfer' AND t.duplicate_of IS NULL AND t.category ~* '^transfer (sent|received)$'
       AND NOT EXISTS (SELECT 1 FROM wealth_person_entries e WHERE e.transaction_id = t.id AND e.status <> 'removed')
     ORDER BY t.occurred_on`, [uid]);
-  const known = new Map(people.map(p => [p.name.toLowerCase(), p.id]));
+}
+// Names nobody in your list goes by yet, with both sent and received transfers (people you know are on their own page).
+export async function loanSuggestions(uid, { db = sql, rows = null } = {}) {
+  if (!rows) rows = await unlinkedTransfers(db, uid);
   const by = new Map();
   for (const t of rows) {
     const person = personOf(t.description), key = person.toLowerCase();
@@ -158,7 +178,7 @@ export async function loanSuggestions(uid, { db = sql, people = [] } = {}) {
   }
   return [...by.entries()]
     .map(([key, g]) => ({ ...g, key, sent: r2(g.sent), received: r2(g.received), p2p: /p2p|liquiloans|lendbox|faircent|lendenclub/i.test(key),
-      personId: known.get(key) || null, firstDay: g.transactions[0].day, lastDay: g.transactions[g.transactions.length - 1].day }))
+      personId: null, firstDay: g.transactions[0].day, lastDay: g.transactions[g.transactions.length - 1].day }))
     .filter(g => (g.sent > 0 && g.received > 0) || (g.p2p && g.sent > 0))
     .sort((a, b) => (b.sent - b.received) - (a.sent - a.received))
     .slice(0, 30);
@@ -187,8 +207,13 @@ async function resolvePeople(db, uid, list, actor, dryRun) {
   const dup = new Set();
   for (const w of want) { const k = w.id || w.name.toLowerCase(); if (dup.has(k)) throw httpError(400, `${w.name || 'A person'} is in the list twice`); dup.add(k); }
   const ids = want.filter(w => w.id).map(w => w.id), names = want.filter(w => w.name).map(w => w.name.toLowerCase());
-  const found = await db.query(`SELECT id, name FROM wealth_people WHERE user_id = $1 AND (id = ANY($2::uuid[]) OR lower(name) = ANY($3::text[]))`, [uid, ids, names]);
-  const byId = new Map(found.map(p => [p.id, p])), byName = new Map(found.map(p => [p.name.toLowerCase(), p]));
+  const found = await db.query(`SELECT id, name, status FROM wealth_people WHERE user_id = $1 AND (id = ANY($2::uuid[]) OR lower(name) = ANY($3::text[]))`, [uid, ids, names]);
+  const byId = new Map(found.filter(p => p.status !== 'removed').map(p => [p.id, p])), byName = new Map(found.filter(p => p.status !== 'removed').map(p => [p.name.toLowerCase(), p]));
+  const viaAlias = await db.query(`SELECT a.alias_key, p.id, p.name FROM wealth_person_aliases a JOIN wealth_people p ON p.id = a.person_id AND p.status <> 'removed'
+    WHERE a.user_id = $1 AND a.alias_key = ANY($2::text[])`, [uid, want.filter(w => w.name).map(w => nameKey(w.name))]).catch(() => []);
+  for (const w of want.filter(w => w.name && !byName.has(w.name.toLowerCase()))) { const hit = viaAlias.find(a => a.alias_key === nameKey(w.name)); if (hit) byName.set(w.name.toLowerCase(), { id: hit.id, name: hit.name }); }
+  const gone = found.filter(p => p.status === 'removed' && names.includes(p.name.toLowerCase()) && !byName.has(p.name.toLowerCase()));
+  if (gone.length && !dryRun) { await withActor(db, actor, [[`UPDATE wealth_people SET status = 'open', hidden = false, updated_at = now() WHERE id = ANY($1::uuid[])`, [gone.map(p => p.id)]]]); for (const p of gone) byName.set(p.name.toLowerCase(), p); }
   for (const w of want.filter(w => w.id)) if (!byId.has(w.id)) throw httpError(404, 'Person not found');
   const fresh = [...new Set(want.filter(w => w.name && !byName.has(w.name.toLowerCase())).map(w => w.name))];
   if (fresh.length && !dryRun) {
@@ -213,6 +238,7 @@ export async function savePerson(uid, b, { db = sql, actor = 'owner', dryRun = f
   if (b?.annualRate !== undefined) set.annual_rate = rateOf(b.annualRate);
   if (b?.status !== undefined) { if (!['open', 'settled', 'written_off', 'removed'].includes(b.status)) throw httpError(400, 'status must be open, settled, written_off or removed'); set.status = b.status; }
   if (b?.note !== undefined) set.note = text(b.note);
+  if (b?.hidden !== undefined) set.hidden = !!b.hidden;
   if (b?.personId == null) {
     if (!set.name) throw httpError(400, 'A person needs a name');
     if (dryRun) return { dryRun, wouldStore: set };
@@ -223,8 +249,9 @@ export async function savePerson(uid, b, { db = sql, actor = 'owner', dryRun = f
     return { stored: true, personId: ins[0].id };
   }
   if (!isUuid(b.personId)) throw httpError(400, 'personId must be a person id');
-  const [p] = await db.query(`SELECT id FROM wealth_people WHERE id = $1 AND user_id = $2 AND status <> 'removed'`, [b.personId, uid]);
+  const [p] = await db.query(`SELECT id, name FROM wealth_people WHERE id = $1 AND user_id = $2 AND status <> 'removed'`, [b.personId, uid]);
   if (!p) throw httpError(404, 'Person not found');
+  if (set.name && set.name === p.name) delete set.name;
   if (set.status === 'removed') {
     const [left] = await db.query(`SELECT (SELECT count(*) FROM wealth_person_entries WHERE person_id = $1 AND status <> 'removed')::int
       + (SELECT count(*) FROM wealth_bill_split_shares sh JOIN wealth_bill_splits s ON s.id = sh.split_id AND s.status = 'active' WHERE sh.person_id = $1)::int AS n`, [p.id]);
@@ -234,8 +261,10 @@ export async function savePerson(uid, b, { db = sql, actor = 'owner', dryRun = f
   if (!cols.length) throw httpError(400, 'Nothing to change');
   if (dryRun) return { dryRun, personId: p.id, wouldSet: set };
   try {
-    await withActor(db, actor, [[`UPDATE wealth_people SET ${cols.map((c, i) => `${c} = $${i + 3}`).join(', ')}, updated_at = now() WHERE id = $1 AND user_id = $2`,
-      [p.id, uid, ...cols.map(c => set[c])]]]);
+    const stmts = [[`UPDATE wealth_people SET ${cols.map((c, i) => `${c} = $${i + 3}`).join(', ')}, updated_at = now() WHERE id = $1 AND user_id = $2`,
+      [p.id, uid, ...cols.map(c => set[c])]]];
+    if (set.name) stmts.push([`INSERT INTO wealth_person_aliases (user_id, person_id, alias, alias_key) VALUES ($1, $2, $3, $4) ON CONFLICT (user_id, alias_key) DO NOTHING`, [uid, p.id, p.name, nameKey(p.name)]]);
+    await withActor(db, actor, stmts);
   } catch (e) { if (e?.code === '23505') throw httpError(409, `${set.name} is already in your people`); throw e; }
   return { stored: true, personId: p.id, changed: cols };
 }
@@ -258,7 +287,7 @@ export async function addPersonEntry(uid, b, { db = sql, actor = 'owner', dryRun
       if (t.linked) throw httpError(409, `${t.description || t.id} is already linked to a person`);
       if (t.split) throw httpError(409, `${t.description || t.id} is split among people — change it on the People page`);
     }
-    moves = rows.map(t => ({ direction: ids.length === 1 && ['out', 'in'].includes(b.direction) ? b.direction : directionOf(t), amount: t.amount, on: t.day, transaction_id: t.id }));
+    moves = rows.map(t => ({ direction: ids.length === 1 && ['out', 'in'].includes(b.direction) ? b.direction : directionOf(t), amount: t.amount, on: t.day, transaction_id: t.id, name: personOf(t.description) }));
   } else {
     if (!['out', 'in'].includes(b?.direction)) throw httpError(400, 'direction must be out (lent) or in (paid back)');
     const amount = Number(b.amount);
@@ -272,6 +301,9 @@ export async function addPersonEntry(uid, b, { db = sql, actor = 'owner', dryRun
     ON CONFLICT DO NOTHING RETURNING id`, [person.id, JSON.stringify(moves), text(b.note)]]]);
   if (ins.length !== moves.length) throw httpError(409, 'A transaction is already linked to a person');
   if (moves.some(m => m.direction === 'out')) await db.query(`UPDATE wealth_people SET status = 'open', updated_at = now() WHERE id = $1 AND status = 'settled'`, [person.id]);
+  const names = [...new Map(moves.filter(m => m.name && nameKey(m.name) !== nameKey(person.name)).map(m => [nameKey(m.name), m.name])).entries()];
+  if (names.length) await db.query(`INSERT INTO wealth_person_aliases (user_id, person_id, alias, alias_key) SELECT $1, $2, x.a, x.k FROM jsonb_to_recordset($3::jsonb) AS x(a text, k text)
+    ON CONFLICT (user_id, alias_key) DO NOTHING`, [uid, person.id, JSON.stringify(names.map(([k, a]) => ({ k, a })))]).catch(() => {});
   return { stored: true, personId: person.id, person: person.name, entries: ins.length };
 }
 
@@ -425,4 +457,50 @@ export async function setRecordStatus(uid, b, { db = sql, actor = 'owner', dryRu
   if (dryRun) return { dryRun, shareId: sh.id, from: sh.status, to: status };
   await withActor(db, actor, [[`UPDATE wealth_bill_split_shares SET status = $2, status_at = now() WHERE id = $1`, [sh.id, status]]]);
   return { stored: true, shareId: sh.id, status };
+}
+
+// POST /api/loans/people/names {personId, name, action: add | remove} — the other names a person goes by in bank text.
+export async function savePersonName(uid, b, { db = sql, actor = 'owner', dryRun = false } = {}) {
+  if (!isUuid(b?.personId)) throw httpError(400, 'personId must be a person id');
+  const [p] = await db.query(`SELECT id, name FROM wealth_people WHERE id = $1 AND user_id = $2 AND status <> 'removed'`, [b.personId, uid]);
+  if (!p) throw httpError(404, 'Person not found');
+  const alias = nameOf(b.name), key = nameKey(alias), action = String(b.action || 'add');
+  if (!key) throw httpError(400, 'Give a name');
+  if (action === 'remove') {
+    if (dryRun) return { dryRun, personId: p.id, remove: alias };
+    await withActor(db, actor, [[`DELETE FROM wealth_person_aliases WHERE user_id = $1 AND person_id = $2 AND alias_key = $3`, [uid, p.id, key]]]);
+    return { stored: true, personId: p.id, removed: alias };
+  }
+  if (action !== 'add') throw httpError(400, 'action must be add or remove');
+  if (key === nameKey(p.name)) return { stored: false, personId: p.id, same: true };
+  const [taken] = await db.query(`SELECT p.name FROM wealth_person_aliases a JOIN wealth_people p ON p.id = a.person_id WHERE a.user_id = $1 AND a.alias_key = $2 AND a.person_id <> $3
+    UNION ALL SELECT name FROM wealth_people WHERE user_id = $1 AND id <> $3 AND status <> 'removed' AND lower(name) = $2`, [uid, key, p.id]);
+  if (taken) throw httpError(409, `"${alias}" already belongs to ${taken.name} — merge the two people instead`);
+  if (dryRun) return { dryRun, personId: p.id, add: alias };
+  await withActor(db, actor, [[`INSERT INTO wealth_person_aliases (user_id, person_id, alias, alias_key) VALUES ($1, $2, $3, $4) ON CONFLICT (user_id, alias_key) DO NOTHING`, [uid, p.id, alias, key]]]);
+  return { stored: true, personId: p.id, added: alias };
+}
+
+// POST /api/loans/people/merge {fromId, intoId} — the same person entered twice: everything moves to one, the other's name
+// becomes one of their other names, and the duplicate is removed (no entry is lost).
+export async function mergePeople(uid, b, { db = sql, actor = 'owner', dryRun = false } = {}) {
+  if (!isUuid(b?.fromId) || !isUuid(b?.intoId) || b.fromId === b.intoId) throw httpError(400, 'Pick two different people');
+  const both = await db.query(`SELECT id, name, status FROM wealth_people WHERE user_id = $1 AND id = ANY($2::uuid[]) AND status <> 'removed'`, [uid, [b.fromId, b.intoId]]);
+  const from = both.find(p => p.id === b.fromId), into = both.find(p => p.id === b.intoId);
+  if (!from || !into) throw httpError(404, 'Person not found');
+  const [clash] = await db.query(`SELECT s.title FROM wealth_bill_split_shares a JOIN wealth_bill_split_shares c ON c.split_id = a.split_id AND c.person_id = $2
+    JOIN wealth_bill_splits s ON s.id = a.split_id AND s.status = 'active' WHERE a.person_id = $1 LIMIT 1`, [from.id, into.id]);
+  if (clash) throw httpError(409, `Both are in the split bill "${clash.title}" — cancel and redo that split first`);
+  if (dryRun) return { dryRun, from: from.name, into: into.name };
+  await withActor(db, actor, [
+    [`UPDATE wealth_person_entries SET person_id = $2 WHERE person_id = $1`, [from.id, into.id]],
+    [`UPDATE wealth_bill_split_shares SET person_id = $2 WHERE person_id = $1`, [from.id, into.id]],
+    [`UPDATE wealth_lend_requests SET person_id = $2 WHERE person_id = $1`, [from.id, into.id]],
+    [`UPDATE wealth_person_rollups SET person_id = $2 WHERE person_id = $1`, [from.id, into.id]],
+    [`UPDATE wealth_person_aliases SET person_id = $2 WHERE person_id = $1`, [from.id, into.id]],
+    [`INSERT INTO wealth_person_aliases (user_id, person_id, alias, alias_key) VALUES ($1, $2, $3, $4) ON CONFLICT (user_id, alias_key) DO UPDATE SET person_id = EXCLUDED.person_id`, [uid, into.id, from.name, nameKey(from.name)]],
+    [`UPDATE wealth_people SET status = 'removed', share_token_hash = NULL, updated_at = now() WHERE id = $1`, [from.id]],
+    [`UPDATE wealth_people SET status = 'open', updated_at = now() WHERE id = $1 AND status = 'settled'`, [into.id]],
+  ]);
+  return { stored: true, from: from.name, into: into.name, personId: into.id };
 }
