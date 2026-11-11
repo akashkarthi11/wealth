@@ -15,16 +15,49 @@ export async function splitsForAccount(uid, accountId, { db = sql } = {}) {
   if (!splits.length) return [];
   const moves = await db.query(`SELECT m.id, m.split_id, m.occurred_at, m.amount::float8 AS amount, m.transaction_id, m.note
     FROM wealth_account_split_moves m WHERE m.split_id = ANY($1::uuid[]) ORDER BY m.occurred_at DESC`, [splits.map(s => s.id)]);
-  return splits.map(s => {
+  const base = splits.map(s => {
     const mine = moves.filter(m => m.split_id === s.id);
     const after = mine.filter(m => !s.base_as_of || new Date(m.occurred_at) > new Date(s.base_as_of));
-    const delta = r2(after.reduce((n, m) => n + m.amount, 0));
-    const balance = s.base_balance == null && !after.length ? null : r2((s.base_balance || 0) + delta);
+    return { s, mine, after, delta: r2(after.reduce((n, m) => n + m.amount, 0)) };
+  });
+  // Interest is earned by every split (e.g. Atom pays interest on each pot): each day's interest from the nightly task
+  // (interest ledger, accrual days on or after the split's screenshot day) is shared across the splits by balance,
+  // rounded to paise so the shares add up exactly to the day's interest. Nothing is stored — it is derived every time.
+  const interest = await splitInterest(db, uid, accountId, base).catch(() => new Map());
+  return base.map(({ s, mine, after, delta }) => {
+    const earned = r2(interest.get(s.id) || 0);
+    const balance = s.base_balance == null && !after.length ? null : r2((s.base_balance || 0) + delta + earned);
     return { id: s.id, key: s.split_key, name: s.name, kind: s.kind, goal: s.goal_amount, purpose: s.purpose,
-      balance, status: after.length ? 'estimated' : s.base_status || null, verifiedBalance: s.base_balance, verifiedAt: s.base_as_of,
-      movedSince: delta, goalPct: s.goal_amount && balance != null ? r2(Math.min(100, balance / s.goal_amount * 100)) : null,
+      balance, status: after.length || earned ? 'estimated' : s.base_status || null, verifiedBalance: s.base_balance, verifiedAt: s.base_as_of,
+      movedSince: delta, interestSince: earned, goalPct: s.goal_amount && balance != null ? r2(Math.min(100, balance / s.goal_amount * 100)) : null,
       recentMoves: mine.slice(0, 8).map(m => ({ at: m.occurred_at, amount: m.amount, note: m.note, transactionId: m.transaction_id })) };
   });
+}
+
+const istDay = t => new Date(new Date(t).getTime() + 5.5 * 3600e3).toISOString().slice(0, 10);
+// Share each accrual day's interest across the splits that existed (had a screenshot balance) by that day, weighted by
+// their balance (screenshot + moves + interest already shared). Largest-remainder rounding keeps exact paise.
+export async function splitInterest(db, uid, accountId, base) {
+  const out = new Map();
+  const dated = base.filter(b => b.s.base_as_of && b.s.base_balance != null);
+  if (!dated.length) return out;
+  const [acct] = await db.query(`SELECT account_key FROM wealth_accounts WHERE id = $1 AND user_id = $2`, [accountId, uid]);
+  if (!acct) return out;
+  const first = dated.map(b => istDay(b.s.base_as_of)).sort()[0];
+  const days = await db.query(`SELECT accrual_date::text AS d, sum(interest_amount)::float8 AS amount FROM wealth_interest_ledger
+    WHERE user_id = $1 AND account_key = $2 AND accrual_date >= $3::date GROUP BY 1 ORDER BY 1`, [uid, acct.account_key, first]);
+  for (const { d, amount } of days) {
+    const paise = Math.round(amount * 100);
+    if (!paise) continue;
+    const eligible = dated.filter(b => istDay(b.s.base_as_of) <= d).map(b => ({ id: b.s.id, w: Math.max(0, b.s.base_balance + b.delta + (out.get(b.s.id) || 0)) }));
+    const total = eligible.reduce((n, e) => n + e.w, 0);
+    if (!(total > 0)) continue;
+    const parts = eligible.map(e => { const raw = paise * e.w / total; return { id: e.id, p: Math.floor(raw), frac: raw - Math.floor(raw) }; });
+    let left = paise - parts.reduce((n, x) => n + x.p, 0);
+    parts.sort((x, y) => y.frac - x.frac).forEach(x => { if (left > 0) { x.p++; left--; } });
+    for (const x of parts) out.set(x.id, r2((out.get(x.id) || 0) + x.p / 100));
+  }
+  return out;
 }
 
 async function ownSplit(db, uid, splitId) {

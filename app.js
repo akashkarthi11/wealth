@@ -1,4 +1,4 @@
-const APP_BUILD_ID='20261111-claude-plan-4d';
+const APP_BUILD_ID='20261111-claude-plan-4e';
 (function promptForUpdatedApp(){
   try {
     const key='wealth-ledger:app-build';
@@ -613,7 +613,7 @@ function splitsHtml(d){const list=d.splits||[];if(!list.length)return '';
  const acct=Number(d.account.current_balance),sum=Math.round(list.reduce((n,x)=>n+(Number(x.balance)||0),0)*100)/100,diff=Number.isFinite(acct)?Math.round((acct-sum)*100)/100:null;
  const total=sum||1,day=t=>t?new Date(t).toLocaleDateString('en-IN',{day:'numeric',month:'short'}):'';
  const bar='<div class="bank-share" role="group" aria-label="Splits — tap a segment">'+list.filter(x=>x.balance>0).map((x,i)=>'<i style="width:'+Math.max(x.balance/total*100,0.6).toFixed(2)+'%;background:'+SPLIT_COLORS[i%SPLIT_COLORS.length]+'" tabindex="0" role="button" data-share="'+esc(x.name+' · '+money(x.balance)+' · '+(x.balance/total*100).toFixed(1)+'%')+'"></i>').join('')+'</div><div class="share-readout" aria-live="polite" hidden></div>';
- const rows=list.map((x,i)=>'<div class="split-row"><i style="background:'+SPLIT_COLORS[i%SPLIT_COLORS.length]+'"></i><span class="split-main"><b>'+esc(x.name)+'</b><small>'+esc(x.kind==='roundups'?'Round-ups':x.goal?'Goal '+money(x.goal):'Goal not set')+' · '+(x.status==='estimated'?'estimated ('+(x.movedSince>=0?'+':'−')+money(Math.abs(x.movedSince))+' since '+day(x.verifiedAt)+')':'verified '+day(x.verifiedAt))+'</small>'
+ const rows=list.map((x,i)=>'<div class="split-row"><i style="background:'+SPLIT_COLORS[i%SPLIT_COLORS.length]+'"></i><span class="split-main"><b>'+esc(x.name)+'</b><small>'+esc(x.kind==='roundups'?'Round-ups':x.goal?'Goal '+money(x.goal):'Goal not set')+' · '+(x.status==='estimated'?(()=>{const ch=Math.round(((x.movedSince||0)+(x.interestSince||0))*100)/100;return 'estimated ('+(ch>=0?'+':'−')+money(Math.abs(ch))+' since '+day(x.verifiedAt)+(x.interestSince?' incl. '+money(x.interestSince)+' interest':'')+')'})():'verified '+day(x.verifiedAt))+'</small>'
   +(x.goalPct!=null?'<span class="split-goal"><em style="width:'+x.goalPct+'%"></em></span>':'')
   +(x.recentMoves&&x.recentMoves.length?'<small class="split-moves">'+x.recentMoves.slice(0,3).map(m=>(m.amount>0?'+':'−')+money(Math.abs(m.amount))+' '+day(m.at)+(m.note?' · '+esc(String(m.note).split(' (')[0]):'')).join(' · ')+'</small>':'')
   +'</span><b class="split-amt">'+(x.balance==null?'—':money(x.balance))+'</b></div>').join('');

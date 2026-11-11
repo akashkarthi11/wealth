@@ -50,6 +50,22 @@ test('paying rent reduces the Rent split; a round-up adds to Round ups; balances
   assert.deepEqual([r.balance, r.status], [209, 'verified']);
 });
 
+test('interest after the screenshot is shared across the splits by balance, adds up exactly, and earlier interest is ignored', async () => {
+  const { a, uid, atom } = await setup();
+  const accrue = (d, amt) => a.query(`INSERT INTO wealth_interest_ledger(user_id,provider,product_key,account_key,partition_key,accrual_date,principal,annual_rate,day_count,interest_amount,entry_type,revision,calculation_status,notes,source_url)
+    VALUES($1,'Slice','atom-savings','atom-savings','main',$2,63448,0.055,365,$3,'accrual',1,'estimated','t','https://example.test/rate')`, [uid, d, amt]);
+  await accrue('2026-11-10', 9.56);                 // already inside the 11 Nov 5:21 PM screenshot ("earned yesterday")
+  await accrue('2026-11-11', 9.5605); await accrue('2026-11-12', 9.5619);
+  const s = await splitsForAccount(uid, atom, { db: a });
+  const total = Math.round(s.reduce((n, x) => n + x.interestSince, 0) * 100) / 100;
+  assert.equal(total, 19.12, 'exactly the two days after the screenshot (9.56 + 9.56 in paise)');
+  const inv = s.find(x => x.key === 'invest-later'), ru = s.find(x => x.key === 'round-ups');
+  assert.ok(Math.abs(inv.interestSince - 19.12 * 30036 / 63447) <= 0.02, 'Invest later gets ~47%');
+  assert.ok(ru.interestSince <= 0.06, 'Round ups (₹172) gets a few paise');
+  assert.equal(inv.status, 'estimated');
+  assert.equal(inv.balance, Math.round((30036 + inv.interestSince) * 100) / 100);
+});
+
 test('safety: a transaction on another account cannot move a split; zero / future / unknown are refused', async () => {
   const { a, uid, atom, slice } = await setup();
   const id = (await splitsForAccount(uid, atom, { db: a }))[0].id;
