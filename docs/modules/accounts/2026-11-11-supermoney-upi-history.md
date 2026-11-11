@@ -60,3 +60,9 @@ Owner request ("read use that", then "approve"): two password-protected HDFC sta
 ## Self transfers out of money in and out (2026-11-11)
 
 Owner request: self transfers must not count as money in or out. The app counts only income/expense (+ investment, liability); `transfer` rows are shown apart. Audit of every non-transfer row found 2 own-account credits stored as income (workbook import, 3 Nov 2026: ₹80,000 "Karthikeyan Subramanian", ₹800 "Karthikeyan S", both "Unconfirmed credit — verify"). Repair [`2026-11-11-self-transfers-not-income.sql`](../../../scripts/db/repairs/2026-11-11-self-transfers-not-income.sql): backup `prod-before-self-transfers.wlb` (32 tables, 5,704 rows), UPDATE 2 → kind `transfer`, category Self transfer; re-run 0. November money in drops by ₹80,800.
+
+## Slice Savings dropped out of the bank total (2026-11-11)
+
+An external writer (ChatGPT, audit actor `external`) added "UPI transfer to Arun S" ₹5,000 at 13:40 IST and set Slice Savings ••3731 to ₹42,889.22 with status `pending_reconciliation`. Totals count only `verified` and `stale` (estimated) balances, so the account left the bank total and net worth. Repair [`2026-11-11-slice-savings-status.sql`](../../../scripts/db/repairs/2026-11-11-slice-savings-status.sql) (owner: "now fix it"): backup `prod-before-slice-status.wlb` (32 tables, 5,771 rows); status → `stale` / `estimated`, amount unchanged; re-run 0.
+
+**Rule for external writers:** when adding a transaction, write `wealth_transactions` only; never change `wealth_accounts` / `wealth_account_balances`, or use status `verified` (bank evidence) or `stale` (estimate) — never `pending_reconciliation`.
