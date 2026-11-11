@@ -4,10 +4,11 @@ Deployment, build, CI and environment configuration.
 
 ## Hosting
 
-- Vercel project `wealth`; serverless functions in `api/` (Node 20+, region `sin1`, `maxDuration` 10 s).
+- Vercel project `wealth` (Hobby plan: max 12 functions, 2 crons). **One** serverless function, `api/router.js` (Node 20+, region `sin1`, `maxDuration` 10 s). `vercel.json` rewrites `/api/<path>` to it; handlers live in `api/_routes/` (not deployed as functions). See [fix note](2026-11-11-hobby-function-limit-single-router.md).
+- Only `main` builds (`git.deploymentEnabled`); see [fix note](2026-11-11-vercel-build-main-only.md).
 - Static files: `index.html`, `app.js`, `style.css` — copied to `public/` by the build.
 - Security headers on all routes: `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, restrictive `Permissions-Policy`. API and `/` are `no-store`.
-- Cron: `/api/refresh-market-prices` daily at 23:00 UTC.
+- Crons: `/api/refresh-market-prices` daily at 23:00 UTC; `/api/nightly` (interest accrual + encrypted backup) at 20:00 UTC.
 
 ## Build — `npm run build`
 
@@ -18,7 +19,7 @@ Tests: `npm run test:us-valuation`.
 
 ## Branches
 
-- `main` — production. `development` — development/preview. Feature branches → PR to `development`.
+- `main` — production (the only branch Vercel builds). `development` — integration. `claude-dev` — Claude's working branch → `development` → `main`. `v2` — kept identical to `main`.
 - `fix/net-worth-valuation-reconciliation` adds a GitHub Actions workflow that runs validation and tests on PRs to `development` only.
 
 ## Environment variables
@@ -29,7 +30,11 @@ Tests: `npm run test:us-valuation`.
 | `WEALTH_SESSION_SECRET` (≥ 32) | Sessions |
 | `WEALTH_ACCESS_KEY` | Register / forgot password |
 | `REDIS_URL` | Optional cache |
-| `CRON_SECRET` | Market-price refresh |
+| `CRON_SECRET` | Market-price refresh, `/api/nightly` |
+| `WEALTH_INGEST_SECRET` (≥ 32) | Plan 3 ingest APIs for the scheduled agents (**not set yet**) |
+| `WEALTH_BACKUP_KEY`, `BLOB_READ_WRITE_TOKEN` (private store) | Nightly encrypted backup (**not set yet**) |
+| `WEALTH_METAL_PRICE_SOURCE` | `futures` to use GC=F/SI=F; default is the India benchmark |
+| `WEALTH_DATA_MODEL` | `v1` (default, Production) or `v2` |
 | `WEALTH_ADVISOR_INGEST_SECRET` (≥ 32) | Stock Advisor ingest |
 | `ANGEL_API_KEY`, `ANGEL_CLIENT_CODE`, `ANGEL_PIN`, `ANGEL_TOTP_SECRET`, `ANGEL_MAC_ADDRESS` | Angel One |
 | `EXA_API_KEY`, `MASSIVE_API_KEY` | Providers |

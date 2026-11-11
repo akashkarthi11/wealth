@@ -1,6 +1,7 @@
 # 2026-11-11 — Production deploy failed: more than 12 functions on the Hobby plan
 
 **Status:** code committed on `claude-dev`, tests passed (102). Not deployed. Production still serves the build from before the `main` merge `45e4b96`.
+**Status update 2026-11-11:** merged to `main` (`696a71d`, PR #43/#44) and **deployed to Production**; every later `main` deploy (latest `2a2afde`) succeeded with one function, `api/router.js`.
 
 ## Symptoms
 

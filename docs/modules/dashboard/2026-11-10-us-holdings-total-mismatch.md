@@ -4,6 +4,7 @@
 - **Primary module:** Dashboard
 - **Related modules:** Investments, Market Data, Database
 - **Status:** Initial fix merged and deployed to Development; recurrence confirmed by user screenshot; unified valuation follow-up committed on `fix/us-holdings-inr-consistency`; tests/deployment pending
+- **Status update 2026-11-11:** branch `fix/us-holdings-inr-consistency` is merged into `main` and deployed to Production.
 - **Branch:** `fix/market-price-wealth-total`
 - **Related PR:** [#33](https://github.com/akashkarthi11/wealth/pull/33)
 

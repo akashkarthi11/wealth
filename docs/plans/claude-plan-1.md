@@ -11,7 +11,7 @@
 | Version | 1.2 |
 | Date | 2026-11-10 |
 | Author | Claude (Claude Code), prepared for the project owner |
-| Status | **Implemented on `claude-dev`** (see §19). Not deployed; no Neon database changed. Awaiting a Neon-branch run and approvals |
+| Status | **Deployed to Production 2026-11-10** (see §19). Superseded for new work by [Plan 2](claude-plan-2.md) and [Plan 3](claude-plan-3.md) |
 | Companion PSD / FSD | Not yet created. This TSD covers technical changes only; no new business functionality is introduced |
 | Format note | **Assumption:** no existing GrowX TSD template was found in the repository or workspace, so this follows a standard TSD structure. Re-format if a GrowX template exists |
 
@@ -250,17 +250,17 @@ Requirement IDs (`TR-x.y`) are referenced by tests in §12.
 
 | ID | Requirement | Script |
 |---|---|---|
-| TR-4.1 | Composite owner FKs `(user_id, parent_id) → parent(user_id, id)` on 13 relations, added `NOT VALID` then validated | [stage 1](../../scripts/migrations/drafts/2026-11-10-normalization-stage1-keys.sql) |
+| TR-4.1 | Composite owner FKs `(user_id, parent_id) → parent(user_id, id)` on 13 relations, added `NOT VALID` then validated | [stage 1](../../scripts/migrations/0002_owner_keys.sql) |
 | TR-4.2 | Unique: one active position per holding; one advisor report per `(user_id, run_at)`; `wealth_transactions.external_ref` unique per user when set | stage 1 |
 | TR-4.3 | Drop 4 duplicate indexes and 13 redundant single-column FKs; remove their re-creation from `migrate-db.mjs` | stage 1 |
-| TR-4.4 | Re-link LIC / Slice auto-deposit obligations to active mandates; one open interest rate per product; strip duplicated metadata keys; delete advisor snapshot copy | [stage 2](../../scripts/migrations/drafts/2026-11-10-normalization-stage2-data.sql) |
+| TR-4.4 | Re-link LIC / Slice auto-deposit obligations to active mandates; one open interest rate per product; strip duplicated metadata keys; delete advisor snapshot copy | [stage 2](../../scripts/db/repairs/2026-11-10-normalization-stage2-data.sql) |
 | TR-4.5 | `fixed-deposits` account row and the 5 identical transaction pairs handled per decisions D3, D4 | stage 2 (commented) |
 
 ### Phase 5 — Account hierarchy
 
 | ID | Requirement |
 |---|---|
-| TR-5.1 | Apply [schema](../../scripts/migrations/drafts/2026-11-10-account-hierarchy-1-schema.sql) and [backfill](../../scripts/migrations/drafts/2026-11-10-account-hierarchy-2-backfill.sql); backfill aborts if any active holding or balance is not carried over |
+| TR-5.1 | Apply [schema](../../scripts/migrations/0003_account_hierarchy.sql) and [backfill](../../scripts/migrations/0004_account_hierarchy_backfill.sql); backfill aborts if any active holding or balance is not carried over |
 | TR-5.2 | `wealth_v_account_values` totals must equal today's dashboard per category to the paisa, except differences listed and explained in the fix note |
 | TR-5.3 | `/api/dashboard` v2 response (§8.2) built from accounts, balances, holdings, latest prices |
 | TR-5.4 | Refresh job writes `wealth_instrument_prices` once per instrument |
@@ -767,7 +767,7 @@ Total ≈ 7–9 working days excluding review. Every phase: Neon branch → Deve
 
 ## 19. Implementation status (v1.1)
 
-Branch `claude-dev`. Nothing deployed; no Neon database written. "Verified on copy" = applied to an in-memory PGlite copy of the Preview data.
+Branch `claude-dev`, merged to `main` and **deployed to Production on 2026-11-10**. "Verified on copy" = applied to an in-memory PGlite copy of the Preview data (rows below keep the evidence as recorded at the time).
 
 | Phase | Requirement | Status | Commit | Evidence |
 |---|---|---|---|---|

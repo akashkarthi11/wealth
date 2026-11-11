@@ -1,7 +1,7 @@
 # Database Optimization Plan
 
 - **Date:** 2026-11-10
-- **Status:** Proposed — nothing applied
+- **Status:** Superseded by [Claude Plan 1](claude-plan-1.md) (deployed 2026-11-10)
 - **Scope:** Neon schema, data integrity, query paths, migrations, retention
 - **Evidence:** read-only audit of the database behind the `development` Preview deployment (`neondb`, ap-southeast-1); baseline schema in [`scripts/db/schema.sql`](../../scripts/db/schema.sql)
 
