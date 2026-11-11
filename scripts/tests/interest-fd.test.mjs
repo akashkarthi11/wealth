@@ -7,7 +7,8 @@ import vm from 'node:vm';
 
 const src = readFileSync(new URL('../../app.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const start = src.indexOf('function interestStatementFor(');
-const block = src.slice(start, src.indexOf('\n', src.indexOf('function interestViewHtml(')));
+const engine = src.slice(src.indexOf('// Interactive charts (2026-11-11)'), src.indexOf('// End interactive charts'));
+const block = engine + src.slice(start, src.indexOf('\n', src.indexOf('function interestViewHtml(')));
 
 function page({ rows = [], positions = [] } = {}) {
   const ctx = { interestRows: rows, interestStatements: [], positions, esc: s => String(s), money: v => 'INR ' + Number(v).toFixed(2),
