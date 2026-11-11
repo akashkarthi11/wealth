@@ -24,6 +24,11 @@ This file contains the user's instructions to the AI assistant. Read and follow 
 - **Do not save any interest from a screenshot into the database** — no income transaction, no interest row, no balance change for it.
 - Interest is handled by the app's own nightly interest task (it calculates and records it every night). Saving it again from a screenshot double-counts it.
 - If a screenshot shows only interest, there is nothing to record. If it also shows other transactions, record only those.
+- **This applies to every task, not only screenshots.** Interest is written ONLY by the app's nightly job (Vercel cron
+  `/api/nightly`, 01:30 IST). ChatGPT / agents must NOT insert or update: interest income transactions, "daily interest credit"
+  rows, `wealth_interest_ledger` rows, or interest statements. The nightly job keeps exactly one "interest this month" income
+  row per account (Slice Savings, Atom) and updates that same row every night; a new row starts each month.
+- If an older scheduled prompt has an "interest accrual" or "interest credit" step, skip it — report only.
 
 ## 3. Production and Development database safety
 - Treat Production as protected. Do not alter Production during a Development migration or test.
