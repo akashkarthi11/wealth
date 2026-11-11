@@ -540,3 +540,58 @@ button.dashboard-alert-banner:focus-visible{outline:2px solid #8bb5ff;outline-of
 .activity-head-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
 .activity-head-actions .primary{padding:9px 14px;font-size:13px}
 @media(max-width:620px){.activity-head-actions{justify-content:flex-start}}
+/* ---- Bank balances (live accounts): summary + account list ---- */
+.bank-summary{position:relative;overflow:hidden;margin:4px 0 14px;padding:20px 20px 18px;border:1px solid #34516c;border-radius:18px;background:radial-gradient(circle at 95% 0%,#2a5b5b66 0,transparent 40%),linear-gradient(135deg,#1b3048,#102033 72%)}
+.bank-kicker{font-size:10px;letter-spacing:1.6px;color:#9fb6d1;font-weight:700}
+.bank-total{margin-top:6px;font-size:clamp(28px,5.5vw,38px);font-weight:850;letter-spacing:-1px;line-height:1.1;color:#f2f7ff}
+.bank-sub{margin:7px 0 0;color:#9fb0c7;font-size:12px;line-height:1.5}
+.bank-share{display:flex;gap:3px;height:10px;margin:16px 0 10px;border-radius:6px;overflow:hidden;background:#0c1727}
+.bank-share i{display:block;height:100%;border-radius:3px}
+.bank-legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:11px;color:#b5c4d8}
+.bank-legend span{display:inline-flex;align-items:center;gap:6px}
+.bank-legend i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.bank-legend b{color:#e6eefb;font-weight:650}
+.bank-split{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.bank-split div{background:#0c172799;border:1px solid #2a3d57;border-radius:12px;padding:10px 12px;min-width:0}
+.bank-split small{display:block;font-size:10px;letter-spacing:.4px;margin:0;color:#8fa2bd}
+.bank-split b{display:block;margin-top:4px;font-size:16px;overflow-wrap:anywhere}
+.bank-list{display:flex;flex-direction:column;border:1px solid #2a3b54;border-radius:16px;overflow:hidden;background:#0f1a2a}
+.bank-row{display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:12px;width:100%;padding:14px 14px;background:transparent;border:0;border-top:1px solid #22324a;color:var(--text);text-align:left;font:inherit;cursor:pointer;transition:background .15s}
+.bank-row:first-child{border-top:0}
+.bank-row:hover,.bank-row:focus-visible{background:#15243a;outline:none}
+.bank-row.muted-row{opacity:.6}
+.bank-avatar{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-weight:800;font-size:13px;color:#0b1724;background:var(--c)}
+.bank-row-main{min-width:0;display:flex;flex-direction:column;gap:2px}
+.bank-row-main b{font-size:14px}
+.bank-row-main small{margin:0;font-size:11px;letter-spacing:0;color:#8fa2bd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bank-row-meta{display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap}
+.bank-row-meta em{font-style:normal;font-size:10px;color:#7f93ae}
+.bank-row-amount{text-align:right;display:flex;flex-direction:column;gap:3px}
+.bank-row-amount b{font-size:15px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.bank-row-amount small{margin:0;font-size:10px;letter-spacing:0;color:#8fa2bd}
+.bank-chevron{color:#5f7593;font-size:20px;line-height:1}
+.bank-chip{display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.3px}
+.bank-chip.ok{background:#12352b;color:#6ce0b0}
+.bank-chip.est{background:#3a2e14;color:#f5c26b}
+.bank-chip.warn{background:#3a1d22;color:#ff9b9b}
+.bank-footnote{margin:10px 2px 0;font-size:11px;color:#7f93ae;line-height:1.5}
+.bank-detail .bank-sub{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+@media(max-width:620px){
+ .bank-summary{padding:16px 15px 15px;border-radius:16px}
+ .bank-split{grid-template-columns:1fr}
+ .bank-row{grid-template-columns:auto 1fr auto;gap:10px;padding:12px}
+ .bank-chevron{display:none}
+ .bank-avatar{width:36px;height:36px;border-radius:10px;font-size:12px}
+ .bank-row-amount b{font-size:14px}
+}
+/* ---- Account details page (from the tables) ---- */
+.acct-flow{margin-top:12px}
+.acct-table{display:flex;flex-direction:column;margin-top:10px}
+.acct-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 2px;border-top:1px solid #22324a}
+.acct-row:first-child{border-top:0}
+.acct-row span:first-child{min-width:0;display:flex;flex-direction:column;gap:3px}
+.acct-row b{font-size:13px}
+.acct-row small{margin:0;font-size:11px;letter-spacing:0;color:#8fa2bd;overflow-wrap:anywhere}
+.acct-amt{text-align:right;display:flex;flex-direction:column;gap:2px;flex:0 0 auto}
+.acct-amt b{font-variant-numeric:tabular-nums;white-space:nowrap}
+.acct-row .income{color:var(--green)}.acct-row .expense{color:#ff9b9b}.acct-flow .income{color:var(--green)}.acct-flow .expense{color:#ff9b9b}

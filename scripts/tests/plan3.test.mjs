@@ -8,7 +8,7 @@ import { migratedDb, adapter, MIGRATIONS_DIR } from './helpers/pglite.mjs';
 import { loadMigrations, applyMigrations } from '../db/migrations-lib.mjs';
 import { storePrices, recordEmailImport, seenMessages, recordBalance, updateHolding, createAccount, setFdTerms, markDuplicate, suggestAccounts, assignAccounts } from '../../api/_ingest.js';
 import { planAccrual, runAccrual, submitRate, recordCredit, interestOverview, dayCount, fdPrincipal, round8, round2, estimatedBalance } from '../../api/_interest.js';
-import { spendingRows, obligationsByAccount } from '../../api/_queries.js';
+import { spendingRows, obligationsByAccount, accountDetail } from '../../api/_queries.js';
 import { collectIssues } from '../../api/_dataquality.js';
 import { encryptBackup, decryptBackup, dumpDatabase } from '../../api/_backup.js';
 import { restoreAll } from '../db/restore-lib.mjs';
@@ -401,14 +401,88 @@ test('Bank balances menu shows the live account balances and its total equals th
   const acc = (bank, name, bal, status, type = 'savings') => ({ bank_name: bank, account_name: name, account_type: type, currency: 'INR', current_balance: bal, balance_status: status, balance_as_of: '2026-11-10T18:29:59Z' });
   const accounts = [acc('Slice', 'Slice Savings', '47889.22', 'stale'), acc('Atom', 'Atom Savings', '63429.56', 'stale'), acc('Bank of India', 'BOI Savings', '1426.99', 'verified'),
     acc('HDFC Bank', 'HDFC Savings', '3.89', 'verified'), acc('Roarbank', 'Roarbank Savings', '650.65', 'verified'), acc('X Bank', 'Old', '500', 'unknown'), acc('Slice', 'Card', '100', 'verified', 'credit_card')];
-  const ctx = { accounts, esc: s => String(s), money: v => 'INR ' + v.toFixed(2), Number, String, Date };
-  vm.runInNewContext(['liveBankAccounts', 'bankCounted', 'bankStatusLabel', 'bankAsOf', 'liveBankCardsHtml', 'liveBankDetailHtml'].map(fn).join('\n') +
-    ";globalThis.html=liveBankCardsHtml();globalThis.detail=liveBankDetailHtml('Slice');", ctx);
+  const ctx = { accounts, esc: s => String(s), money: v => 'INR ' + v.toFixed(2), Number, String, Date, Math };
+  const bankColors = src.match(/const BANK_COLORS=\[[^\]]*\];/)[0];
+  vm.runInNewContext(bankColors + ['liveBankAccounts', 'bankCounted', 'bankStatusLabel', 'bankAsOf', 'bankChip', 'bankInitials', 'liveBankCardsHtml'].map(fn).join('\n') +
+    ";globalThis.html=liveBankCardsHtml();", ctx);
   const casa = v1Totals(accounts, []).casa;
   assert.equal(casa, 113400.31);
-  assert.match(ctx.html, /<span class="pill">INR 113400\.31<\/span>/, 'menu total = dashboard CASA');
-  assert.equal((ctx.html.match(/bank-balance-card/g) || []).length, 6, 'one card per bank account (not the credit card)');
-  assert.match(ctx.html, /Estimated · last verified \+ interest/);
-  assert.match(ctx.html, /X Bank[\s\S]*Not counted in the dashboard total/);
-  assert.match(ctx.detail, /Slice Savings[\s\S]*INR 47889\.22/);
+  assert.match(ctx.html, /<div class="bank-total">INR 113400\.31<\/div>/, 'menu total = dashboard CASA');
+  assert.equal((ctx.html.match(/class="bank-row( muted-row)?"/g) || []).length, 6, 'one row per bank account (not the credit card)');
+  assert.match(ctx.html, /Verified by bank<\/small><b>INR 2081\.53/);
+  assert.match(ctx.html, /Estimated \(verified \+ interest\)<\/small><b>INR 111318\.78/);
+  assert.match(ctx.html, /bank-chip est">Estimated/);
+  assert.match(ctx.html, /X Bank[\s\S]*Not counted/);
+  assert.match(ctx.html, /class="bank-avatar"[^>]*>BOI</, 'familiar short names on the badges');
+  assert.match(ctx.html, /class="bank-avatar"[^>]*>HDFC</);
+});
+
+test('bank detail page: only that bank\'s rows and notes; combined records filtered; investment records never shown', async () => {
+  const vm = await import('node:vm');
+  const src = readFileSync(new URL('../../app.js', import.meta.url), 'utf8');
+  const fn = name => { const s = src.indexOf('function ' + name + '('); let i = src.indexOf('{', s), d = 0; for (; i < src.length; i++) { if (src[i] === '{') d++; else if (src[i] === '}' && --d === 0) break; } return src.slice(s, i + 1); };
+  const consts = src.match(/const BANK_MATCH=\{[^\n]*?\};/)[0] + src.match(/const NOT_BANK_RECORD=[^\n]*?;/)[0];
+  const sourceSections = [
+    { heading: 'Latest balance snapshot — 7 November 2026', tables: [[['Account', 'Latest balance'], ['Slice Savings', '₹47,925'], ['Slice Atom', '₹63,420'], ['Bank of India', '₹1,426.99'], ['HDFC Bank', '₹3.89']]], notes: ['BOI balance from SMS', 'Atom buckets updated'] },
+    { heading: 'Slice Savings ••3731 — statement summary', tables: [[['Item', 'Value'], ['Opening', '₹40,000'], ['Interest', '₹64.36']]], notes: [] },
+    { heading: 'Angel One equity holdings', tables: [[['Stock', 'Qty'], ['HDFC Bank', '10']]], notes: [] },
+    { heading: '8 November 2026 — Roarbank credit line and savings', tables: [[['Item', 'Value'], ['Savings account', '₹650.65']]], notes: [] },
+  ];
+  const ctx = { sourceSections, String, Object, RegExp };
+  vm.runInNewContext(consts + fn('bankMatches') + fn('accountRecords') + ';globalThis.f=accountRecords;', ctx);
+  const f = b => JSON.parse(JSON.stringify(ctx.f(b)));   // copy out of the sandbox (cross-realm arrays)
+  const rows = (bank, i) => f(bank)[i].tables[0].slice(1).map(r => r[0]);
+  assert.deepEqual(f('Slice').map(r => [r.heading.slice(0, 14), !!r._filtered]), [['Latest balance', true], ['Slice Savings ', false]]);
+  assert.deepEqual(rows('Slice', 0), ['Slice Savings'], 'Atom row goes to Atom, not Slice');
+  assert.deepEqual(rows('Atom', 0), ['Slice Atom']);
+  assert.deepEqual(f('Atom')[0].notes, ['Atom buckets updated']);
+  assert.deepEqual(rows('Bank of India', 0), ['Bank of India']);
+  assert.deepEqual(f('HDFC Bank').map(r => r.heading.slice(0, 6)), ['Latest'], 'the HDFC Bank stock holding is not a bank record');
+  assert.equal(f('Roarbank')[0]._filtered, undefined, 'a record about Roarbank alone is shown whole');
+});
+
+test('account details page comes from the tables: own account only, history, month flows without duplicates, interest month total, upcoming', async () => {
+  const { a, uid, sav } = await interestFixture();
+  const tx = (kind, amt, day, desc) => a.query(`INSERT INTO wealth_transactions(user_id,kind,category,description,amount,account_id,occurred_on) VALUES($1,$2,'C',$3,$4,$5,$6) RETURNING id`, [uid, kind, desc, amt, sav, day]).then(r => r[0].id);
+  await tx('income', 7.21, '2026-11-10', 'interest'); const d1 = await tx('expense', 280, '2026-11-08', 'Tea'); const d2 = await tx('expense', 280, '2026-11-08', 'Tea');
+  await tx('transfer', 890, '2026-11-05', 'to Atom'); await tx('expense', 100, '2026-10-20', 'October');
+  await markDuplicate(uid, { transactionId: d2, duplicateOf: d1 }, { db: a });
+  await a.query(`INSERT INTO wealth_interest_statements(user_id,provider,product_key,period_start,period_end,statement_total,statement_label) VALUES($1,'Slice Small Finance Bank','slice-savings','2026-11-01','2026-11-09',64.36,'Nov')`, [uid]);
+  await runAccrual(uid, { db: a, now: NOW });
+  await a.query(`INSERT INTO wealth_planned_bills(user_id,title,amount,due_date,account_id,bill_key) VALUES($1,'Rent',8000,'2026-11-15',$2,'rent')`, [uid, sav]);
+  const d = await accountDetail(uid, sav, a, { now: NOW });
+  assert.equal(d.account.account_name, 'Slice Savings');
+  assert.deepEqual(d.thisMonth, { month: '2026-11', moneyIn: 7.21, moneyOut: 280, transfers: 890 }, 'the marked duplicate is left out');
+  assert.deepEqual(d.months.map(m => m.month), ['2026-11', '2026-10']);
+  assert.equal(d.transactionCount, 4);
+  assert.ok(d.balanceHistory.length >= 1);
+  assert.equal(d.interest[0].month_total, round2(64.36 + round8(47882 * 0.055 / 365)), 'statement to 9 Nov + 10 Nov accrual');
+  assert.deepEqual(d.upcoming.map(o => [o.title, o.due_date]), [['Rent', '2026-11-15']]);
+  const [other] = await a.query(`INSERT INTO wealth_users(email,password_hash) VALUES('x@example.test','x') RETURNING id`);
+  assert.equal(await accountDetail(other.id, sav, a, { now: NOW }), null, 'another user cannot read it');
+});
+
+test('no waste: prices are not copied into the unused history table; one rolling estimate per account; audit keeps only changes', async () => {
+  const { a, uid, sav } = await interestFixture();
+  // 1. Prices: latest price (v1) + instrument history (v2), nothing in wealth_price_history.
+  await stock(a, uid);
+  await storePrices(uid, [{ assetClass: 'indian_equity', symbol: 'LT', price: 4200, currency: 'INR', asOf: '2026-11-10T10:00:00Z', source: 'NSE' }], { db: a, now: NOW });
+  assert.equal((await a.query(`SELECT count(*)::int n FROM wealth_price_history`))[0].n, 0);
+  assert.equal((await a.query(`SELECT count(*)::int n FROM wealth_market_prices`))[0].n, 1);
+  // 2. Two nights of daily-credited interest → still one estimated row, moved forward; the verified row untouched.
+  await a.query(`UPDATE wealth_interest_products SET credit_frequency='daily' WHERE product_key='slice-savings'`);
+  await runAccrual(uid, { db: a, now: NOW });
+  await runAccrual(uid, { db: a, now: NOW + 864e5 });
+  const rows = await a.query(`SELECT status, as_of, balance::float8 b FROM wealth_account_balances WHERE account_id=$1 ORDER BY as_of`, [sav]);
+  assert.deepEqual(rows.map(r => r.status), ['verified', 'estimated']);
+  assert.equal(rows[1].as_of.toISOString(), '2026-11-11T18:29:59.000Z', 'estimate moved to the end of 11 Nov');
+  const i10 = round2(47882 * 0.055 / 365), p11 = round2(47882 + i10);
+  assert.equal(rows[1].b, round2(47882 + i10 + round2(p11 * 0.055 / 365)));
+  // 3. Audit: an update stores only the changed columns; touching only updated_at is not recorded.
+  const before = (await a.query(`SELECT count(*)::int n FROM wealth_audit_log WHERE table_name='wealth_accounts'`))[0].n;
+  await a.query(`UPDATE wealth_accounts SET updated_at = now() + interval '1 minute' WHERE id=$1`, [sav]);
+  assert.equal((await a.query(`SELECT count(*)::int n FROM wealth_audit_log WHERE table_name='wealth_accounts'`))[0].n, before, 'updated_at alone is not audited');
+  await a.query(`UPDATE wealth_accounts SET account_name='Slice Savings A/c', updated_at=now() WHERE id=$1`, [sav]);
+  const [last] = await a.query(`SELECT before, after FROM wealth_audit_log WHERE table_name='wealth_accounts' ORDER BY id DESC LIMIT 1`);
+  assert.deepEqual([last.before, last.after], [{ account_name: 'Slice Savings' }, { account_name: 'Slice Savings A/c' }]);
 });

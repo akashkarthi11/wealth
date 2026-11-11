@@ -179,9 +179,17 @@ export async function runAccrual(uid, { db = sql, now = Date.now(), dryRun = fal
       estimate = lastDay ? estimatedBalance({ balances, dayTotals: plan.dayTotals, through: lastDay }) : null;
       if (estimate && !dryRun) {
         const [stored] = await withActor(db, actor, [
-          [`INSERT INTO wealth_account_balances (account_id, as_of, balance, status, note) SELECT $1, $2, $3, 'estimated', $4
-            WHERE NOT EXISTS (SELECT 1 FROM wealth_account_balances WHERE account_id = $1 AND as_of >= $2)
-            ON CONFLICT (account_id, as_of) DO NOTHING RETURNING as_of`, [l.account_id, estimate.asOf, estimate.balance, estimate.note]],
+          // One rolling estimate per verified balance: move the estimate that follows the latest verified balance forward
+          // (it is derived data — verified balance + ledger — so no information is lost); insert only when there is none.
+          [`WITH base AS (SELECT max(as_of) AS v FROM wealth_account_balances WHERE account_id = $1 AND status = 'verified'),
+            upd AS (UPDATE wealth_account_balances b SET as_of = $2, balance = $3, note = $4 FROM base
+                    WHERE b.account_id = $1 AND b.status = 'estimated' AND b.as_of > coalesce(base.v, '-infinity'::timestamptz) AND b.as_of < $2
+                      AND b.as_of = (SELECT max(as_of) FROM wealth_account_balances WHERE account_id = $1 AND status = 'estimated')
+                    RETURNING b.as_of),
+            ins AS (INSERT INTO wealth_account_balances (account_id, as_of, balance, status, note) SELECT $1, $2, $3, 'estimated', $4
+                    WHERE NOT EXISTS (SELECT 1 FROM upd) AND NOT EXISTS (SELECT 1 FROM wealth_account_balances WHERE account_id = $1 AND as_of >= $2)
+                    ON CONFLICT (account_id, as_of) DO NOTHING RETURNING as_of)
+            SELECT as_of FROM upd UNION ALL SELECT as_of FROM ins`, [l.account_id, estimate.asOf, estimate.balance, estimate.note]],
           // Legacy dashboard column ('stale' = estimated there; v1 still counts it and shows it as unverified).
           [`UPDATE wealth_accounts SET current_balance = $3, balance_as_of = $4, balance_status = 'stale', updated_at = now()
             WHERE user_id = $1 AND id = $2 AND balance_status IN ('verified', 'stale') AND (balance_as_of IS NULL OR balance_as_of < $4) RETURNING id`,
