@@ -19,6 +19,12 @@ This file contains the user's instructions to the AI assistant. Read and follow 
 - Never use `pending_reconciliation`.
 - Never describe an estimate as verified. Preserve the evidence timestamp and explain the estimate where the schema supports a note.
 
+## 2a. Interest — never record it from screenshots
+- Screenshots (Slice, Atom, bank apps) show interest as a **full / running total** ("interest earned this month", "November savings interest", "₹X interest earned yesterday").
+- **Do not save any interest from a screenshot into the database** — no income transaction, no interest row, no balance change for it.
+- Interest is handled by the app's own nightly interest task (it calculates and records it every night). Saving it again from a screenshot double-counts it.
+- If a screenshot shows only interest, there is nothing to record. If it also shows other transactions, record only those.
+
 ## 3. Production and Development database safety
 - Treat Production as protected. Do not alter Production during a Development migration or test.
 - When the user requests a Production-only operation, use the Production project only.

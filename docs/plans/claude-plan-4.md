@@ -259,3 +259,7 @@ Checked against screenshots: Monies 1,42,378 (9 Nov) → 1,42,399 (11 Nov) = +21
 - Schemes: UPDATE 2 — Slice Monies 1% of Slice card spends → 1.5% from 3,00,000 → 2% from 5,00,000; HDFC Swiggy Orange 5% of Swiggy orders on the card. (The full card-only / Swiggy display needs build `4c`/`4d` deployed.)
 - Verified balances via the app's own path (account record and history in step): Slice Savings ₹42,871 (11 Nov 5:19 PM), Atom Savings ₹63,448.36 (5:21 PM), Slice Monies 1,42,399 (≈ ₹1,423.99). Slice Savings record and history now both ₹42,871 — the ₹5,018 mismatch (D0) is closed.
 - "approve splits" received; the splits need migration 0019, which reaches Production with the next deploy ("main") — applied after it.
+
+### Splits in Production; interest rule (2026-11-11)
+- Build `4d` live (`main` `cdb8e20`, 0019 applied, 20 migrations). Atom splits added (owner "approve splits"): INSERT 4 splits, 4 verified balances, 2 round-up moves; re-run 0. Splits ₹63,447 vs Atom ₹63,448.36 (rounding).
+- Owner rule: screenshots show interest as a full/running total — **never save interest from a screenshot**; the nightly interest task records it. Added as `rules.md` §2a; `issue.md` rule 9 changed to match.
