@@ -78,10 +78,14 @@ export function configStatus(env=process.env){
   backup:String(env.WEALTH_BACKUP_KEY??'').trim().length>=32&&String(env.BLOB_READ_WRITE_TOKEN??'').trim().length>0,
   metalPriceSource:String(env.WEALTH_METAL_PRICE_SOURCE||'').trim().toLowerCase()==='futures'?'futures':'india benchmark (agent)',
   dataModel:String(env.WEALTH_DATA_MODEL||'v1').trim().toLowerCase()==='v2'?'v2':'v1',
+  dashboardModel:dashboardModel(env),
  };
 }
 // Data model switch (TSD §13): 'v1' legacy positions (default) or 'v2' account hierarchy.
 export function dataModel(){return String(process.env.WEALTH_DATA_MODEL||'v1').trim().toLowerCase()==='v2'?'v2':'v1'}
+// Dashboard model (owner 2026-11-11: "set v2 default"): the dashboard shows the account model (v2) unless
+// WEALTH_DASHBOARD_MODEL=v1. Separate from dataModel(), which still decides where new records are written.
+export function dashboardModel(env=process.env){return String(env.WEALTH_DASHBOARD_MODEL||'v2').trim().toLowerCase()==='v1'&&String(env.WEALTH_DATA_MODEL||'').trim().toLowerCase()!=='v2'?'v1':'v2'}
 // Database schema is provisioned by migrations, never by request handlers.
 // Avoid running DDL and role UPDATE statements on every serverless cold start.
 // A missing or invalid deployment setting. Handlers report it as 503 with the message (no secret values).
