@@ -1,0 +1,36 @@
+# Wealth Ledger Issue Log
+
+## Issue: November round-ups were double-counted on 11 Nov 2026
+
+### What happened
+- The Slice Activity screen showed **“Nov Round ups — ₹159”**, which is the **cumulative November total**, not a new transaction on 11 Nov.
+- The detailed round-ups screen breaks that ₹159 into individual entries:
+  - 11 Nov: ₹18
+  - 7 Nov: ₹15
+  - 6 Nov: ₹16 + ₹40 + ₹30 + ₹40
+- Earlier ledger entries already included ₹141 of round-ups (the prior entries total ₹141).
+- Only **₹18** was new on 11 Nov. Recording ₹159 as a fresh transaction incorrectly overstated round-ups by ₹141.
+
+### Corrections applied
+- Updated the 11 Nov “November round-ups” ledger row from **₹159 to ₹18**.
+- Assigned that ₹18 transaction to **Slice Savings ••3731**.
+- Assigned **Gullak Technologies ₹1** to **Slice Savings ••3731**, based on the payment details screenshot.
+- Confirmed **MMTC PAMP ₹21** was paid from **Slice Credit Card ••6136** and classified as an investment.
+- Atom interest **₹76.36** remains assigned to Atom Savings.
+- The generic savings interest **₹71.57** and Mr Arun S **₹5,000** are assigned to Slice Savings ••3731 based on the user's clarification that these transactions were from the savings side and the payment screenshot showing Slice Savings for the round-up/Gullak transactions.
+
+### Rules for future imports (ChatGPT and Claude)
+1. **Never treat a cumulative/month-to-date total as a new transaction.** A summary such as “Nov Round ups ₹159” is a running total unless the transaction detail proves it is a single posting.
+2. Open or inspect the transaction breakdown and import only individual new postings not already present in the ledger.
+3. Reconcile against existing ledger rows by date, description, amount, account, and transaction/reference ID before inserting. Do not duplicate existing entries.
+4. For the November round-ups shown here, the month-to-date total is ₹159 and the new 11 Nov posting is only ₹18; the earlier ₹141 was already recorded.
+5. Use payment-detail screenshots to identify the source account:
+   - MMTC PAMP ₹21 → Slice CC ••6136.
+   - Round-up ₹18 → Slice Savings ••3731.
+   - Gullak Technologies ₹1 → Slice Savings ••3731.
+   - Atom interest ₹76.36 → Atom Savings.
+6. Do not guess an account for transactions where the source account is not visible. Leave it unassigned and ask for clarification if assigning it is necessary.
+7. Keep transfers/savings round-ups distinct from consumption expenses. Do not count a savings transfer as spending.
+
+### Verification note
+The production database was updated and verified on 11 Nov 2026. The earlier development-only corrections were not assumed to have synced automatically. This issue file is maintained in the repository's development branch for future import workflows.
