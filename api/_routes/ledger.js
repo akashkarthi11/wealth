@@ -1,23 +1,25 @@
-import {sql,schema,json,body,sessionUser,cacheGet,cacheSet,cacheDel,invalidateUserCaches,scheduleCacheRefresh} from '../_lib.js';
+import {sql,schema,json,body,sessionUser,invalidateUserCaches,cachedForUser,cacheHeader} from '../_lib.js';
 import {pageTransactions,PAGE_DEFAULT} from '../_queries.js';
 
-// Only the default first page is cached; later pages and custom sizes always read Neon.
-const cacheKey=uid=>'wealth:ledger:v2:'+uid;
+// Only the default first page is cached (by data version); later pages and custom sizes always read Neon.
 const KINDS=['income','expense','transfer','investment','liability'];
 
 export default async function handler(req,res){
- try{const uid=await sessionUser(req);if(!uid)return json(res,401,{error:'Sign in required'});await schema();
+ try{
  if(req.method==='GET'){
+  await schema();
   const q=new URL(req.url,'https://local').searchParams;
   const cursor=q.get('cursor'),limit=Number(q.get('limit'))||PAGE_DEFAULT;
-  const firstPage=!cursor&&limit===PAGE_DEFAULT;
-  if(firstPage){
-   const key=cacheKey(uid);const cached=await cacheGet(key);
-   if(cached){try{const data=typeof cached==='string'?JSON.parse(cached):cached;if(data&&Array.isArray(data.transactions)){scheduleCacheRefresh(uid,'ledger',async()=>{await cacheSet(key,await pageTransactions(uid),20)},20);return json(res,200,data)}}catch(e){console.warn('[wealth-ledger:cache-invalid]',e?.message||e)}await cacheDel(key)}
-   const data=await pageTransactions(uid);await cacheSet(key,data,20);return json(res,200,data);
+  // First page: versioned Redis cache (0018) — served only while no data has changed, so it is never stale.
+  if(!cursor&&limit===PAGE_DEFAULT){
+   const {uid,data,hit}=await cachedForUser(req,'ledger',uid=>pageTransactions(uid),{ttl:600});
+   if(!uid)return json(res,401,{error:'Sign in required'});
+   cacheHeader(res,hit);return json(res,200,data);
   }
+  const uid=await sessionUser(req);if(!uid)return json(res,401,{error:'Sign in required'});
   return json(res,200,await pageTransactions(uid,{cursor,limit}));
  }
+ const uid=await sessionUser(req);if(!uid)return json(res,401,{error:'Sign in required'});await schema();
  if(req.method==='POST'){
   const b=await body(req);const kind=String(b.kind||'');const category=String(b.category||'').trim().slice(0,60);const description=String(b.description||'').slice(0,180);const account=String(b.account||'').slice(0,80);const amount=Number(b.amount);const date=String(b.date||'');
   const accountIdIn=b.accountId?String(b.accountId):'';const externalRef=b.externalRef?String(b.externalRef).trim().slice(0,120):'';

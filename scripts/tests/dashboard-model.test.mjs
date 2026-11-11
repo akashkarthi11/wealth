@@ -20,8 +20,8 @@ test('write model is unchanged (still v1 unless WEALTH_DATA_MODEL=v2)', () => {
 
 test('dashboard route: owner ?model=v1 compares, ?model=v2 forces, otherwise the default', () => {
   const src = readFileSync(new URL('../../api/_routes/dashboard.js', import.meta.url), 'utf8');
-  assert.match(src, /const wantV2=asked==='v1'\?false:asked==='v2'\?true:dashboardModel\(\)==='v2';/);
-  assert.match(src, /const asked=payload\.role==='admin'\?/, 'only the owner can switch per request');
+  assert.match(src, /const wantV2=admin&&asked==='v1'\?false:admin&&asked==='v2'\?true:defaultV2;/, 'only the owner can switch per request');
+  assert.match(src, /variant:\[asked\|\|'default',dashboardModel\(\),day\]\.join\(':'\)/, 'cache key per model choice and IST day');
   const app = readFileSync(new URL('../../app.js', import.meta.url), 'utf8');
   assert.match(app, /'\/api\/dashboard'\+\(wantModelV1\(\)\?'\?model=v1':''\)/);
   assert.match(app, /Compare with old dashboard \(v1\)/);
