@@ -70,30 +70,41 @@ export function personFigures(moves, { annualRate = null, dueOn = null, status =
 
 export async function loansOverview(uid, { db = sql, now = Date.now() } = {}) {
   const today = istToday(now);
-  const [people, entries, shares, splits] = await Promise.all([
+  const [people, entries, shares, splits, rollups] = await Promise.all([
     db.query(`SELECT id, name, kind, due_on::text AS due_on, annual_rate::float8 AS annual_rate, status, note FROM wealth_people WHERE user_id = $1 ORDER BY lower(name)`, [uid]),
-    db.query(`SELECT e.id, e.person_id, e.direction, e.amount::float8 AS amount, e.occurred_on::text AS on, e.transaction_id, e.note,
+    db.query(`SELECT e.id, e.person_id, e.direction, e.amount::float8 AS amount, e.occurred_on::text AS on, e.transaction_id, e.note, e.split_id, e.rollup_id, e.rollup_ref,
         t.description AS tx_description, coalesce(a.account_name, nullif(t.account, '')) AS account
       FROM wealth_person_entries e JOIN wealth_people p ON p.id = e.person_id AND p.user_id = $1
       LEFT JOIN wealth_transactions t ON t.id = e.transaction_id LEFT JOIN wealth_accounts a ON a.id = t.account_id
       ORDER BY e.occurred_on DESC, e.created_at DESC`, [uid]),
-    db.query(`SELECT sh.split_id, sh.person_id, sh.base::float8 AS base, sh.tax::float8 AS tax, sh.amount::float8 AS amount
+    db.query(`SELECT sh.id, sh.split_id, sh.person_id, sh.base::float8 AS base, sh.tax::float8 AS tax, sh.amount::float8 AS amount, sh.rollup_id
       FROM wealth_bill_split_shares sh JOIN wealth_bill_splits s ON s.id = sh.split_id AND s.user_id = $1 AND s.status = 'active'`, [uid]),
     db.query(`SELECT id, transaction_id, title, occurred_on::text AS on, total::float8 AS total, tax::float8 AS tax, mode, note
       FROM wealth_bill_splits WHERE user_id = $1 AND status = 'active' ORDER BY occurred_on DESC, created_at DESC`, [uid]),
+    db.query(`SELECT r.id, r.person_id, r.closed_on::text AS on, r.total_owed::float8 AS total_owed, r.already_back::float8 AS already_back,
+        r.new_amount::float8 AS new_amount, r.closed_items, r.note
+      FROM wealth_person_rollups r JOIN wealth_people p ON p.id = r.person_id AND p.user_id = $1 ORDER BY r.closed_on DESC, r.created_at DESC`, [uid]),
   ]);
   const splitById = new Map(splits.map(s => [s.id, s]));
   const nameById = new Map(people.map(p => [p.id, p.name]));
+  // A share counts as paid when a payment back is linked to it ("Mark paid").
+  const paidShare = new Map(entries.filter(e => e.split_id && e.direction === 'in').map(e => [e.person_id + ':' + e.split_id, e]));
+  const entryItem = e => ({ type: e.transaction_id ? 'transfer' : e.rollup_ref ? 'carried' : 'manual', direction: e.direction, amount: e.amount, on: e.on,
+    transactionId: e.transaction_id, entryId: e.id, splitId: e.split_id || null, rollupId: e.rollup_id || null,
+    label: e.rollup_ref ? 'Carried from round-off' : e.split_id ? 'Paid share of ' + (splitById.get(e.split_id)?.title || 'a bill') : e.direction === 'out' ? 'Lent' : 'Paid back',
+    detail: e.tx_description || e.note, account: e.account });
+  const shareItem = s => { const b = splitById.get(s.split_id), paid = paidShare.get(s.person_id + ':' + s.split_id);
+    return { type: 'bill', direction: 'out', amount: s.amount, on: b.on, splitId: b.id, shareId: s.id, transactionId: b.transaction_id, rollupId: s.rollup_id || null,
+      label: 'Share of ' + b.title, detail: s.tax ? `₹${s.base} + ₹${s.tax} GST` : null, paid: !!paid, paidOn: paid?.on || null }; };
   const out = people.map(p => {
-    const items = [
-      ...entries.filter(e => e.person_id === p.id).map(e => ({ type: e.transaction_id ? 'transfer' : 'manual', direction: e.direction, amount: e.amount, on: e.on,
-        transactionId: e.transaction_id, entryId: e.id, label: e.direction === 'out' ? 'Lent' : 'Paid back', detail: e.tx_description || e.note, account: e.account })),
-      ...shares.filter(s => s.person_id === p.id).map(s => { const b = splitById.get(s.split_id); return { type: 'bill', direction: 'out', amount: s.amount, on: b.on,
-        splitId: b.id, transactionId: b.transaction_id, label: 'Share of ' + b.title, detail: s.tax ? `₹${s.base} + ₹${s.tax} GST` : null }; }),
-    ].sort((a, b) => String(b.on).localeCompare(String(a.on)));
+    const all = [...entries.filter(e => e.person_id === p.id).map(entryItem), ...shares.filter(s => s.person_id === p.id).map(shareItem)]
+      .sort((a, b) => String(b.on).localeCompare(String(a.on)));
+    const open = all.filter(i => !i.rollupId);                 // closed by a round-off → history only
+    const rolls = rollups.filter(r => r.person_id === p.id).map(r => ({ id: r.id, on: r.on, totalOwed: r.total_owed, alreadyBack: r.already_back,
+      newAmount: r.new_amount, closedItems: r.closed_items, note: r.note, items: all.filter(i => i.rollupId === r.id) }));
     return { id: p.id, name: p.name, kind: p.kind, dueOn: p.due_on, annualRate: p.annual_rate, status: p.status, note: p.note,
-      ...personFigures(items, { annualRate: p.annual_rate, dueOn: p.due_on, status: p.status, today }),
-      bills: items.filter(i => i.type === 'bill').length, items };
+      ...personFigures(open, { annualRate: p.annual_rate, dueOn: p.due_on, status: p.status, today }),
+      bills: open.filter(i => i.type === 'bill').length, unpaidShares: open.filter(i => i.type === 'bill' && !i.paid).length, items: open, rollups: rolls };
   });
   const active = out.filter(p => p.status === 'open');
   const splitList = splits.map(s => {
@@ -101,14 +112,20 @@ export async function loansOverview(uid, { db = sql, now = Date.now() } = {}) {
     const me = mine.find(x => x.person_id == null);
     return { id: s.id, transactionId: s.transaction_id, title: s.title, on: s.on, total: s.total, tax: s.tax, mode: s.mode,
       myShare: me ? me.amount : 0, othersOwe: r2(mine.filter(x => x.person_id).reduce((n, x) => n + x.amount, 0)),
-      shares: mine.map(x => ({ personId: x.person_id, name: x.person_id ? nameById.get(x.person_id) : 'You', base: x.base, tax: x.tax, amount: x.amount }))
+      shares: mine.map(x => ({ personId: x.person_id, name: x.person_id ? nameById.get(x.person_id) : 'You', base: x.base, tax: x.tax, amount: x.amount,
+        paid: x.person_id ? paidShare.has(x.person_id + ':' + s.id) : true }))
         .sort((a, b) => (a.personId ? 1 : 0) - (b.personId ? 1 : 0) || a.name.localeCompare(b.name)) };
   });
+  // For Activity: what each transaction is linked to (shown on the row).
+  const links = {};
+  for (const e of entries) if (e.transaction_id) links[e.transaction_id] = { type: e.direction === 'out' ? 'lent' : 'paidback', personId: e.person_id, name: nameById.get(e.person_id), entryId: e.id };
+  for (const s of splitList) if (s.transactionId) links[s.transactionId] = { type: 'split', splitId: s.id, myShare: s.myShare, othersOwe: s.othersOwe,
+    people: s.shares.filter(x => x.personId).map(x => ({ name: x.name, amount: x.amount, paid: x.paid })) };
   return { asOf: today, countedInNetWorth: false,
     totals: { owed: r2(active.reduce((n, p) => n + p.owed, 0)), lent: r2(out.reduce((n, p) => n + p.lent, 0)),
       repaid: r2(out.reduce((n, p) => n + p.repaid, 0)), people: active.filter(p => p.owed > 0).length, overdue: active.filter(p => p.overdue).length,
       splits: splits.length },
-    people: out, splits: splitList, suggestions: await loanSuggestions(uid, { db, people: out }) };
+    people: out, splits: splitList, links, suggestions: await loanSuggestions(uid, { db, people: out }) };
 }
 
 // People with both sent and received transfers that are not linked yet, plus P2P platforms (TR4-B.5).
@@ -217,12 +234,14 @@ export async function addPersonEntry(uid, b, { db = sql, actor = 'owner', dryRun
   let moves;
   if (ids.length) {
     const rows = await db.query(`SELECT t.id, t.kind, t.category, t.description, t.amount::float8 AS amount, t.occurred_on::text AS day,
-        EXISTS (SELECT 1 FROM wealth_person_entries e WHERE e.transaction_id = t.id) AS linked
+        EXISTS (SELECT 1 FROM wealth_person_entries e WHERE e.transaction_id = t.id) AS linked,
+        EXISTS (SELECT 1 FROM wealth_bill_splits s WHERE s.transaction_id = t.id AND s.status = 'active') AS split
       FROM wealth_transactions t WHERE t.user_id = $1 AND t.id = ANY($2::uuid[])`, [uid, ids]);
     if (rows.length !== ids.length) throw httpError(404, 'Transaction not found');
     for (const t of rows) {
       if (t.kind !== 'transfer') throw httpError(400, `Only transfers can be lent or paid back (${t.description || t.id} is ${t.kind}) — split a bill instead`);
       if (t.linked) throw httpError(409, `${t.description || t.id} is already linked to a person`);
+      if (t.split) throw httpError(409, `${t.description || t.id} is split among people — change it on the People page`);
     }
     moves = rows.map(t => ({ direction: ids.length === 1 && ['out', 'in'].includes(b.direction) ? b.direction : directionOf(t), amount: t.amount, on: t.day, transaction_id: t.id }));
   } else {
@@ -247,10 +266,12 @@ export async function createSplit(uid, b, { db = sql, actor = 'owner', dryRun = 
   if (b?.transactionId != null) {
     if (!isUuid(b.transactionId)) throw httpError(400, 'transactionId must be a transaction id');
     const [t] = await db.query(`SELECT id, kind, category, description, amount::float8 AS amount, occurred_on::text AS day,
-        EXISTS (SELECT 1 FROM wealth_bill_splits s WHERE s.transaction_id = t.id AND s.status = 'active') AS split
+        EXISTS (SELECT 1 FROM wealth_bill_splits s WHERE s.transaction_id = t.id AND s.status = 'active') AS split,
+        EXISTS (SELECT 1 FROM wealth_person_entries e WHERE e.transaction_id = t.id) AS linked
       FROM wealth_transactions t WHERE t.id = $1 AND t.user_id = $2`, [b.transactionId, uid]);
     if (!t) throw httpError(404, 'Transaction not found');
-    if (!['expense', 'investment'].includes(t.kind)) throw httpError(400, 'Only a bill you paid (an expense) can be split');
+    if (!(['expense', 'investment'].includes(t.kind) || (t.kind === 'transfer' && /^transfer sent$/i.test(String(t.category || ''))))) throw httpError(400, 'Only a bill you paid or money you sent can be split');
+    if (t.linked) throw httpError(409, 'This transfer is already linked to a person — change it on the People page');
     if (t.split) throw httpError(409, 'This bill is already split — cancel that split first to change it');
     if (total != null && Math.abs(total - t.amount) > 0.004) throw httpError(400, `The bill total must be the transaction amount (₹${t.amount})`);
     total = t.amount; title = title || text(t.description, 120) || t.category; on = on || t.day; txId = t.id;
@@ -294,4 +315,66 @@ export async function cancelSplit(uid, b, { db = sql, actor = 'owner', dryRun = 
   if (dryRun) return { dryRun, splitId: s.id };
   await withActor(db, actor, [[`UPDATE wealth_bill_splits SET status = 'cancelled', updated_at = now() WHERE id = $1 AND user_id = $2`, [s.id, uid]]]);
   return { stored: true, splitId: s.id };
+}
+
+// POST /api/loans/entries/move {entryId, personId | name} — "change the person" (e.g. a transfer linked to the wrong person).
+export async function moveEntry(uid, b, { db = sql, actor = 'owner', dryRun = false } = {}) {
+  if (!isUuid(b?.entryId)) throw httpError(400, 'entryId must be an entry id');
+  const [e] = await db.query(`SELECT e.id, e.person_id, e.rollup_id, e.split_id FROM wealth_person_entries e JOIN wealth_people p ON p.id = e.person_id AND p.user_id = $2 WHERE e.id = $1`, [b.entryId, uid]);
+  if (!e) throw httpError(404, 'Entry not found');
+  if (e.rollup_id) throw httpError(409, 'This entry is closed by a round-off');
+  if (e.split_id) throw httpError(409, 'A paid bill share belongs to that person');
+  const [to] = await resolvePeople(db, uid, [b.personId != null ? { personId: b.personId } : { name: b.name }], actor, dryRun);
+  if (to.id === e.person_id) return { stored: false, entryId: e.id, same: true };
+  if (dryRun) return { dryRun, entryId: e.id, to: to.name };
+  await withActor(db, actor, [[`UPDATE wealth_person_entries SET person_id = $2 WHERE id = $1`, [e.id, to.id]]]);
+  return { stored: true, entryId: e.id, personId: to.id, person: to.name };
+}
+
+// POST /api/loans/shares/paid {splitId, personId, occurredOn?, note?} — the person paid their share of that bill.
+export async function markSharePaid(uid, b, { db = sql, actor = 'owner', dryRun = false, now = Date.now() } = {}) {
+  if (!isUuid(b?.splitId) || !isUuid(b?.personId)) throw httpError(400, 'splitId and personId are required');
+  const [s] = await db.query(`SELECT sh.amount::float8 AS amount, s.title, sh.rollup_id,
+      EXISTS (SELECT 1 FROM wealth_person_entries e WHERE e.person_id = sh.person_id AND e.split_id = sh.split_id) AS paid
+    FROM wealth_bill_split_shares sh JOIN wealth_bill_splits s ON s.id = sh.split_id AND s.user_id = $3 AND s.status = 'active'
+    WHERE sh.split_id = $1 AND sh.person_id = $2`, [b.splitId, b.personId, uid]);
+  if (!s) throw httpError(404, 'Share not found');
+  if (s.paid) return { stored: false, already: 'paid' };
+  if (s.rollup_id) throw httpError(409, 'This share is closed by a round-off');
+  if (!(s.amount > 0)) throw httpError(400, 'Nothing to pay on this share');
+  const on = dayOf(b.occurredOn, 'occurredOn', now) || istToday(now);
+  if (dryRun) return { dryRun, amount: s.amount, on };
+  const [ins] = await withActor(db, actor, [[`INSERT INTO wealth_person_entries (person_id, direction, amount, occurred_on, split_id, note)
+    VALUES ($1, 'in', $2, $3, $4, $5) ON CONFLICT DO NOTHING RETURNING id`, [b.personId, s.amount, on, b.splitId, text(b.note)]]]);
+  return { stored: ins.length > 0, amount: s.amount, title: s.title };
+}
+
+// POST /api/loans/roundoff {personId, alreadyBack?, newAmount?, closedOn?, note?} — close everything open with a person
+// into one round-off (total owed now, already back not recorded before) and carry one new amount forward.
+export async function roundOff(uid, b, { db = sql, actor = 'owner', dryRun = false, now = Date.now() } = {}) {
+  if (!isUuid(b?.personId)) throw httpError(400, 'personId must be a person id');
+  const o = await loansOverview(uid, { db, now });
+  const p = o.people.find(x => x.id === b.personId);
+  if (!p) throw httpError(404, 'Person not found');
+  if (!p.items.length) throw httpError(400, `Nothing open with ${p.name} to round off`);
+  const total = p.owed, back = b.alreadyBack == null || b.alreadyBack === '' ? 0 : Number(b.alreadyBack);
+  if (!(back >= 0) || back > 1e12) throw httpError(400, 'alreadyBack must be 0 or more');
+  const carried = b.newAmount == null || b.newAmount === '' ? r2(Math.max(0, total - back)) : Number(b.newAmount);
+  if (!(carried >= 0) || carried > 1e12) throw httpError(400, 'newAmount must be 0 or more');
+  const on = dayOf(b.closedOn, 'closedOn', now) || istToday(now);
+  const summary = { person: p.name, closedItems: p.items.length, totalOwed: total, alreadyBack: r2(back), newAmount: r2(carried), closedOn: on,
+    roundedBy: r2(total - back - carried) };
+  if (dryRun) return { dryRun, ...summary };
+  const [ins] = await withActor(db, actor, [[`WITH r AS (
+      INSERT INTO wealth_person_rollups (person_id, closed_on, total_owed, already_back, new_amount, closed_items, note)
+      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id),
+    e AS (UPDATE wealth_person_entries SET rollup_id = (SELECT id FROM r) WHERE person_id = $1 AND rollup_id IS NULL RETURNING 1),
+    s AS (UPDATE wealth_bill_split_shares sh SET rollup_id = (SELECT id FROM r) FROM wealth_bill_splits b
+          WHERE sh.person_id = $1 AND sh.rollup_id IS NULL AND b.id = sh.split_id AND b.status = 'active' RETURNING 1),
+    n AS (INSERT INTO wealth_person_entries (person_id, direction, amount, occurred_on, rollup_ref, note)
+          SELECT $1, 'out', $5, $2, (SELECT id FROM r), $8 WHERE $5::numeric > 0 RETURNING 1)
+    SELECT (SELECT id FROM r) AS id, (SELECT count(*)::int FROM e) + (SELECT count(*)::int FROM s) AS closed`,
+    [p.id, on, total, summary.alreadyBack, summary.newAmount, p.items.length, text(b.note),
+     `Round-off ${on}: ${p.items.length} entr${p.items.length === 1 ? 'y' : 'ies'}, owed ₹${total}, already back ₹${summary.alreadyBack}`]]]);
+  return { stored: true, rollupId: ins[0].id, closed: ins[0].closed, ...summary };
 }

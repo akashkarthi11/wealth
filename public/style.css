@@ -891,3 +891,18 @@ body.sheet-open{overflow:hidden}
 .split-foot{padding:12px 18px 16px;border-top:1px solid var(--line);background:#0f1828;border-radius:0 0 20px 20px}.split-sum{display:grid;grid-template-columns:1fr 1fr;gap:10px}.split-sum span{display:grid;gap:3px}.split-sum small{letter-spacing:0;margin:0;font-size:11px}.split-sum b{font-size:19px}
 .split-err{color:#ffb2a9;font-size:12px;margin:8px 0 0}.split-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:10px}.split-actions .primary[disabled]{opacity:.45;cursor:not-allowed}
 @media(max-width:480px){.split-row{grid-template-columns:28px minmax(0,1fr) auto auto;}.split-row .split-amt{grid-column:2/3;grid-row:2}.split-amt input{width:100%}.split-bill{grid-template-columns:1fr}}
+.rw-c-title.lend-name{display:flex;flex-direction:row;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}.lend-name h4{font-size:15px}
+/* People: tags in Activity, quick link, paid / round off (build 4h) */
+.act-tag{display:inline-block;margin-top:5px;padding:2px 8px;border-radius:20px;font-style:normal;font-size:10.5px;font-weight:650;letter-spacing:.2px;border:1px solid}
+.act-tag.lent{color:#ffcf8a;border-color:#6b5230;background:#2a2116}.act-tag.back{color:#8fe9c4;border-color:#2d5a4c;background:#10241f}.act-tag.split{color:#b9cdff;border-color:#34507c;background:#152238}
+.act-lend-btns{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin-top:10px}.act-lend-btns .act-loan{margin:0}
+.lend-btns{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 2px}.lend-btns .primary,.lend-btns .ghost{padding:8px 14px;font-size:13px}
+.lend-inline{margin-top:10px}.lend-round-head{font-size:12.5px;line-height:1.5;color:#c8d6ea;margin:0 0 4px}
+.lend-item-act{display:block;margin-top:3px}.lend-paid{font-size:11px;color:#6ce0b0}.lend-pay.is-paid>b{opacity:.55;text-decoration:line-through}
+.lend-move{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 10px}.lend-move input{flex:1 1 180px;padding:10px 12px}.lend-move .primary,.lend-move .ghost{padding:9px 13px;font-size:13px}.lend-move .rw-form-msg{flex-basis:100%;margin:0}
+.lend-roll{margin:10px 0;padding:8px 10px;border:1px dashed #34465f;border-radius:10px}.lend-roll summary{cursor:pointer;display:grid;gap:3px}.lend-roll summary small{letter-spacing:0;margin:0}.lend-roll .lend-pay{opacity:.75}
+button.lend-share{cursor:pointer;color:inherit;font:inherit;font-size:12px}button.lend-share em{font-style:normal;color:var(--blue);margin-left:4px}button.lend-share:hover{border-color:var(--blue)}.lend-share.paid{opacity:.7}
+.lend-assign{margin:0 0 16px;padding:16px;border:1px solid #4a6aa0;border-radius:16px;background:linear-gradient(140deg,#18294a,#121d33)}.lend-assign h4{margin:6px 0 4px;font-size:17px}.lend-assign small{letter-spacing:0;margin:0}
+.lend-assign-or{display:flex;align-items:center;gap:10px;margin:2px 0 8px}.lend-assign-or span{font-size:11px;color:var(--muted)}.lend-assign-or .ghost{padding:9px 13px;font-size:13px}
+body.signing-out{cursor:progress}body.signing-out main{opacity:.55;pointer-events:none;transition:opacity .2s}
+.lend-item-act{justify-self:start;display:flex;gap:10px}.lend-item-act .link-btn{text-align:left;padding:2px 0}
