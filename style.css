@@ -767,3 +767,28 @@ em.in{color:var(--green)}em.out{color:#ff9b9b}
 .bank-share i[data-share].selected,.bank-share i[data-share]:focus-visible{filter:brightness(1.35);box-shadow:inset 0 0 0 2px #ffffffaa}
 .share-readout{font-size:12px;color:#e8f0fb;background:#0f1a2b;border:1px solid #2a3b54;border-radius:9px;padding:6px 10px;margin:-2px 0 10px;display:inline-block}
 @media(max-width:620px){.ichart-axis{font-size:19px}.ichart-tools button{width:36px;height:34px}}
+/* Interest by day card (2026-11-11) */
+.int-card{display:flex;flex-direction:column;gap:14px}
+.int-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.int-head h3{margin:4px 0 3px;color:#f2f6fd;font-size:19px}.int-head p{margin:0;color:#9eafc6;font-size:12px}
+.int-total{text-align:right}.int-total strong{display:block;color:#70dfbd;font-size:26px;font-variant-numeric:tabular-nums;line-height:1.1}
+.int-total small{display:block;margin-top:4px;color:#8fa5c0;font-size:10px;letter-spacing:0}
+.int-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.int-kpi{background:#0e1a2b;border:1px solid #243650;border-radius:12px;padding:10px 11px;min-width:0}
+.int-kpi small{display:block;margin:0;color:#8fa5c0;font-size:10px;letter-spacing:.3px}
+.int-kpi b{display:block;margin-top:4px;color:#eef4ff;font-size:16px;font-variant-numeric:tabular-nums}
+.int-kpi span{display:block;margin-top:2px;color:#7f93ae;font-size:10px}
+.int-sources{display:flex;flex-direction:column;gap:6px}
+.int-src{display:grid;grid-template-columns:auto 1fr auto;grid-template-rows:auto auto;column-gap:10px;row-gap:6px;align-items:center;text-align:left;width:100%;background:#0e1a2b;border:1px solid #243650;border-radius:12px;padding:9px 12px;color:inherit}
+.int-src>i{width:12px;height:3px;border-radius:2px;display:block}
+.int-src-name b{display:block;font-size:13px;color:#e8f0fb}.int-src-name small{display:block;margin:2px 0 0;letter-spacing:0;font-size:10px;color:#8fa5c0}
+.int-src-amt{text-align:right}.int-src-amt b{display:block;font-size:13px;color:#eef4ff;font-variant-numeric:tabular-nums}.int-src-amt small{display:block;margin:2px 0 0;letter-spacing:0;font-size:10px;color:#8fa5c0}
+.int-src-bar{grid-column:1/-1;height:4px;border-radius:3px;background:#1a2a40;overflow:hidden}.int-src-bar em{display:block;height:100%;border-radius:3px}
+.int-src.off{opacity:.45}.int-src.off .int-src-name b{text-decoration:line-through}
+.int-src:focus-visible{outline:2px solid #3d5578;outline-offset:2px}
+.int-foot{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.int-how{flex:1;min-width:220px}.int-how summary{cursor:pointer;color:#9fb1c9;font-size:11px}
+.int-how p{margin:8px 0 0;color:#8297b2;font-size:11px;line-height:1.55}
+.int-link{background:transparent;border:1px solid #2a3b54;border-radius:20px;color:#cfe0f7;padding:6px 12px;font-size:12px}
+@media(max-width:520px){.int-kpis{gap:6px}.int-kpi{padding:8px}.int-kpi b{font-size:14px}.int-total strong{font-size:22px}.int-head h3{font-size:17px}}
+@media(min-width:760px){.int-sources{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px}}
