@@ -12,7 +12,7 @@ if (syntax.status !== 0) {
 
 const ids = new Set([...html.matchAll(/id=["']([^"']+)["']/g)].map(m => m[1]));
 const refs = new Set([...js.matchAll(/[$][(]["']([^"']+)["'][)]/g)].map(m => m[1]));
-const runtimeGeneratedIds = new Set(['fdMsg', 'activitySearch', 'activityKind', 'activityAccount', 'activityFrom', 'activityTo', 'activityCount', 'activityRows', 'activityFilterBadge', 'activityActiveFilters', 'activityClearAll', 'activityAdvancedFilters', 'activityFilterToggle', 'activitySummary', 'recordsList', 'recordsSearch']); // Elements created by app.js when their feature view is rendered.
+const runtimeGeneratedIds = new Set(['fdMsg', 'activitySearch', 'activityKind', 'activityAccount', 'activityFrom', 'activityTo', 'activityCount', 'activityRows', 'activityFilterBadge', 'activityActiveFilters', 'activityClearAll', 'activityAdvancedFilters', 'activityFilterToggle', 'activitySummary', 'recordsList', 'recordsSearch', 'rewardsBox']); // Elements created by app.js when their feature view is rendered.
 const missing = [...refs].filter(id => !ids.has(id) && !runtimeGeneratedIds.has(id));
 if (missing.length) {
   console.error('Homepage is missing HTML elements referenced by app.js:', missing.join(', '));

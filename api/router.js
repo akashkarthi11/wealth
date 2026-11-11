@@ -34,6 +34,11 @@ export const ROUTES = {
   'interest/credits': () => import('./_routes/interest.js'),
   'obligations': () => import('./_routes/obligations.js'),
   'nightly': () => import('./_routes/nightly.js'),
+  // TSD Claude Plan 4, Part A
+  'rewards': () => import('./_routes/rewards.js'),
+  'rewards/balances': () => import('./_routes/rewards.js'),
+  'rewards/events': () => import('./_routes/rewards.js'),
+  'rewards/programs': () => import('./_routes/rewards.js'),
 };
 
 // The route comes from the rewrite's __route parameter, or from the path when the router is called directly.
