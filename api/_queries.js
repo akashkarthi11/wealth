@@ -178,3 +178,52 @@ export async function legacyPositionRows(uid, db = sql){
 export function legacyAccountRows(uid, db = sql) {
   return db.query(`SELECT id,account_key,bank_name,account_name,account_type,masked_identifier,currency,current_balance,balance_as_of,balance_status FROM wealth_accounts WHERE user_id=$1 ORDER BY bank_name,account_name`, [uid]);
 }
+
+// One account's detail page, entirely from the tables (no imported snapshots): the account, its balance history,
+// this month's money in/out, interest (if linked), upcoming payments from it and recent transactions.
+// Returns null when the account does not belong to the user.
+export async function accountDetail(uid, accountId, db = sql, { now = Date.now(), txLimit = 25 } = {}) {
+  const [acc] = await db.query(`SELECT a.id, a.account_key, a.bank_name, a.account_name, a.masked_identifier, a.account_type, a.subtype_code,
+      trim(a.currency) AS currency, a.current_balance::float8 AS current_balance, a.balance_as_of, a.balance_status, s.label AS subtype_label, s.category
+    FROM wealth_accounts a LEFT JOIN wealth_account_subtypes s ON s.code = a.subtype_code WHERE a.user_id = $1 AND a.id = $2`, [uid, accountId]);
+  if (!acc) return null;
+  const month = new Date(now + 5.5 * 3600e3).toISOString().slice(0, 7);
+  const notDup = await db.query(`SELECT 1 FROM information_schema.columns WHERE table_name='wealth_transactions' AND column_name='duplicate_of'`).then(r => r.length ? ' AND t.duplicate_of IS NULL' : '');
+  const [history, flows, transactions, interest, upcoming, counts] = await Promise.all([
+    db.query(`SELECT as_of, balance::float8 AS balance, status, note FROM wealth_account_balances WHERE account_id = $1 ORDER BY as_of DESC LIMIT 30`, [acc.id]),
+    db.query(`SELECT to_char(t.occurred_on, 'YYYY-MM') AS month, t.kind, sum(t.amount)::float8 AS total, count(*)::int AS n
+      FROM wealth_transactions t WHERE t.user_id = $1 AND t.account_id = $2${notDup} AND t.occurred_on >= (date_trunc('month', (now() AT TIME ZONE 'Asia/Kolkata')::date) - interval '5 months')
+      GROUP BY 1, 2 ORDER BY 1 DESC, 2`, [uid, acc.id]),
+    db.query(`SELECT t.id, to_char(t.occurred_on, 'YYYY-MM-DD') AS occurred_on, t.kind, t.category, t.description, t.amount::float8 AS amount, t.external_ref
+      FROM wealth_transactions t WHERE t.user_id = $1 AND t.account_id = $2${notDup} ORDER BY t.occurred_on DESC, t.created_at DESC LIMIT $3`, [uid, acc.id, txLimit]),
+    db.query(`SELECT p.product_key, p.provider,
+        (SELECT annual_rate::float8 FROM wealth_interest_rates r WHERE r.product_key = p.product_key AND r.effective_to IS NULL ORDER BY effective_from DESC LIMIT 1) AS rate,
+        (SELECT effective_from::text FROM wealth_interest_rates r WHERE r.product_key = p.product_key AND r.effective_to IS NULL ORDER BY effective_from DESC LIMIT 1) AS rate_from,
+        (SELECT max(accrual_date)::text FROM wealth_interest_ledger g WHERE g.user_id = $1 AND g.account_key = $3 AND g.product_key = p.product_key) AS last_accrual,
+        (SELECT coalesce(sum(interest_amount), 0)::float8 FROM wealth_interest_ledger g WHERE g.user_id = $1 AND g.account_key = $3 AND g.product_key = p.product_key
+           AND to_char(accrual_date, 'YYYY-MM') = $4) AS accrued_month,
+        st.statement_total::float8 AS statement_total, st.period_end::text AS statement_end,
+        (SELECT coalesce(sum(interest_amount), 0)::float8 FROM wealth_interest_ledger g WHERE g.user_id = $1 AND g.account_key = $3 AND g.product_key = p.product_key
+           AND to_char(accrual_date, 'YYYY-MM') = $4 AND accrual_date > st.period_end) AS accrued_after_statement
+      FROM wealth_interest_links l JOIN wealth_interest_products p ON p.id = l.product_id
+      LEFT JOIN LATERAL (SELECT statement_total, period_end FROM wealth_interest_statements s WHERE s.user_id = $1 AND s.product_key = p.product_key
+        AND to_char(s.period_end, 'YYYY-MM') = $4 ORDER BY s.period_end DESC LIMIT 1) st ON true
+      WHERE l.account_id = $2`, [uid, acc.id, acc.account_key, month]).catch(() => []),
+    db.query(`SELECT o.id, o.title, o.obligation_type, o.frequency, coalesce(n.due_date, o.next_due_date)::text AS due_date,
+        coalesce(n.expected_amount, o.expected_amount)::float8 AS amount, o.amount_type
+      FROM wealth_recurring_obligations o
+      LEFT JOIN LATERAL (SELECT p.due_date, p.expected_amount FROM wealth_payment_occurrences p WHERE p.obligation_id = o.id AND p.status = 'planned' ORDER BY p.due_date LIMIT 1) n ON true
+      WHERE o.user_id = $1 AND o.account_id = $2 AND o.status = 'active' ORDER BY 5 NULLS LAST, o.title`, [uid, acc.id]).catch(() => []),
+    db.query(`SELECT count(*)::int AS n FROM wealth_transactions t WHERE t.user_id = $1 AND t.account_id = $2${notDup}`, [uid, acc.id]),
+  ]);
+  // Month-to-date interest, same rule as the Interest page: bank statement through its end date + daily accruals after.
+  for (const i of interest) {
+    i.month_total = Math.round((i.statement_total != null ? i.statement_total + (i.accrued_after_statement || 0) : i.accrued_month) * 100) / 100;
+    i.month_basis = i.statement_total != null ? `statement to ${i.statement_end} + daily accruals after` : 'daily accruals';
+  }
+  const IN = ['income'], OUT = ['expense', 'investment', 'liability'];
+  const sum = (m, kinds) => flows.filter(f => f.month === m && kinds.includes(f.kind)).reduce((s, f) => s + f.total, 0);
+  const months = [...new Set(flows.map(f => f.month))].sort().reverse().map(m => ({ month: m, moneyIn: sum(m, IN), moneyOut: sum(m, OUT), transfers: sum(m, ['transfer']) }));
+  return { account: acc, month, thisMonth: months.find(m => m.month === month) || { month, moneyIn: 0, moneyOut: 0, transfers: 0 }, months,
+    balanceHistory: history, interest, upcoming, transactions, transactionCount: counts[0]?.n || 0 };
+}

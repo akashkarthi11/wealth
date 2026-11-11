@@ -8,7 +8,7 @@ import { migratedDb, adapter, MIGRATIONS_DIR } from './helpers/pglite.mjs';
 import { loadMigrations, applyMigrations } from '../db/migrations-lib.mjs';
 import { storePrices, recordEmailImport, seenMessages, recordBalance, updateHolding, createAccount, setFdTerms, markDuplicate, suggestAccounts, assignAccounts } from '../../api/_ingest.js';
 import { planAccrual, runAccrual, submitRate, recordCredit, interestOverview, dayCount, fdPrincipal, round8, round2, estimatedBalance } from '../../api/_interest.js';
-import { spendingRows, obligationsByAccount } from '../../api/_queries.js';
+import { spendingRows, obligationsByAccount, accountDetail } from '../../api/_queries.js';
 import { collectIssues } from '../../api/_dataquality.js';
 import { encryptBackup, decryptBackup, dumpDatabase } from '../../api/_backup.js';
 import { restoreAll } from '../db/restore-lib.mjs';
@@ -403,8 +403,8 @@ test('Bank balances menu shows the live account balances and its total equals th
     acc('HDFC Bank', 'HDFC Savings', '3.89', 'verified'), acc('Roarbank', 'Roarbank Savings', '650.65', 'verified'), acc('X Bank', 'Old', '500', 'unknown'), acc('Slice', 'Card', '100', 'verified', 'credit_card')];
   const ctx = { accounts, esc: s => String(s), money: v => 'INR ' + v.toFixed(2), Number, String, Date, Math };
   const bankColors = src.match(/const BANK_COLORS=\[[^\]]*\];/)[0];
-  vm.runInNewContext(bankColors + ['liveBankAccounts', 'bankCounted', 'bankStatusLabel', 'bankAsOf', 'bankChip', 'bankInitials', 'liveBankCardsHtml', 'liveBankDetailHtml'].map(fn).join('\n') +
-    ";globalThis.html=liveBankCardsHtml();globalThis.detail=liveBankDetailHtml('Slice');", ctx);
+  vm.runInNewContext(bankColors + ['liveBankAccounts', 'bankCounted', 'bankStatusLabel', 'bankAsOf', 'bankChip', 'bankInitials', 'liveBankCardsHtml'].map(fn).join('\n') +
+    ";globalThis.html=liveBankCardsHtml();", ctx);
   const casa = v1Totals(accounts, []).casa;
   assert.equal(casa, 113400.31);
   assert.match(ctx.html, /<div class="bank-total">INR 113400\.31<\/div>/, 'menu total = dashboard CASA');
@@ -415,7 +415,6 @@ test('Bank balances menu shows the live account balances and its total equals th
   assert.match(ctx.html, /X Bank[\s\S]*Not counted/);
   assert.match(ctx.html, /class="bank-avatar"[^>]*>BOI</, 'familiar short names on the badges');
   assert.match(ctx.html, /class="bank-avatar"[^>]*>HDFC</);
-  assert.match(ctx.detail, /Slice Savings[\s\S]*INR 47889\.22/);
 });
 
 test('bank detail page: only that bank\'s rows and notes; combined records filtered; investment records never shown', async () => {
@@ -440,4 +439,25 @@ test('bank detail page: only that bank\'s rows and notes; combined records filte
   assert.deepEqual(rows('Bank of India', 0), ['Bank of India']);
   assert.deepEqual(f('HDFC Bank').map(r => r.heading.slice(0, 6)), ['Latest'], 'the HDFC Bank stock holding is not a bank record');
   assert.equal(f('Roarbank')[0]._filtered, undefined, 'a record about Roarbank alone is shown whole');
+});
+
+test('account details page comes from the tables: own account only, history, month flows without duplicates, interest month total, upcoming', async () => {
+  const { a, uid, sav } = await interestFixture();
+  const tx = (kind, amt, day, desc) => a.query(`INSERT INTO wealth_transactions(user_id,kind,category,description,amount,account_id,occurred_on) VALUES($1,$2,'C',$3,$4,$5,$6) RETURNING id`, [uid, kind, desc, amt, sav, day]).then(r => r[0].id);
+  await tx('income', 7.21, '2026-11-10', 'interest'); const d1 = await tx('expense', 280, '2026-11-08', 'Tea'); const d2 = await tx('expense', 280, '2026-11-08', 'Tea');
+  await tx('transfer', 890, '2026-11-05', 'to Atom'); await tx('expense', 100, '2026-10-20', 'October');
+  await markDuplicate(uid, { transactionId: d2, duplicateOf: d1 }, { db: a });
+  await a.query(`INSERT INTO wealth_interest_statements(user_id,provider,product_key,period_start,period_end,statement_total,statement_label) VALUES($1,'Slice Small Finance Bank','slice-savings','2026-11-01','2026-11-09',64.36,'Nov')`, [uid]);
+  await runAccrual(uid, { db: a, now: NOW });
+  await a.query(`INSERT INTO wealth_planned_bills(user_id,title,amount,due_date,account_id,bill_key) VALUES($1,'Rent',8000,'2026-11-15',$2,'rent')`, [uid, sav]);
+  const d = await accountDetail(uid, sav, a, { now: NOW });
+  assert.equal(d.account.account_name, 'Slice Savings');
+  assert.deepEqual(d.thisMonth, { month: '2026-11', moneyIn: 7.21, moneyOut: 280, transfers: 890 }, 'the marked duplicate is left out');
+  assert.deepEqual(d.months.map(m => m.month), ['2026-11', '2026-10']);
+  assert.equal(d.transactionCount, 4);
+  assert.ok(d.balanceHistory.length >= 1);
+  assert.equal(d.interest[0].month_total, round2(64.36 + round8(47882 * 0.055 / 365)), 'statement to 9 Nov + 10 Nov accrual');
+  assert.deepEqual(d.upcoming.map(o => [o.title, o.due_date]), [['Rent', '2026-11-15']]);
+  const [other] = await a.query(`INSERT INTO wealth_users(email,password_hash) VALUES('x@example.test','x') RETURNING id`);
+  assert.equal(await accountDetail(other.id, sav, a, { now: NOW }), null, 'another user cannot read it');
 });
