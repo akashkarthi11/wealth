@@ -1,4 +1,4 @@
-import {sql,schema,json,dashboardModel,cachedForUser,cacheHeader} from '../_lib.js';
+import {sql,schema,json,dashboardModel,cachedForUser,sendCached,withStatus} from '../_lib.js';
 import {pageTransactions,spendingRows,accountHierarchyRows,legacyPositionRows} from '../_queries.js';
 import {valuePortfolio} from '../_valuation.js';
 import {brokerSummary} from '../_broker.js';
@@ -49,9 +49,8 @@ export default async function handler(req,res){
   await schema();
   const asked=new URL(req.url,'https://local').searchParams.get('model')||'';
   const day=new Date(Date.now()+5.5*3600e3).toISOString().slice(0,10);
-  const {uid,data,hit}=await cachedForUser(req,'dashboard',uid=>buildDashboard(uid,asked),{variant:[asked||'default',dashboardModel(),day].join(':'),ttl:600});
-  if(!uid||!data)return json(res,401,{error:'Sign in required'});
-  cacheHeader(res,hit);
-  return json(res,200,data);
+  const r=await cachedForUser(req,'dashboard',async uid=>(await buildDashboard(uid,asked))||withStatus(401,{error:'Sign in required'}),{variant:[asked||'default',dashboardModel(),day].join(':'),ttl:600});
+  if(!r.uid)return json(res,401,{error:'Sign in required'});
+  return sendCached(res,r);
  }catch(e){console.error('[wealth-dashboard]',e?.message||e);return json(res,500,{error:'Unable to load dashboard.'})}
 }

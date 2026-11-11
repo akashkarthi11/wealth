@@ -1,7 +1,8 @@
 import { neon } from '@neondatabase/serverless';
 import { createClient } from 'redis';
 import { waitUntil } from '@vercel/functions';
-import { randomBytes, scryptSync, timingSafeEqual, createHmac } from 'node:crypto';
+import { randomBytes, scryptSync, timingSafeEqual, createHmac, createHash } from 'node:crypto';
+import { gzipSync, gunzipSync } from 'node:zlib';
 
 // Environment handling works the same on every deployment (Production, Preview, and other Vercel teams):
 // take the first variable that holds a real URL; empty values and "[SENSITIVE]"-style placeholders are skipped.
@@ -120,12 +121,29 @@ export function sessionFrom(req){try{const c=String(req.headers.cookie||'').spli
 // Signature + expiry only. Use sessionUser() wherever a revoked session must be rejected.
 export function userFrom(req){return sessionFrom(req)?.uid||null}
 // Signature + expiry + session_version check against the database.
-// ── Versioned Redis cache (migration 0018) ──────────────────────────────────────────────────────────────────────
+// ── Versioned cache, 3 layers (migration 0018; tuned 2026-11-11 for Redis in Mumbai, functions in Singapore) ──────
 // wealth_data_version.version goes up on every write to a data table, whoever writes (app, cron, ChatGPT/direct SQL).
-// A cached response stores the version it was built from and is served only while the version is unchanged.
-// The sign-in check and the version come back in ONE query, and the Redis read runs in parallel with it, so a cache
-// hit costs one database round trip instead of a dozen. Redis stays optional: any Redis problem means "miss".
-const CACHE_PREFIX='wealth:c1:';
+// A cached response is used only while that version is unchanged, so it is never stale. Layers, fastest first:
+//  1. Browser: every cached response carries an ETag (data version + deploy). If the browser already has it, the
+//     server answers 304 Not Modified — no body, no Redis, no rebuild.
+//  2. Memory: a warm function instance keeps recent responses (LRU, size-capped) — no network at all.
+//  3. Redis (shared across instances): the finished JSON body, gzip-compressed, so each Mumbai round trip carries a
+//     fraction of the bytes. Read only when memory misses, in parallel with the one database query.
+// The sign-in check and the version come back in ONE query. Redis stays optional: any problem simply means "miss".
+const DEPLOY_ID=String(process.env.VERCEL_DEPLOYMENT_ID||process.env.VERCEL_GIT_COMMIT_SHA||'local').replace(/[^A-Za-z0-9_-]/g,'').slice(-12)||'local';
+const CACHE_PREFIX='wealth:c2:'+DEPLOY_ID+':';      // a new deploy never serves an older build's responses
+const MEM=new Map(),MEM_MAX_ENTRIES=40,MEM_MAX_BYTES=8e6;let memBytes=0;
+function memDel(key){const e=MEM.get(key);if(e){memBytes-=e.b.length;MEM.delete(key)}}
+export function memGet(key,now=Date.now()){const e=MEM.get(key);if(!e)return null;if(e.exp<now){memDel(key);return null}MEM.delete(key);MEM.set(key,e);return e}
+export function memSet(key,entry,ttl,now=Date.now()){memDel(key);if(entry.b.length>2e6)return;MEM.set(key,{...entry,exp:now+ttl*1000});memBytes+=entry.b.length;
+ while(MEM.size>MEM_MAX_ENTRIES||memBytes>MEM_MAX_BYTES){memDel(MEM.keys().next().value)}}
+export function memStats(){return {entries:MEM.size,bytes:memBytes}}
+export function packEntry(entry){return 'z1:'+gzipSync(JSON.stringify(entry),{level:6}).toString('base64')}
+export function unpackEntry(raw){if(typeof raw!=='string')return null;return JSON.parse(raw.startsWith('z1:')?gunzipSync(Buffer.from(raw.slice(3),'base64')).toString('utf8'):raw)}
+export function etagFor(key,version){return '"w2-'+createHash('sha1').update(key+'|'+version).digest('base64url').slice(0,20)+'"'}
+export async function cacheSetRaw(key,raw,ttl){await redisOp(c=>c.set(key,raw,{EX:ttl}),null,'set')}
+// A compute() result: plain data (200), or withStatus(404, {...}) for a cacheable non-200 answer.
+export function withStatus(status,data){return {__status:status,data}}
 export async function sessionAndVersion(req){
  const s=sessionFrom(req);
  if(!s||!sql)return {uid:null,version:null};
@@ -138,32 +156,42 @@ export async function sessionAndVersion(req){
   throw e;
  }
 }
-export function cacheKeyFor(uid,name,variant=''){return CACHE_PREFIX+name+':'+uid+(variant?':'+variant:'')}
-// Authenticated, versioned GET: returns {uid, data, hit}. `compute(uid)` builds the response when the cache misses.
-// The cache write happens after the response (waitUntil). ttl caps how long an entry can live even without writes.
-export async function cachedForUser(req,name,compute,{variant='',ttl=600}={}){
- const s=sessionFrom(req);
- if(!s)return {uid:null,data:null,hit:false};
- const key=cacheKeyFor(s.uid,name,variant);
- const [who,cached]=await Promise.all([sessionAndVersion(req),cacheGet(key)]);
- if(!who.uid)return {uid:null,data:null,hit:false};
- if(cached&&who.version!=null){try{const c=typeof cached==='string'?JSON.parse(cached):cached;if(c&&c.v===who.version)return {uid:who.uid,data:c.d,hit:true}}catch{}}
- const data=await compute(who.uid);
- if(who.version!=null&&data!=null)waitUntil(cacheSet(key,{v:who.version,d:data},ttl).catch(()=>{}));
- return {uid:who.uid,data,hit:false};
-}
-// For handlers that already know the user (handle()/authorize): version + Redis read in parallel, same rule.
 export async function dataVersion(){if(!sql)return null;try{const [r]=await sql.query('SELECT version FROM wealth_data_version WHERE id=1');return r?String(r.version):null}catch{return null}}
-export async function cachedValue(uid,name,compute,{variant='',ttl=600}={}){
- const key=cacheKeyFor(uid,name,variant);
- const [version,cached]=await Promise.all([dataVersion(),cacheGet(key)]);
- if(cached&&version!=null){try{const c=typeof cached==='string'?JSON.parse(cached):cached;if(c&&c.v===version)return {data:c.d,hit:true}}catch{}}
- const data=await compute();
- if(version!=null&&data!=null)waitUntil(cacheSet(key,{v:version,d:data},ttl).catch(()=>{}));
- return {data,hit:false};
+export function cacheKeyFor(uid,name,variant=''){return CACHE_PREFIX+name+':'+uid+(variant?':'+variant:'')}
+// Shared core: version (and uid) from `who`, memory → Redis → compute; 304 when the browser already has this version.
+async function serveVersioned(req,key,whoPromise,compute,ttl){
+ const mem=memGet(key);
+ const [who,raw]=await Promise.all([whoPromise,mem?null:cacheGet(key)]);
+ if(!who.uid)return {uid:null};
+ const version=who.version,etag=version!=null?etagFor(key,version):null;
+ if(etag&&String(req.headers?.['if-none-match']||'').split(/\s*,\s*/).includes(etag))return {uid:who.uid,notModified:true,etag,source:'browser'};
+ if(version!=null){
+  if(mem&&mem.v===version)return {uid:who.uid,status:mem.s,body:mem.b,etag,source:'memory'};
+  if(raw){try{const e=unpackEntry(raw);if(e&&e.v===version){memSet(key,e,ttl);return {uid:who.uid,status:e.s,body:e.b,etag,source:'redis'}}}catch{}}
+ }
+ const out=await compute(who.uid);
+ const status=out&&out.__status?out.__status:200,body=JSON.stringify(out&&out.__status?out.data:out);
+ if(version!=null&&status<500){const e={v:version,s:status,b:body};memSet(key,e,ttl);waitUntil(cacheSetRaw(key,packEntry(e),ttl).catch(()=>{}))}
+ return {uid:who.uid,status,body,etag:version!=null?etag:null,source:'database'};
 }
-// Header that shows whether a response came from the cache (for checking speed; no data in it).
-export function cacheHeader(res,hit){try{res.setHeader('X-Wealth-Cache',hit?'hit':'miss')}catch{}}
+// Authenticated, versioned GET (session + version in one query).
+export async function cachedForUser(req,name,compute,{variant='',ttl=600}={}){
+ const s=sessionFrom(req);if(!s)return {uid:null};
+ return serveVersioned(req,cacheKeyFor(s.uid,name,variant),sessionAndVersion(req),compute,ttl);
+}
+// For handlers that already know the user (handle()/authorize): version query instead of session+version.
+export async function cachedValue(req,uid,name,compute,{variant='',ttl=600}={}){
+ return serveVersioned(req,cacheKeyFor(uid,name,variant),dataVersion().then(version=>({uid,version})),compute,ttl);
+}
+// Send a cached result: 304 when the browser has it, else the stored body. The browser may keep it (private) but must
+// ask again every time (no-cache) — that is what makes 304 possible. X-Wealth-Cache says which layer answered.
+export function sendCached(res,r){
+ res.setHeader('Cache-Control','private, no-cache');
+ if(r.etag)res.setHeader('ETag',r.etag);
+ res.setHeader('X-Wealth-Cache',r.source||'database');
+ if(r.notModified){res.statusCode=304;return res.end()}
+ res.statusCode=r.status||200;res.setHeader('Content-Type','application/json; charset=utf-8');return res.end(r.body);
+}
 export async function sessionUser(req){
  const s=sessionFrom(req);
  if(!s||!sql)return null;
@@ -193,7 +221,9 @@ export async function rateCount(key){
 }
 export async function rateReset(key){await cacheDel('wealth:rl:'+key)}
 export function clientIp(req){return String(req.headers['x-forwarded-for']||'').split(',')[0].trim()||req.socket?.remoteAddress||'unknown'}
-export function cookie(res,v){res.setHeader('Set-Cookie',v?'wealth_session='+v+'; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800':'wealth_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0')}
+export function cookie(res,v){res.setHeader('Set-Cookie',v?'wealth_session='+v+'; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800':'wealth_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
+ // Signing out also drops the browser's copies of cached API responses (they are kept privately for 304 checks).
+ if(!v)res.setHeader('Clear-Site-Data','"cache"')}
 export function json(res,status,data){res.statusCode=status;res.setHeader('Content-Type','application/json; charset=utf-8');res.setHeader('Cache-Control','no-store');res.end(JSON.stringify(data))}
 export async function body(req){let s='';for await(const c of req)s+=c;if(s.length>20000)throw new Error('Request too large');return JSON.parse(s||'{}')}
 

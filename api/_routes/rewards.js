@@ -1,4 +1,4 @@
-import { json, handle, invalidateUserCaches, cachedValue, cacheHeader } from '../_lib.js';
+import { json, handle, invalidateUserCaches, cachedValue, sendCached } from '../_lib.js';
 import { rewardsOverview, recordRewardBalance, recordRewardEvent, upsertRewardProgram } from '../_rewards.js';
 
 // GET  /api/rewards            programs, latest balances, ₹ value where a rate is known, cashback from transactions (owner)
@@ -12,8 +12,7 @@ export default handle('wealth-rewards', { methods: ['GET', 'POST'], auth: req =>
   if (route === 'rewards') {
     if (req.method !== 'GET') return json(res, 405, { error: 'Method not allowed' });
     const month = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);   // day in the key: month-to-date rolls over
-    const { data, hit } = await cachedValue(who.uid, 'rewards', () => rewardsOverview(who.uid), { variant: month });
-    cacheHeader(res, hit); return json(res, 200, data);
+    return sendCached(res, await cachedValue(req, who.uid, 'rewards', () => rewardsOverview(who.uid), { variant: month }));
   }
   if (req.method !== 'POST') return json(res, 405, { error: 'Method not allowed' });
   const fn = { 'rewards/balances': recordRewardBalance, 'rewards/events': recordRewardEvent, 'rewards/programs': upsertRewardProgram }[route];

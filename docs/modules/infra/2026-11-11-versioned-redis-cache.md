@@ -1,6 +1,6 @@
 # Faster pages: versioned Redis cache — 2026-11-11
 
-**Status:** code on `claude-dev`, not deployed. Owner: "use redis more efficiently to increase speed of project".
+**Status:** in Production — `main` `35b2934` (build `4a`), migration 0018 applied; data version counting (4 after the reward repairs). Owner: "use redis more efficiently to increase speed of project".
 
 ## Before
 - `/api/dashboard` (the heaviest call, ~12 queries in several sequential stages) was **never cached**: a stale-while-revalidate cache had once served totals that disagreed with the holdings list.
@@ -35,3 +35,17 @@ The IST day in a key makes month-to-date / "today" figures roll over at midnight
 
 ## Tests
 `scripts/tests/cache.test.mjs` (version bumps once per write statement from any writer, reads and log tables do not; routes use the helpers; one-query session+version; served only on a version match; write after response). `dashboard-model.test.mjs` updated. Full suite 170/170. Development: 0018 applied (19 migrations).
+
+## Redis location (2026-11-11)
+- Store `redis-chestnut-brush` (Redis Cloud, Free 30 MB) is in **Mumbai (`bom1`)**; Vercel functions run in **Singapore (`sin1`)**, Neon in ap-southeast-1. Each Redis call crosses Singapore↔Mumbai (~30–60 ms).
+- Upstash in Singapore was tried from the CLI but needs a paid checkout — owner: "not free"; not created.
+- Free option left to the owner: a Redis Cloud Free store in Singapore from the Vercel dashboard, then move `wealth` to it (the old store stays for `growx-mindrelax`). Until then the cache runs on the Mumbai store.
+
+## Tuned for Redis in Mumbai (owner: "use mumbai but more efficient and give me better result")
+Functions run in Singapore and the database is there too, so on a cache hit the Mumbai Redis read (~30–60 ms) was the slowest step. Three layers now answer before or instead of Redis:
+1. **Browser — 304 Not Modified.** Every cached response has an `ETag` built from the data version, the cache key and the deploy. The browser keeps the response privately (`Cache-Control: private, no-cache`; the CDN stays `no-store`) and sends `If-None-Match`; when nothing changed, the server answers **304 with no body** — no Redis, no rebuild, nothing downloaded on the phone. Signing out sends `Clear-Site-Data: "cache"`.
+2. **Instance memory.** A warm function keeps recent responses (LRU, 40 entries / 8 MB, same TTL) — no network at all. Redis is read only when memory misses.
+3. **Redis, compressed.** Entries are the finished JSON body, gzip-packed (`z1:` prefix): the real dashboard body is **265 KB → 74 KB (28%)**; pack 9 ms, unpack 3 ms. The body is sent as stored (no re-serialising).
+Also: cache keys carry the deploy id, so a new build never serves an older build's response.
+`X-Wealth-Cache` now says which layer answered: `browser` (304), `memory`, `redis` or `database`.
+Tests: `cache.test.mjs` (6) — version bumps, packing round trip and size, LRU/expiry, ETag per version, 304 without body, sign-out clears cache, routes wired, `vercel.json` headers. Full suite 173/173.
