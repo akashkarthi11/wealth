@@ -7,7 +7,7 @@
 
 - Transactions in the database start on 21 May 2026. In that range, the file's 6 Slice credit-card payments were already stored. **8 Slice Savings ••3731 Awfis payments (₹935) were missing.** Slice Savings had only 9 transactions, all from 3 Nov 2026.
 - Rows before 21 May 2026 are only the payments made through super.money, not full statements.
-- **Likely double counting:** the same Slice credit-card payment stored twice, once from the workbook import ("Awfis") and once from the Slice statement import ("Awfis · UPI · Slice statement"). One-to-one pairing finds **95 plain rows, ₹1,34,692.54**. 7 more pairs (₹4,352) come from the same import and need owner review.
+- **Likely double counting:** the same Slice credit-card payment stored twice, once from the workbook import ("Awfis") and once from the Slice statement import ("Awfis · UPI · Slice statement"). One-to-one pairing finds **93 plain rows, ₹1,26,297.54** (an earlier count of 95 treated three 4-row groups as 3 copies each; each is 2 pairs). 7 more pairs (₹4,352) come from the same import and need owner review.
 
 ## Applied
 
@@ -20,7 +20,7 @@ Backup first: `prod-before-supermoney.wlb` (32 tables, 2,288 rows). Transactions
 
 ## Prepared, not run
 
-- (c) [`2026-11-11-mark-slice-card-duplicates.sql`](../../../scripts/db/repairs/2026-11-11-mark-slice-card-duplicates.sql): marks each plain row `duplicate_of` its statement twin (the 1st plain row pairs with the 1st statement row of the same date, amount and merchant, and so on). It never deletes; it can be undone by clearing `duplicate_of`. Dry run on Production: 95 rows, ₹1,34,692.54. Run only after owner approval.
+- (c) [`2026-11-11-mark-slice-card-duplicates.sql`](../../../scripts/db/repairs/2026-11-11-mark-slice-card-duplicates.sql): marks each plain row `duplicate_of` its statement twin (the 1st plain row pairs with the 1st statement row of the same date, amount and merchant, and so on). It never deletes; it can be undone by clearing `duplicate_of`. **Applied 2026-11-11** (owner: "dublicate record in spending find and solve"): backup `prod-before-dupes.wlb` (32 tables, 4,335 rows), UPDATE 93 (₹1,26,297.54); a re-run marks 0.
 
 ## Addition 2026-11-11 — Paytm UPI statement, 11 Nov 2023 – 10 Nov 2024
 
@@ -38,3 +38,11 @@ Backup first: `prod-before-supermoney.wlb` (32 tables, 2,288 rows). Transactions
 - Description: `<payee> · UPI · Paytm[ · note] · ref <UPI ref>`. The import skips a row whose reference and amount already exist, so re-running adds nothing (tested on Development: 1,014, then 0).
 - Production (backup `prod-before-paytm-import.wlb`, 32 tables, 2,307 rows): **1,014 rows**: expense 440 (₹1,55,701.99), income 21 (₹9,871.70), investment 129 (₹4,42,952: CoinDCX ₹3,59,251 in 102 payments, Angel One ₹58,801, P2P ₹15,000, CoinSwitch ₹9,500, Angel One MF ₹400), loan repayments 22 (₹38,834.48), transfers 402 (₹13,34,506.43). Transactions 604 → 1,618; audited as owner. The reference record's note was updated to say the rows are now in Activity.
 - Effect: Activity "All time" and monthly spending statistics now include Nov 2023 – Nov 2024 (partial months). There is no data between Nov 2024 and May 2026.
+
+## Duplicate check across all spending (2026-11-11)
+
+Same date, same account, same amount, before the fix: 99 groups. After marking the 93 Slice card copies, 12 groups are left and kept on purpose:
+- **Different payees, same small amount** (Bank of India 3, Slice 3): separate real payments.
+- **Paytm, same payee, different UPI ref** (IRCTC ₹1,272.50 on 29 Nov 2023; Devasagayam Xavier ₹10 on 23 Jun 2024): separate payments; the ref numbers differ.
+- **Slice statement entry 1 and entry 2** (Zarivault ₹950 on 1 Jun; Awfis ₹100 on 29 Jun): the statement itself lists two payments.
+- **Workbook-only pairs** (Zarivault ₹950 on 25 May; Awfis ₹100 on 1 Jul): no statement row to compare; kept as two payments unless the owner says otherwise.
