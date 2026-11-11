@@ -1,6 +1,7 @@
 # 2026-11-11 — Angel One ledger statement kept as history (migration 0011)
 
 - **Status:** code + tests on `claude-dev`; migration 0011 applied to Development and the statement imported there; Production after a backup and owner approval
+- **Status update 2026-11-11:** in Production. Backup `prod-before-0011.wlb` (31 tables, 1,333 rows, drill passed); `main` `4d2a262` applied 0011 (12 migrations); statement imported (952 entries, 3 transfers matched, 2 recategorised, audited as owner); build `20261111-claude-plan-3m`.
 - **Owner request:** "for history and can we use this data anywhere" → yes
 
 ## What the statement is

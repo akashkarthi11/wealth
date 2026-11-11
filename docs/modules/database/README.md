@@ -49,7 +49,7 @@ Runs during `npm run build` on **Production builds only** (skipped on Vercel Pre
 | `0008_plan3_data_quality_interest_obligations_audit` | Plan 3 | Duplicate marking, FD terms, price holds, interest links, obligations read model, `wealth_audit_log` |
 | `0009_interest_credits_balance` | Plan 3 §14.1 | `credit_frequency`; balance status `estimated` |
 | `0010_audit_changed_fields_only` | Plan 3 §14.4 | Audit stores only changed columns ([fix note](2026-11-11-store-only-required-data.md)) |
-| `0011_broker_ledger` | 2026-11-11 | `wealth_broker_ledger`: broker funds ledger history ([fix note](../integrations/2026-11-11-angel-one-ledger-history.md)). Applied to Development; Production with the next `main` deploy |
+| `0011_broker_ledger` | 2026-11-11 | `wealth_broker_ledger`: broker funds ledger history ([fix note](../integrations/2026-11-11-angel-one-ledger-history.md)). Applied to Development and Production (`4d2a262`) |
 
 - Backups: encrypted (`WLB1`, AES-256-GCM) via `scripts/db/backup-restore.mjs`; take one and pass the drill before applying a migration to Production.
 - The old data migrations are archived in `scripts/migrations/legacy/` and no longer run.
