@@ -184,7 +184,7 @@ export async function setBillStatus(uid, id, status, db = sql) {
 // v1 (legacy) positions exactly as the live dashboard reads them; shared with /api/reconcile.
 export async function legacyPositionRows(uid, db = sql){
  const enrichedQuery=`SELECT p.id,p.category,p.institution_name,p.platform_name,p.record_type,p.name,p.ticker,p.currency,p.quantity,
-  CASE WHEN mp.status='fresh' AND mp.fetched_at>now()-interval '36 hours' AND a.asset_class IN ('indian_equity','indian_mutual_fund','us_equity','us_etf') AND mp.currency=p.currency AND p.quantity IS NOT NULL THEN p.quantity*mp.unit_price ELSE p.current_value END AS current_value,
+  CASE WHEN mp.status='fresh' AND mp.fetched_at>now()-interval '36 hours' AND a.asset_class IN ('indian_equity','indian_mutual_fund','us_equity','us_etf','precious_metal') AND mp.currency=p.currency AND p.quantity IS NOT NULL THEN p.quantity*mp.unit_price ELSE p.current_value END AS current_value,
   p.invested_value,p.balance_as_of,p.source_key,p.metadata,mp.unit_price AS market_unit_price,mp.currency AS market_price_currency,
   mp.source AS market_price_source,mp.fetched_at AS market_price_updated_at,mp.status AS market_price_status,a.quantity_unit,
   (mp.metadata->>'fx_to_inr')::numeric AS market_fx_to_inr,
