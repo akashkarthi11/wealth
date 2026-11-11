@@ -211,3 +211,5 @@ Defaults taken without an answer: D1 = all programs; D2 = shown apart from net w
 Development (real data): points value ₹1,428.14 (2 of 6 programs priced); cashback ₹450 this month, ₹3,698.55 all time (44 credits); HDFC Swiggy cashback ₹577; Slice card cashback ₹2,665.85; Spark ₹450. Build `20261111-claude-plan-3v`; full suite 164/164.
 
 **Part A complete in code** (build `3y`, 165/165 tests). Production still needs: deploy (`main`) and the owner-approved seed. Owner inputs: which Slice Monies cash value is withdrawable (₹1,423.78 vs ₹0); a Roarbank rewards balance.
+
+**Seed in Production** (owner: "approve rewards seed", 2026-11-11): backup `prod-before-rewards-seed.wlb` (35 tables, 5,778 rows); INSERT 6 programs + 6 balances; re-run 0. Production overview: points value ₹1,428.14 (Paytm 436 coins, Slice 1,42,378 Monies), cashback ₹3,698.55 all time (Spark ₹450, Slice card ₹2,665.85, HDFC Swiggy ₹577). Audited as owner.
