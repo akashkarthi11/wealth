@@ -476,7 +476,7 @@ button.dashboard-alert-banner:focus-visible{outline:2px solid #8bb5ff;outline-of
 .interest-day-products{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .interest-day-products>div{min-width:0;display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:6px;align-items:center}
 .interest-dot{width:7px;height:7px;border-radius:50%;grid-row:1/4}
-.slice-dot{background:#66dcb8}.atom-dot{background:#85aaff}
+.slice-dot{background:#66dcb8}.atom-dot{background:#85aaff}.fd-dot{background:#f2b45c}
 .interest-day-products small{font-size:9px;letter-spacing:0;color:#92a6c0;white-space:nowrap}
 .interest-day-products b{font-size:13px;color:#eaf2fc;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .interest-day-products em{font-size:9px;color:#8197b3;font-style:normal}
