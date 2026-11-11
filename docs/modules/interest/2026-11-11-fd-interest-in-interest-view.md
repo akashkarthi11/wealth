@@ -1,6 +1,6 @@
 # FD interest not calculated / not shown on the Interest page — 2026-11-11
 
-**Status:** code on `claude-dev` (build `20261111-claude-plan-3o`, not deployed); data fix prepared and rehearsed on Development, **waiting for owner approval for Production** ("approve fd interest fix").
+**Status:** in Production. `main` `8edae9b` (build `20261111-claude-plan-3o`); data fix applied after owner approval ("approve to dev merge to main").
 
 ## Problem (owner: "fd intrest not calculated", "it need to show in intrest menu and intrest by day flowchart")
 1. **No calculation.** Slice FD and Angel One FD were linked to interest products with rates (7.75%, 8%), but had no FD terms (principal, start date, payout). `planAccrual` returns `pending_terms`, so the nightly job wrote nothing. Both rate periods also started on 10 Nov, after the FDs were booked.
@@ -22,3 +22,7 @@ Development: terms UPDATE 2, rates UPDATE 2, values UPDATE 1+1, re-run 0; accrua
 - Daily list: a "Fixed deposits" entry per day with a running total (only when FD rows exist).
 - FD box: app-reported interest, or current − invested when no figure was recorded; plus "calculated by this app since start".
 - Tests: `scripts/tests/interest-fd.test.mjs` (6). Full suite 142/142.
+
+## Production (2026-11-11)
+- Backup `prod-before-fd-terms.wlb` (32 tables, 5,736 rows); repair: terms UPDATE 2, rate periods UPDATE 2, Slice FD value UPDATE 1 (₹3,005.04), Angel One FD value UPDATE 1 (₹1,001.30).
+- Accrual 5–10 Nov written as owner: Slice FD 6 rows ₹3.82, Angel One FD 6 rows ₹1.32; a re-run writes 0. The nightly job continues from 11 Nov.
