@@ -392,3 +392,23 @@ test('nightly run raises a daily-credited balance as "estimated" (v2) / "stale" 
   assert.deepEqual(after, { b: 47890, s: 'verified' });
   assert.equal((await a.query(`SELECT count(*)::int n FROM wealth_account_balances WHERE status='estimated'`))[0].n, 1, 'estimate kept in history');
 });
+
+test('Bank balances menu shows the live account balances and its total equals the dashboard CASA figure', async () => {
+  const vm = await import('node:vm');
+  const { v1Totals } = await import('../../api/_reconcile.js');
+  const src = readFileSync(new URL('../../app.js', import.meta.url), 'utf8');
+  const fn = name => { const s = src.indexOf('function ' + name + '('); let i = src.indexOf('{', s), d = 0; for (; i < src.length; i++) { if (src[i] === '{') d++; else if (src[i] === '}' && --d === 0) break; } return src.slice(s, i + 1); };
+  const acc = (bank, name, bal, status, type = 'savings') => ({ bank_name: bank, account_name: name, account_type: type, currency: 'INR', current_balance: bal, balance_status: status, balance_as_of: '2026-11-10T18:29:59Z' });
+  const accounts = [acc('Slice', 'Slice Savings', '47889.22', 'stale'), acc('Atom', 'Atom Savings', '63429.56', 'stale'), acc('Bank of India', 'BOI Savings', '1426.99', 'verified'),
+    acc('HDFC Bank', 'HDFC Savings', '3.89', 'verified'), acc('Roarbank', 'Roarbank Savings', '650.65', 'verified'), acc('X Bank', 'Old', '500', 'unknown'), acc('Slice', 'Card', '100', 'verified', 'credit_card')];
+  const ctx = { accounts, esc: s => String(s), money: v => 'INR ' + v.toFixed(2), Number, String, Date };
+  vm.runInNewContext(['liveBankAccounts', 'bankCounted', 'bankStatusLabel', 'bankAsOf', 'liveBankCardsHtml', 'liveBankDetailHtml'].map(fn).join('\n') +
+    ";globalThis.html=liveBankCardsHtml();globalThis.detail=liveBankDetailHtml('Slice');", ctx);
+  const casa = v1Totals(accounts, []).casa;
+  assert.equal(casa, 113400.31);
+  assert.match(ctx.html, /<span class="pill">INR 113400\.31<\/span>/, 'menu total = dashboard CASA');
+  assert.equal((ctx.html.match(/bank-balance-card/g) || []).length, 6, 'one card per bank account (not the credit card)');
+  assert.match(ctx.html, /Estimated · last verified \+ interest/);
+  assert.match(ctx.html, /X Bank[\s\S]*Not counted in the dashboard total/);
+  assert.match(ctx.detail, /Slice Savings[\s\S]*INR 47889\.22/);
+});
