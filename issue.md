@@ -35,3 +35,21 @@
 
 ### Verification note
 The production database was updated and verified on 11 Nov 2026. The earlier development-only corrections were not assumed to have synced automatically. This issue file is maintained in the repository's development branch for future import workflows.
+
+---
+
+## Issue: November interest recorded as running totals AND as daily rows (found by Claude, fixed 11 Nov 2026)
+
+### What happened
+- Interest screens show **month-to-date** totals. The 11 Nov rows "November savings interest ₹71.57" and "November Atom interest ₹76.36" are running totals through 10 Nov (Slice: ₹57.15 MTD on 9 Nov + ₹7.21 + ₹7.21; Atom: ₹57.24 + ₹9.56 × 2).
+- Earlier rows already inside those totals were still counted: Slice ₹35.53 (6 Nov), ₹42.74 (7 Nov), ₹7.20 (8 Nov), ₹7.21 (10 Nov); Atom ₹9.55 (8 Nov), ₹9.56 (10 Nov). November income was overstated by **₹111.79**.
+- The "Slice Atom" clarification above (17:13) was committed after the database write (17:10), so the ₹18 round-up was still on Slice Savings ••3731.
+
+### Corrections applied (Production, owner approval "yes, approve interest fix"; backup taken)
+- The six rows are marked `duplicate_of` the ₹71.57 / ₹76.36 rows (nothing deleted; they drop out of totals). Script: `scripts/db/repairs/2026-11-11-november-interest-and-roundups.sql`.
+- **Slice Atom = Atom Savings** (database account: bank "Atom", "Atom Savings" — owner confirmed). Round-ups ₹141 (7 Nov) and ₹18 (11 Nov) moved to Atom Savings.
+
+### Rules for future imports (ChatGPT and Claude)
+9. **Interest is a running total too.** "November savings interest ₹X" / "Atom interest earned this month ₹X" on an activity or summary screen is month-to-date. Record only the **new daily credit** (the difference from the last recorded total), or replace the earlier total — never add both.
+10. **Slice Atom = the "Atom Savings" account** (bank "Atom"). Round-ups and Atom interest go there.
+11. Atom has **splits** (pots such as Rent). Until split tracking is added to the app, put Atom money on Atom Savings and name the split in the description; do not invent a split.
