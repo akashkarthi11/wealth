@@ -1,0 +1,1 @@
+- [No v2 merges](no-v2-merge.md) — release stops at main; leave the v2 branch untouched
