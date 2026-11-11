@@ -8,10 +8,10 @@
 |---|---|
 | Document | TSD — Claude Plan 3 |
 | Project | Wealth Ledger (`akashkarthi11/wealth`), Vercel project `wealth` |
-| Version | 1.0 (draft) |
+| Version | 1.2 |
 | Date | 2026-11-11 |
 | Author | Claude (Claude Code), prepared for the project owner |
-| Status | **Proposed — for review.** Nothing in this document is implemented yet |
+| Status | **Implemented and deployed to Production** (`main` `2a2afde`, 2026-11-11; migrations 0008–0010). Owner settings still open — see §14 |
 | Predecessors | [Claude Plan 1](claude-plan-1.md) (deployed) · [Claude Plan 2](claude-plan-2.md) (Phase B done; cut-over in progress) |
 | Companion PSD / FSD | Not created. Technical change only |
 | Standing rules | **No data is deleted** (runner guard + test). **Production only** for routine operations; Development is for rehearsal. Every deployment and production write needs explicit owner approval |
@@ -21,6 +21,8 @@
 | Version | Date | Change |
 |---|---|---|
 | 1.0 | 2026-11-11 | First draft |
+| 1.1 | 2026-11-11 | Phases 1–6 implemented (§14); single-function router; daily-credited interest raises the balance (§14.1, 0009) |
+| 1.2 | 2026-11-11 | Deployed to Production; interest view fixes (§14.2); bank balances from the database (§14.3); audit stores changed fields only (§14.4, 0010); only `main` builds on Vercel (§14.5); open owner actions (§14.6) |
 
 ### Approvals
 
@@ -391,8 +393,8 @@ About 6 working days plus owner input. Phase 1 needs decisions DV3-1 … DV3-3 a
 
 ## 14. Implementation status (2026-11-11)
 
-Code is on `claude-dev` with tests passing (102). Migration **0008** is **applied to Development** (encrypted backup and restore drill first).
-**Production is not deployed.** The previous `main` deploy failed on the Hobby 12-function limit; this change fixes that with a single-function router (see [fix record](../modules/infra/2026-11-11-hobby-function-limit-single-router.md)).
+**Deployed to Production** (`main` `2a2afde`, app build `20261111-claude-plan-3h`). Tests: 110 passing. Migrations 0008, 0009 and 0010 are applied to Development and Production, each after an encrypted backup and a passing restore drill. `/api/health` reports 11 migrations (latest `0010_audit_changed_fields_only`); its `ok` is `false` only because `WEALTH_INGEST_SECRET` and the backup store are not set yet (§14.6).
+The earlier failed `main` deploy (Hobby 12-function limit) is fixed by the single-function router (see [fix record](../modules/infra/2026-11-11-hobby-function-limit-single-router.md)).
 
 | Phase | Status | Evidence |
 |---|---|---|
@@ -415,4 +417,41 @@ Code is on `claude-dev` with tests passing (102). Migration **0008** is **applie
 - Accrual still needs a verified balance no older than 2 days, so estimates stop growing when screenshots stop.
 - Accruals are never written as income transactions. Actual credits with bank evidence still go through `POST /api/interest/credits`.
 - **Old daily prompt:** it requires the newest balance row to be `verified`, so after an estimate it reports the principal as stale and writes nothing. The app's nightly run does the accrual. Switch the task to the new API prompt.
-- **Status:** migration 0009 is applied to Development; the dry run gives Slice ₹47,889.22 and Atom ₹63,429.56 for 10 Nov. Production gets 0009 with the next `main` deploy.
+- **Status:** migration 0009 is applied to Development and Production (`main` build `337a88f`). The dry run gives Slice ₹47,889.22 and Atom ₹63,429.56 for 10 Nov. Those two estimated balances were written to Production for 11 Nov at the owner's request ("for today update in db"); the nightly run keeps them current from then on.
+
+### 14.2 Change 2026-11-11 — interest view shows correct day and month totals
+
+- A day's total sums every correction revision, not only the newest row. Before this, 9 Nov showed −₹7.21, which was the correction alone.
+- The month total is the statement total plus the accruals after the statement's end date (`interestMonthTotal`). Before this, the chart and the statement total ignored days the statement did not cover.
+- Fix record: [interest view totals](../modules/interest/2026-11-11-interest-view-day-and-month-totals.md). Commits `f42727e`, `79ff474`; in Production from `0a91031`.
+
+### 14.3 Change 2026-11-11 — bank balances come from the database
+
+- The Bank balances menu uses the same live account balances as the dashboard. Before this, it showed figures from saved snapshot tables, so the two disagreed.
+- The widget was redesigned: a total, a share bar, a legend, and a verified/estimated split, then one row per bank with a status chip.
+- The account details page is built from the database through a new `GET /api/account-detail?id=<account uuid>` (owner session only, own accounts only). It shows the account and subtype, 30 balance rows, 6 months of money in/out (transfers kept separate), the 25 latest transactions, interest (month-to-date total and basis), and upcoming obligations. No static snapshot data is used, and each page shows only that bank's records.
+- Fix record: [bank balances from the database](../modules/accounts/2026-11-11-bank-balances-live-and-account-details.md). Commits `b84be41`, `dfe0aec`, `68ec9a7`, `25983f2`; in Production from `2a2afde`.
+
+### 14.4 Change 2026-11-11 — store only required data (migration 0010)
+
+- Owner rule: "store only required data, don't save waste data".
+- `wealth_trg_audit` now stores only the changed columns on an update. An update that changes nothing except `updated_at` is not recorded. Inserts store the new row; deletes store the old row. Existing audit rows are kept.
+- The price refresh and `POST /api/prices` no longer write `wealth_price_history`; `wealth_instrument_prices` is the history.
+- Each account has one rolling estimated balance, updated in place until the next verified balance, instead of a new row every night. Verified balances are never touched.
+- Fix record: [audit stores changed fields only](../modules/database/2026-11-11-store-only-required-data.md). Commit `501bcab`; in Production from `2a2afde`.
+
+### 14.5 Change 2026-11-11 — only `main` builds on Vercel
+
+- `vercel.json` `git.deploymentEnabled = {"**": false, "main": true}`. Pushes to `claude-dev`, `development` and `v2` no longer create deployments.
+- Fix record: [Vercel builds main only](../modules/infra/2026-11-11-vercel-build-main-only.md). Commits `77768a8`, `20a5b21`.
+- Branch `v2` was created from `main` and is kept identical to it (`2a2afde`).
+
+### 14.6 Open owner actions
+
+| Action | Why |
+|---|---|
+| Set `WEALTH_INGEST_SECRET` in Production, then switch both scheduled agents to the new [daily](../ops/daily-wealth-operations-prompt.md) and [hourly](../ops/hourly-wealth-operations-prompt.md) prompts | The old hourly prompt still writes `wealth_price_history`. The old daily prompt reports "principal stale" after an estimated balance and writes nothing |
+| Create a private Vercel Blob store and set `WEALTH_BACKUP_KEY` | The nightly backup is skipped until both are set (`/api/health` `config.backup = false`) |
+| Nippon units, FD terms (rate, start, maturity), duplicate pairs | Phase 1 data-quality decisions DV3-1 … DV3-3 |
+| Preview deployments → Development database | Today Preview uses the Production database |
+| Stock Advisor report retention (hourly, only on change, or one per day) | Decision pending |

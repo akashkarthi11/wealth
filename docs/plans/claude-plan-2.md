@@ -8,10 +8,10 @@
 |---|---|
 | Document | TSD — Claude Plan 2 |
 | Project | Wealth Ledger (`akashkarthi11/wealth`), Vercel project `wealth` |
-| Version | 1.0 (draft) |
+| Version | 1.1 |
 | Date | 2026-11-10 |
 | Author | Claude (Claude Code), prepared for the project owner |
-| Status | **Proposed — for review.** Nothing in this document is implemented yet |
+| Status | **In progress.** Phases A.3, B, G and D.1 are done and in Production (see §15); C was folded into [Plan 3](claude-plan-3.md) Phase 2; D.2, E and F not started |
 | Predecessor | [TSD — Claude Plan 1](claude-plan-1.md) (implemented and deployed to Production 2026-11-10) |
 | Companion PSD / FSD | Not created. No new business functionality; this is a technical cut-over |
 | Standing rule | **No data is deleted.** Migrations and repairs only add, link or mark rows (Plan 1 v1.2). The runner refuses destructive SQL |
@@ -21,6 +21,7 @@
 | Version | Date | Change |
 |---|---|---|
 | 1.0 | 2026-11-10 | First draft, from the state of Production after the Plan 1 deployment |
+| 1.1 | 2026-11-11 | Implementation status brought up to date: B and G in Production, C moved to Plan 3, D.1 done, `CRON_SECRET` active |
 
 ### Approvals
 
@@ -471,9 +472,10 @@ About 5.5 working days plus observation time. Phases A, B and G are the minimum 
 
 | Phase | Status | Commit | Evidence |
 |---|---|---|---|
-| A — configuration | **Open (owner)**: `CRON_SECRET` (Production), dev-team settings | — | `/api/health` |
+| A — configuration | **Partly done**: `CRON_SECRET` active in Production (cron runs succeed, 2026-11-11). Open (owner): dev-team settings (Preview → Development database) | — | `/api/health` |
 | A.3 — fresh US prices with FX | Done once on Production (5 USD prices, v2 table only); Development fully refreshed | — | v2 INDmoney ₹5,311.06, nothing excluded |
-| B — sync legacy → v2 (0006) | **Done**: applied to Development; Production gets it from the next deploy (direct apply needs owner approval) | `68cfe07` | 8 sync tests; on Development 0 issues, 26/26 holdings linked, no rows lost |
-| C, D, E, F, G | Not started (C is extended in [Claude Plan 3](claude-plan-3.md) Phase 2) | — | — |
-| G — job observability (0007) | **Done**: `wealth_job_runs`; price refresh and advisor ingest record runs; `/api/health` shows last runs, agent activity, stale/failing jobs. Applied to Development | — | `reconcile-dq.test.mjs` |
+| B — sync legacy → v2 (0006) | **Done and in Production**: applied to Development, then to Production by the `main` build `45e4b96` (2026-11-11) | `68cfe07` | 8 sync tests; on Development 0 issues, 26/26 holdings linked, no rows lost |
+| C — v2 write API | **Superseded**: delivered as [Claude Plan 3](claude-plan-3.md) Phase 2 (ingest APIs), in Production | `696a71d` | `plan3.test.mjs` |
+| D.2 switch, E, F | Not started. Production still reads v1 (`WEALTH_DATA_MODEL` default); v2 is kept in step by the 0006 triggers | — | `/api/reconcile` |
+| G — job observability (0007) | **Done**: `wealth_job_runs`; price refresh and advisor ingest record runs; `/api/health` shows last runs, agent activity, stale/failing jobs. Applied to Development and Production (build `45e4b96`) | — | `reconcile-dq.test.mjs` |
 | D.1 — `/api/reconcile` | **Done**: v1 (server port of the live dashboard, parity-tested) vs v2 per category with reasons; on Production all differences are `price_basis`, `acceptable: true` | — | read-only run on Production |

@@ -19,5 +19,5 @@ External services: Angel One SmartAPI, Exa, Massive, and Stock Advisor report in
 
 - `POST` (ingest): `Authorization: Bearer $WEALTH_ADVISOR_INGEST_SECRET` (≥ 32 chars, constant-time compare). Body needs `report_json` object plus `report_text` or `recommendations`. Saved against the first admin user.
 - `GET`: latest report for the signed-in user (falls back to `wealth_snapshots` with a `stock-advisor` source) plus INR equity holdings.
-- Table: `wealth_stock_advisor_reports` — migration [`20261110_stock_advisor_reports.sql`](../../../scripts/migrations/20261110_stock_advisor_reports.sql) is **manual**.
+- Table: `wealth_stock_advisor_reports` — migration [`20261110_stock_advisor_reports.sql`](../../../scripts/migrations/legacy/20261110_stock_advisor_reports.sql) is **manual**.
 - UI: `stockAdvisorHtml` / `loadStockAdvisor` in [`app.js`](../../../app.js).

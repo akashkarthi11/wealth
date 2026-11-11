@@ -3,6 +3,7 @@
 - **Date:** 2026-11-10
 - **Primary module:** Auth
 - **Status:** Code committed on `claude-dev` (`e6b0fd3`); tests pass; migration 0001 not yet applied to any database; not deployed
+- **Status update 2026-11-11:** merged to `main` and **deployed to Production on 2026-11-10** with Claude Plan 1; migration 0001 applied to Development and Production.
 - **TSD:** [Claude Plan 1](../../plans/claude-plan-1.md) Phase 1 (TR-1.1 – TR-1.5), defects DEF-01, DEF-02
 
 ## Symptoms

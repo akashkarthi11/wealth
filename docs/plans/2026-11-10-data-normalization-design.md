@@ -1,7 +1,7 @@
 # Data Normalization Design — No Duplicate Data, Keys Doing the Work
 
 - **Date:** 2026-11-10
-- **Status:** Proposed. Stage 1 and 2 SQL drafted and syntax-checked against Neon (read-only); nothing applied
+- **Status:** Implemented as migration 0002 ([Plan 1](claude-plan-1.md) Phase 4); in Production since 2026-11-10. Stage-2 repair script is ready in `scripts/db/repairs/` but **not run** (needs owner approval). Stage 3 deletions withdrawn (no-data-deletion rule)
 - **Parent plan:** [Database optimization plan](2026-11-10-database-optimization-plan.md) (replaces its Phases 2, 3 and 5)
 - **Audit:** [`scripts/db/audit-duplicates.sql`](../../scripts/db/audit-duplicates.sql) — every query returns 0 rows when clean
 
@@ -33,7 +33,7 @@
 | 14 | Credit-card balance stored as a LIABILITY position, a `liability` transaction and `metadata.cycle_liability` (₹30,634.21 vs ₹30,536.95) | 3 copies | 3 |
 
 ## Stage 1 — Keys only, no row changes
-[`scripts/migrations/drafts/2026-11-10-normalization-stage1-keys.sql`](../../scripts/migrations/drafts/2026-11-10-normalization-stage1-keys.sql)
+[`scripts/migrations/0002_owner_keys.sql`](../../scripts/migrations/0002_owner_keys.sql)
 
 - `UNIQUE (user_id, id)` on positions, investment assets, recurring obligations, subscriptions, snapshots.
 - 13 composite owner FKs (`NOT VALID` → `VALIDATE`), using `ON DELETE SET NULL (column)` so deleting a parent never nulls `user_id`.
@@ -43,7 +43,7 @@
 - **Ship together with** removing the two `CREATE UNIQUE INDEX` lines in `scripts/migrate-db.mjs` that would re-create dropped indexes on every deploy.
 
 ## Stage 2 — Remove duplicated data (approval per environment)
-[`scripts/migrations/drafts/2026-11-10-normalization-stage2-data.sql`](../../scripts/migrations/drafts/2026-11-10-normalization-stage2-data.sql)
+[`scripts/db/repairs/2026-11-10-normalization-stage2-data.sql`](../../scripts/db/repairs/2026-11-10-normalization-stage2-data.sql)
 
 - Re-point the LIC and Slice auto-deposit obligations to their active mandates (their planned occurrences become valid again).
 - Close the older Slice savings rate; add "one open rate per product" unique index.

@@ -39,7 +39,18 @@ Runs during `npm run build` on **Production builds only** (skipped on Vercel Pre
 
 - Applies each `scripts/migrations/NNNN_name.sql` **once**, in order, inside one transaction (Neon `Pool` over WebSocket), recorded in `wealth_schema_migrations` with a SHA-256 checksum. An edited, already-applied file fails the build. Files must not contain `BEGIN`/`COMMIT`.
 - `npm run db:migrate:dry` lists pending files and writes nothing.
-- Current files: `0000_baseline`, `0001_session_version`, `0002_owner_keys`, `0003_account_hierarchy`, `0004_account_hierarchy_backfill`, `0005_link_obligations_and_interest`.
+- Current files (all applied to Development and Production as of 2026-11-11):
+
+| File | Plan | Purpose |
+|---|---|---|
+| `0000_baseline` … `0005_link_obligations_and_interest` | Plan 1 | Baseline, session version, keys, account hierarchy, obligation/interest links |
+| `0006_sync_legacy_to_v2` | Plan 2 B | Triggers keep v2 tables in step with every v1 write |
+| `0007_job_runs_and_data_quality` | Plan 2 G | `wealth_job_runs` |
+| `0008_plan3_data_quality_interest_obligations_audit` | Plan 3 | Duplicate marking, FD terms, price holds, interest links, obligations read model, `wealth_audit_log` |
+| `0009_interest_credits_balance` | Plan 3 §14.1 | `credit_frequency`; balance status `estimated` |
+| `0010_audit_changed_fields_only` | Plan 3 §14.4 | Audit stores only changed columns ([fix note](2026-11-11-store-only-required-data.md)) |
+
+- Backups: encrypted (`WLB1`, AES-256-GCM) via `scripts/db/backup-restore.mjs`; take one and pass the drill before applying a migration to Production.
 - The old data migrations are archived in `scripts/migrations/legacy/` and no longer run.
 - **Data repairs** live in `scripts/db/repairs/` and run manually with owner approval: `node scripts/db/run-sql.mjs <env-file> <file> --apply --yes` (read-only without `--apply`).
 - Tests run every migration on in-memory Postgres (PGlite): `npm test`.

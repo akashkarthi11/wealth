@@ -1,7 +1,7 @@
 # Account Hierarchy Data Model
 
 - **Date:** 2026-11-10
-- **Status:** Proposed. Schema and backfill drafted and syntax-checked; nothing applied
+- **Status:** Implemented as migrations 0003–0004 and the v2 dashboard ([Plan 1](claude-plan-1.md) Phase 5); in Production since 2026-11-10
 - **Replaces:** Stage 3 of the [Data normalization design](2026-11-10-data-normalization-design.md)
 
 ## Shape
@@ -77,8 +77,8 @@ Kept for audit until a later, separately approved drop: `wealth_positions`, `wea
 
 ## Scripts (drafts, not run by `migrate-db.mjs`)
 
-1. [`account-hierarchy-1-schema.sql`](../../scripts/migrations/drafts/2026-11-10-account-hierarchy-1-schema.sql) — subtype catalogue, new tables, views. Additive only.
-2. [`account-hierarchy-2-backfill.sql`](../../scripts/migrations/drafts/2026-11-10-account-hierarchy-2-backfill.sql) — copies data in, idempotent, and **aborts the whole transaction** if any active holding or balance was not carried over.
+1. [`account-hierarchy-1-schema.sql`](../../scripts/migrations/0003_account_hierarchy.sql) — subtype catalogue, new tables, views. Additive only.
+2. [`account-hierarchy-2-backfill.sql`](../../scripts/migrations/0004_account_hierarchy_backfill.sql) — copies data in, idempotent, and **aborts the whole transaction** if any active holding or balance was not carried over.
 
 Both parse against Neon (checked in read-only transactions). A full run has not happened yet: it needs a Neon branch with write access.
 

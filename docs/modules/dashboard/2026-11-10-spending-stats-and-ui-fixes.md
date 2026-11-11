@@ -4,6 +4,7 @@
 - **Primary module:** Dashboard
 - **Related modules:** Accounts & transactions, Investments, Integrations
 - **Status:** Code committed on `claude-dev` (`a7ed523`); tests pass; verified read-only against the Preview database; not deployed
+- **Status update 2026-11-11:** merged to `main` and **deployed to Production on 2026-11-10** with Claude Plan 1.
 - **TSD:** [Claude Plan 1](../../plans/claude-plan-1.md) Phase 3 (TR-3.1 – TR-3.6) — DEF-05, DEF-09, DEF-10
 
 ## Symptoms
