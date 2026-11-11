@@ -225,3 +225,7 @@ Development (real data): points value ₹1,428.14 (2 of 6 programs priced); cash
 - **Page:** grouped by bank/app (largest first) with linked accounts and group totals; filters All · Points · Cashback; compact cards (main figure first, account chip that opens the bank page — or Investments for gold — progress, scheme, Details folded); empty programs show "No balance yet — Add"; the Update form has the units (points programs) and a Linked account select; cashback by type folded.
 - **Bank pages:** a Rewards section lists the programs linked to that bank.
 - Development: 0017 applied (18 migrations); links UPDATE 3 (Development has no Roarbank credit card; Production has it), re-run 0; checked visually at 540 px. Tests 167/167.
+
+### Deployed (2026-11-11, owner: "ok use it now", "approve rewards links")
+- Backup `prod-before-0016.wlb` (35 tables, 5,802 rows); `main` `35b2934` (build `4a`) applied 0016, 0017, 0018 (19 migrations).
+- Backup `prod-before-reward-links.wlb` (36 tables, 5,806 rows); Monies scheme UPDATE 1 (re-run 0); account links UPDATE 4 (re-run 0). All six programs linked: HDFC Swiggy Orange ••9229, Paytm Gold, Roarbank Credit Card, Slice Credit Card ••6136, Slice Savings ••3731 (Monies, Spark — Spark counts credits from any account).

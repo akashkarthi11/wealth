@@ -1,4 +1,4 @@
-import { json, handle, invalidateUserCaches, cachedValue, cacheHeader } from '../_lib.js';
+import { json, handle, invalidateUserCaches, cachedValue, sendCached } from '../_lib.js';
 import { runAccrual, submitRate, recordCredit, interestOverview } from '../_interest.js';
 import { startJob, finishJob } from '../_jobs.js';
 
@@ -13,8 +13,7 @@ export default handle('wealth-interest', { methods: ['GET', 'POST'], auth: req =
   if (route === 'interest') {
     if (req.method !== 'GET') return json(res, 405, { error: 'Method not allowed' });
     const day = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
-    const { data, hit } = await cachedValue(who.uid, 'interest', () => interestOverview(who.uid), { variant: day });
-    cacheHeader(res, hit); return json(res, 200, data);
+    return sendCached(res, await cachedValue(req, who.uid, 'interest', () => interestOverview(who.uid), { variant: day }));
   }
   if (req.method !== 'POST') return json(res, 405, { error: 'Method not allowed' });
   if (route === 'interest/rates') { const r = await submitRate(body, { actor: who.actor, dryRun }); return json(res, r.status, r.body); }
