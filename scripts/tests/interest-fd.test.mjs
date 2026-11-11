@@ -58,14 +58,21 @@ test('daily list shows a Fixed deposits entry per day with a running total', () 
   assert.match(html, /<small>Fixed deposits<\/small><b>INR 0\.86<\/b><em>MTD INR 1\.71/);
 });
 
-test('FD box: app-reported interest, or current minus invested, plus the calculated total', () => {
+test('FD box: both FDs (incl. the screenshot-imported Angel One FD), app-reported interest and per-FD calculated interest', () => {
   const positions = [
     { record_type: 'FIXED_DEPOSIT', name: 'Slice FD', current_value: '3005.04', invested_value: '3001.00', metadata: {} },
-    { record_type: 'FIXED_DEPOSIT', name: 'Angel One FD (aggregate)', current_value: '1001.30', invested_value: '1000.00', metadata: { interest_earned_inr: 1.30 } },
+    { record_type: 'FIXED_DEPOSIT', name: 'Angel One FD (aggregate)', current_value: '1001.30', invested_value: '1000.00', metadata: { interest_earned_inr: 1.30, historical_snapshot: true } },
   ];
-  const html = page({ rows, positions }).interestViewHtml();
-  assert.match(html, /<span>Slice FD<\/span><b>INR 4\.04<\/b>/);
-  assert.match(html, /<span>Angel One FD \(aggregate\)<\/span><b>INR 1\.30<\/b>/);
+  const fdRows = rows.map(r => r.product_key === 'slice-fd' ? { ...r, account_key: 'slice-fixed_deposit-slice-fd' } : r.product_key === 'angel-one-fd' ? { ...r, account_key: 'angel-one-fixed_deposit-angel-one-fd-aggregate-' } : r);
+  const html = page({ rows: fdRows, positions }).interestViewHtml();
+  assert.match(html, /<span>Slice FD<small>INR 3005\.04 now · INR 3001\.00 invested · app calculated INR 1\.27<\/small><\/span><b>INR 4\.04<\/b>/);
+  assert.match(html, /<span>Angel One FD \(aggregate\)<small>INR 1001\.30 now · INR 1000\.00 invested · app calculated INR 0\.44<\/small><\/span><b>INR 1\.30<\/b>/);
   assert.match(html, /<strong>INR 5\.34<\/strong>/);
   assert.match(html, /calculated by this app since start INR 1\.71/);
+});
+
+test('two FDs: daily list and chart legend show the split per FD', () => {
+  const a = page({ rows });
+  assert.match(a.activeInterestListHtml(), /<small class="interest-fd-split">Angel One FD INR 0\.22 · Slice FD INR 0\.64<\/small>/);
+  assert.match(a.interestSummaryHtml(), /Fixed deposits · INR 1\.71 \(Angel One FD INR 0\.44 · Slice FD INR 1\.27\)/);
 });

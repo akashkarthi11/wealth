@@ -734,3 +734,5 @@ em.in{color:var(--green)}em.out{color:#ff9b9b}
 .rec-kv dt{font-size:10px;color:var(--muted)}.rec-kv dd{margin:3px 0 0;font-size:13px;overflow-wrap:anywhere}
 .rec-body code{font-size:11px;color:#9fb1c9;overflow-wrap:anywhere}
 @media(max-width:620px){.rec-card summary{grid-template-columns:auto 1fr auto;gap:9px;padding:12px}.rec-facts{grid-column:1/-1;grid-row:2;justify-content:flex-start;flex-wrap:wrap}.rec-facts span{text-align:left}.rec-stats{width:100%}.rec-stats span{flex:1}}
+.interest-fd-split{display:block;margin-top:3px;font-size:10px;letter-spacing:0;color:#c9a46a}
+.interest-fd-list span small{display:block;margin-top:2px;letter-spacing:0;font-size:10px;color:var(--muted)}
