@@ -120,6 +120,50 @@ export function sessionFrom(req){try{const c=String(req.headers.cookie||'').spli
 // Signature + expiry only. Use sessionUser() wherever a revoked session must be rejected.
 export function userFrom(req){return sessionFrom(req)?.uid||null}
 // Signature + expiry + session_version check against the database.
+// ── Versioned Redis cache (migration 0018) ──────────────────────────────────────────────────────────────────────
+// wealth_data_version.version goes up on every write to a data table, whoever writes (app, cron, ChatGPT/direct SQL).
+// A cached response stores the version it was built from and is served only while the version is unchanged.
+// The sign-in check and the version come back in ONE query, and the Redis read runs in parallel with it, so a cache
+// hit costs one database round trip instead of a dozen. Redis stays optional: any Redis problem means "miss".
+const CACHE_PREFIX='wealth:c1:';
+export async function sessionAndVersion(req){
+ const s=sessionFrom(req);
+ if(!s||!sql)return {uid:null,version:null};
+ try{
+  const rows=await sql.query('SELECT u.session_version,(SELECT version FROM wealth_data_version WHERE id=1) AS data_version FROM wealth_users u WHERE u.id=$1',[s.uid]);
+  if(!rows.length||Number(rows[0].session_version||1)!==s.sv)return {uid:null,version:null};
+  return {uid:s.uid,version:rows[0].data_version==null?null:String(rows[0].data_version)};
+ }catch(e){
+  if(e?.code==='42P01'||e?.code==='42703'){const uid=await sessionUser(req);return {uid,version:null}}   // before 0018 / 0001
+  throw e;
+ }
+}
+export function cacheKeyFor(uid,name,variant=''){return CACHE_PREFIX+name+':'+uid+(variant?':'+variant:'')}
+// Authenticated, versioned GET: returns {uid, data, hit}. `compute(uid)` builds the response when the cache misses.
+// The cache write happens after the response (waitUntil). ttl caps how long an entry can live even without writes.
+export async function cachedForUser(req,name,compute,{variant='',ttl=600}={}){
+ const s=sessionFrom(req);
+ if(!s)return {uid:null,data:null,hit:false};
+ const key=cacheKeyFor(s.uid,name,variant);
+ const [who,cached]=await Promise.all([sessionAndVersion(req),cacheGet(key)]);
+ if(!who.uid)return {uid:null,data:null,hit:false};
+ if(cached&&who.version!=null){try{const c=typeof cached==='string'?JSON.parse(cached):cached;if(c&&c.v===who.version)return {uid:who.uid,data:c.d,hit:true}}catch{}}
+ const data=await compute(who.uid);
+ if(who.version!=null&&data!=null)waitUntil(cacheSet(key,{v:who.version,d:data},ttl).catch(()=>{}));
+ return {uid:who.uid,data,hit:false};
+}
+// For handlers that already know the user (handle()/authorize): version + Redis read in parallel, same rule.
+export async function dataVersion(){if(!sql)return null;try{const [r]=await sql.query('SELECT version FROM wealth_data_version WHERE id=1');return r?String(r.version):null}catch{return null}}
+export async function cachedValue(uid,name,compute,{variant='',ttl=600}={}){
+ const key=cacheKeyFor(uid,name,variant);
+ const [version,cached]=await Promise.all([dataVersion(),cacheGet(key)]);
+ if(cached&&version!=null){try{const c=typeof cached==='string'?JSON.parse(cached):cached;if(c&&c.v===version)return {data:c.d,hit:true}}catch{}}
+ const data=await compute();
+ if(version!=null&&data!=null)waitUntil(cacheSet(key,{v:version,d:data},ttl).catch(()=>{}));
+ return {data,hit:false};
+}
+// Header that shows whether a response came from the cache (for checking speed; no data in it).
+export function cacheHeader(res,hit){try{res.setHeader('X-Wealth-Cache',hit?'hit':'miss')}catch{}}
 export async function sessionUser(req){
  const s=sessionFrom(req);
  if(!s||!sql)return null;

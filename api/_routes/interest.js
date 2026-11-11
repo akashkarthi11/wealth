@@ -1,4 +1,4 @@
-import { json, handle, invalidateUserCaches } from '../_lib.js';
+import { json, handle, invalidateUserCaches, cachedValue, cacheHeader } from '../_lib.js';
 import { runAccrual, submitRate, recordCredit, interestOverview } from '../_interest.js';
 import { startJob, finishJob } from '../_jobs.js';
 
@@ -10,7 +10,12 @@ const AUTH = { 'interest': {}, 'interest/rates': {}, 'interest/run': { cron: tru
 
 export default handle('wealth-interest', { methods: ['GET', 'POST'], auth: req => AUTH[req.route] || { ingest: false } }, async ({ req, res, who, body, dryRun }) => {
   const route = req.route || 'interest';
-  if (route === 'interest') return req.method === 'GET' ? json(res, 200, await interestOverview(who.uid)) : json(res, 405, { error: 'Method not allowed' });
+  if (route === 'interest') {
+    if (req.method !== 'GET') return json(res, 405, { error: 'Method not allowed' });
+    const day = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
+    const { data, hit } = await cachedValue(who.uid, 'interest', () => interestOverview(who.uid), { variant: day });
+    cacheHeader(res, hit); return json(res, 200, data);
+  }
   if (req.method !== 'POST') return json(res, 405, { error: 'Method not allowed' });
   if (route === 'interest/rates') { const r = await submitRate(body, { actor: who.actor, dryRun }); return json(res, r.status, r.body); }
   if (route === 'interest/credits') { const r = await recordCredit(who.uid, body, { actor: who.actor }); await invalidateUserCaches(who.uid); return json(res, 201, r); }
