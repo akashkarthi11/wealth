@@ -253,3 +253,9 @@ Checked against screenshots: Monies 1,42,378 (9 Nov) → 1,42,399 (11 Nov) = +21
 - Also fixed: the hidden tap readout under share bars showed as an empty box (`.share-readout[hidden]`).
 - Tests: `splits.test.mjs` (4). Full suite 178/178.
 - Next: rent — amount and due day, then rent payments create a − move on the Rent split; ChatGPT rule to post Atom movements with their split.
+
+### Applied in Production (owner: "approve schemes", "approve balances")
+- Backup `prod-before-balances-schemes.wlb` (36 tables, 5,863 rows).
+- Schemes: UPDATE 2 — Slice Monies 1% of Slice card spends → 1.5% from 3,00,000 → 2% from 5,00,000; HDFC Swiggy Orange 5% of Swiggy orders on the card. (The full card-only / Swiggy display needs build `4c`/`4d` deployed.)
+- Verified balances via the app's own path (account record and history in step): Slice Savings ₹42,871 (11 Nov 5:19 PM), Atom Savings ₹63,448.36 (5:21 PM), Slice Monies 1,42,399 (≈ ₹1,423.99). Slice Savings record and history now both ₹42,871 — the ₹5,018 mismatch (D0) is closed.
+- "approve splits" received; the splits need migration 0019, which reaches Production with the next deploy ("main") — applied after it.
