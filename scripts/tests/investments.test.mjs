@@ -28,7 +28,7 @@ const items = [{ kind: 'investment', category: 'SIP', amount: '1000', occurred_o
 
 function render() {
   const ctx = { positions, items, accounts: [], esc: s => String(s), money: v => 'INR ' + Number(v).toFixed(2), accountKey: s => s, latestAngelOneEquitySummary: null, Number, String, Date, Math, Set, Object, JSON };
-  vm.runInNewContext(consts + ['usHoldingInrValue', 'wealthPosition', 'invTime', 'invPriceTag', 'invHolding', 'invPnlHtml', 'investmentsPageModel', 'investmentsPageHtml'].map(fn).join('\n')
+  vm.runInNewContext(consts + ['usHoldingInrValue', 'wealthPosition', 'dayChangeOf', 'istDayKey', 'dayChangeLabel', 'invTime', 'invPriceTag', 'invHolding', 'invPnlHtml', 'investmentsPageModel', 'investmentsPageHtml'].map(fn).join('\n')
     + ';globalThis.model=investmentsPageModel();globalThis.html=investmentsPageHtml();', ctx);
   return ctx;
 }
