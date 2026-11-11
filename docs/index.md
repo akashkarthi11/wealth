@@ -80,6 +80,9 @@ Each module fix note should include:
 | 2026-11-11 | Infra | Every branch built on Vercel; only `main` should | [Vercel builds main only](modules/infra/2026-11-11-vercel-build-main-only.md) | Deployed |
 | 2026-11-11 | Accounts / Dashboard | Bank balances menu disagreed with the dashboard; account details used static snapshot data and other banks' rows | [Bank balances from the database](modules/accounts/2026-11-11-bank-balances-live-and-account-details.md) | Deployed to Production |
 | 2026-11-11 | Database | Audit log stored whole rows and no-op updates; unused price history; a new estimated row every night | [Store only required data (0010)](modules/database/2026-11-11-store-only-required-data.md) | Deployed to Production |
+| 2026-11-11 | Investments | Investments menu showed ₹20,272 (money put in + FD) vs dashboard ₹3,83,641; holdings came from snapshots | [Investments page from holdings](modules/investments/2026-11-11-investments-page-from-holdings.md) | Code + tests on `claude-dev`; not deployed |
+| 2026-11-11 | Accounts | Activity page had no totals, raw dates, a delete button on every row, filters that reset during background loading | [Activity page redesign](modules/accounts/2026-11-11-activity-page-redesign.md) | Code + tests on `claude-dev`; not deployed |
+| 2026-11-11 | Investments / Market data | Dashboard Angel One "Today's gain" showed ₹0; invested and P&L came from the 10 Nov snapshot | [Angel One today's gain](modules/investments/2026-11-11-angel-one-today-gain.md) | Code + tests on `claude-dev`; not deployed |
 
 ## Plans
 

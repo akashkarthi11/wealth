@@ -154,13 +154,29 @@ export async function legacyPositionRows(uid, db = sql){
   (mp.metadata->>'fx_to_inr')::numeric AS market_fx_to_inr,
   CASE WHEN mp.status='fresh' AND mp.fetched_at>now()-interval '36 hours' AND p.quantity IS NOT NULL
    THEN CASE WHEN mp.currency='USD' THEN p.quantity*mp.unit_price*NULLIF(CASE WHEN NULLIF(mp.metadata->>'fx_to_inr','')::numeric>0 AND NULLIF(mp.metadata->>'fx_as_of','')::timestamptz>now()-interval '36 hours' THEN NULLIF(mp.metadata->>'fx_to_inr','')::numeric ELSE NULL END,0)
-             WHEN mp.currency='INR' THEN p.quantity*mp.unit_price ELSE NULL END ELSE NULL END AS market_value_inr
+             WHEN mp.currency='INR' THEN p.quantity*mp.unit_price ELSE NULL END ELSE NULL END AS market_value_inr%PREV_COLS%
   FROM wealth_positions p
   LEFT JOIN wealth_investment_assets a ON a.position_id=p.id
-  LEFT JOIN wealth_market_prices mp ON mp.asset_id=a.id
+  LEFT JOIN wealth_market_prices mp ON mp.asset_id=a.id%PREV_JOIN%
   WHERE p.user_id=$1 AND p.record_type NOT LIKE '%_ARCHIVED' ORDER BY p.category,p.platform_name,p.record_type,p.name`;
+ // Day change (2026-11-11): the previous close is the last stored price from before the latest price's IST trading day
+ // (wealth_instrument_prices keeps every quote whoever wrote it, through the 0006 mirror trigger). Holidays and weekends
+ // are handled naturally: after the 10 Nov holiday the previous close is the 9 Nov price.
+ const prevCols=`,mp.source_timestamp AS market_price_as_of,pc.price AS market_previous_close,pc.as_of AS market_previous_close_at`;
+ const prevJoin=`
+  LEFT JOIN wealth_instruments ins ON ins.asset_class=a.asset_class
+   AND ins.symbol=coalesce(p.ticker,CASE WHEN a.asset_class='precious_metal' THEN upper(p.record_type) ELSE p.name END)
+  LEFT JOIN LATERAL (SELECT ip.price,ip.as_of FROM wealth_instrument_prices ip
+   WHERE ip.instrument_id=ins.id AND mp.source_timestamp IS NOT NULL
+     AND ip.as_of < (date_trunc('day',mp.source_timestamp AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata')
+   ORDER BY ip.as_of DESC,ip.fetched_at DESC LIMIT 1) pc ON true`;
  try{
-  return await db.query(enrichedQuery,[uid]);
+  return await db.query(enrichedQuery.replace('%PREV_COLS%',prevCols).replace('%PREV_JOIN%',prevJoin),[uid]);
+ }catch(error){
+  console.error('[wealth-dashboard:previous-close]',error?.message||error);
+ }
+ try{
+  return await db.query(enrichedQuery.replace('%PREV_COLS%','').replace('%PREV_JOIN%',''),[uid]);
  }catch(error){
   console.error('[wealth-dashboard:priced-positions]',error?.message||error);
   // A missing pricing table must never hide the user's saved positions or turn totals into zero.
