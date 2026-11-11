@@ -70,6 +70,13 @@ test('share bars carry tap-to-read data and a readout; events are bound once', (
   assert.equal((src.match(/data-share="'\+esc\(/g) || []).length, 2, 'investments and banks bars');
   assert.equal((src.match(/<div class="share-readout" aria-live="polite" hidden><\/div>/g) || []).length, 2);
   assert.equal((src.match(/^chartBindEvents\(\);/gm) || []).length, 1);
+  // Touched date gets a ball on every visible line; touching outside a chart / share bar closes the readout.
+  assert.match(src, /ball\.setAttribute\('class','ichart-focus'\)/);
+  assert.match(src, /document\.addEventListener\('pointerdown',e=>chartDismissOutside\(e\.target\),true\);/);
+  assert.match(src, /function chartHide\(box\)\{[^\n]*querySelectorAll\('\.ichart-focus'\)\.forEach\(el=>el\.remove\(\)\)/);
+  // Touch anywhere: a transparent full-size hit layer on every chart, plus a click fallback that shows the nearest date.
+  assert.match(src, /<rect class="ichart-hit" x="0" y="0" width="'\+W\+'" height="'\+H\+'" fill="transparent" pointer-events="all"\/><\/svg>/);
+  assert.match(src, /const svg=e\.target\.closest\('\.ichart svg'\);if\(svg\)\{const box=svg\.closest\('\.ichart'\);chartShow\(box,chartIndexAt\(svg,e\.clientX\)\)\}/);
   assert.match(src, /chartWidget\('interest-day',interestChartDef\(/);
-  assert.match(src, /'\+chartRangeRowHtml\(\)\+'<section class="chart-card"><div class="chart-head"><div><h4>Cash flow trend<\/h4>/);
+  assert.match(src, /chartRangeRowHtml\(\)\+'<section class="chart-card"><div class="chart-head"><div><h4>Cash flow trend<\/h4>/);
 });
