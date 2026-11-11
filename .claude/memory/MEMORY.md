@@ -1,1 +1,2 @@
 - [No v2 merges](no-v2-merge.md) — release stops at main; leave the v2 branch untouched
+- [claude-dev tracks all files](claude-dev-tracks-all.md) — only claude-dev has .env/backups; strip them when merging to development/main
