@@ -1,4 +1,4 @@
-const APP_BUILD_ID='20261111-claude-plan-3w';
+const APP_BUILD_ID='20261111-claude-plan-3x';
 (function promptForUpdatedApp(){
   try {
     const key='wealth-ledger:app-build';
@@ -136,7 +136,7 @@ function chartInnerHtml(id){
  if(!pts.length)return '<p class="muted">No data in this period — choose a longer period.</p>';
  const W=720,H=240,L=78,R=18,T=16,B=40,vals=pts.flatMap(p=>ser.map(s=>p.values[s.key])).filter(x=>x!=null&&Number.isFinite(+x)).map(Number);
  let max=Math.max(0,...vals),min=Math.min(0,...vals);if(max===min)max=min+1;const pad=(max-min)*0.06;max+=pad;if(min<0)min-=pad;
- const x=i=>L+(pts.length===1?(W-L-R)/2:i*(W-L-R)/(pts.length-1)),y=val=>T+(max-val)/(max-min)*(H-T-B);
+ const x=i=>L+(pts.length===1?(W-L-R)/2:i*(W-L-R)/(pts.length-1)),y=val=>T+(max-val)/(max-min)*(H-T-B);c._y=y;
  let grid='';for(let i=0;i<=4;i++){const val=min+(max-min)*i/4,yy=y(val);grid+='<line x1="'+L+'" y1="'+yy.toFixed(1)+'" x2="'+(W-R)+'" y2="'+yy.toFixed(1)+'" class="ichart-grid"/><text x="'+(L-9)+'" y="'+(yy+4).toFixed(1)+'" text-anchor="end" class="ichart-axis">'+esc(chartAxisFmt(c,val,max))+'</text>'}
  const lines=ser.map(s=>{let d='',pen=false;pts.forEach((p,i)=>{const val=p.values[s.key];if(val==null){pen=false;return}d+=(pen?'L':'M')+x(i).toFixed(1)+' '+y(+val).toFixed(1);pen=true});
   const dots=pts.length<=45?pts.map((p,i)=>p.values[s.key]==null?'':'<circle cx="'+x(i).toFixed(1)+'" cy="'+y(+p.values[s.key]).toFixed(1)+'" r="4" fill="'+s.color+'" class="ichart-dot"/>').join(''):'';
@@ -152,13 +152,21 @@ function chartIndexAt(svg,clientX){const c=CHARTS[svg.closest('.ichart').dataset
 function chartShow(box,i){const c=CHARTS[box.dataset.chart];if(!c)return;const v=chartVisible(c),n=v.pts.length;i=Math.max(0,Math.min(n-1,i));const p=v.pts[i];if(!p)return;c.focus=i;
  const svg=box.querySelector('svg'),W=+svg.dataset.w,L=+svg.dataset.l,R=+svg.dataset.r,xx=n===1?L+(W-L-R)/2:L+i*(W-L-R)/(n-1),cross=svg.querySelector('.ichart-cross');
  cross.setAttribute('x1',xx);cross.setAttribute('x2',xx);cross.setAttribute('visibility','visible');
+ // A ball on every visible line at the touched date (the hit layer stays on top so the next touch still works).
+ svg.querySelectorAll('.ichart-focus').forEach(el=>el.remove());const hitLayer=svg.querySelector('.ichart-hit');
+ if(c._y)c.series.filter(s=>!c.hidden.has(s.key)&&p.values[s.key]!=null).forEach(s=>{const ball=document.createElementNS('http://www.w3.org/2000/svg','circle');ball.setAttribute('class','ichart-focus');ball.setAttribute('cx',String(xx));ball.setAttribute('cy',String(c._y(+p.values[s.key])));ball.setAttribute('r','7');ball.setAttribute('fill',s.color);svg.insertBefore(ball,hitLayer)});
  const tip=box.querySelector('.ichart-tip');tip.replaceChildren();const head=document.createElement('div');head.className='ichart-tip-date';head.textContent=chartLabelOf(p.x,false);tip.append(head);
  c.series.filter(s=>!c.hidden.has(s.key)).forEach(s=>{const row=document.createElement('div'),key=document.createElement('i'),val=document.createElement('b'),name=document.createElement('span');key.style.background=s.color;const raw=p.values[s.key];val.textContent=raw==null?'Not recorded':c.format(+raw);name.textContent=s.name;row.append(key,val,name);tip.append(row)});
  if(p.extra){const ex=document.createElement('small');ex.textContent=p.extra;tip.append(ex)}
- tip.hidden=false;const rect=svg.getBoundingClientRect(),left=xx/W*rect.width;tip.style.left=Math.max(0,Math.min(rect.width-tip.offsetWidth,left-tip.offsetWidth/2))+'px'}
-function chartHide(box){const t=box.querySelector('.ichart-tip'),x=box.querySelector('.ichart-cross');if(t)t.hidden=true;if(x)x.setAttribute('visibility','hidden')}
+ // Beside the crosshair (right, or left near the edge) so the balls on the touched date stay visible.
+ tip.hidden=false;const rect=svg.getBoundingClientRect(),px=xx/W*rect.width;let left=px+14;if(left+tip.offsetWidth>rect.width)left=px-14-tip.offsetWidth;tip.style.left=Math.max(0,left)+'px'}
+function chartHide(box){const t=box.querySelector('.ichart-tip'),x=box.querySelector('.ichart-cross');if(t)t.hidden=true;if(x)x.setAttribute('visibility','hidden');box.querySelectorAll('.ichart-focus').forEach(el=>el.remove());const c=CHARTS[box.dataset.chart];if(c)c.focus=null}
+// Touch or click anywhere outside a chart / share bar closes its readout.
+function chartDismissOutside(target){if(!target?.closest?.('.ichart'))document.querySelectorAll('.ichart').forEach(chartHide);
+ if(!target?.closest?.('.bank-share'))document.querySelectorAll('.share-readout:not([hidden])').forEach(o=>{o.hidden=true;const bar=o.previousElementSibling;if(bar)bar.querySelectorAll('[data-share].selected').forEach(s=>s.classList.remove('selected'))})}
 function shareShow(seg){const bar=seg.closest('.bank-share'),out=bar&&bar.nextElementSibling;if(!out||!out.classList.contains('share-readout'))return;bar.querySelectorAll('[data-share]').forEach(s=>s.classList.toggle('selected',s===seg));out.textContent=seg.dataset.share;out.hidden=false}
 function chartBindEvents(){
+ document.addEventListener('pointerdown',e=>chartDismissOutside(e.target),true);
  const drag=new Map();
  document.addEventListener('click',e=>{
   const r=e.target.closest('[data-chart-range]');if(r){chartRange=r.dataset.chartRange;document.querySelectorAll('[data-chart-range]').forEach(b=>{const on=b.dataset.chartRange===chartRange;b.classList.toggle('active',on);b.setAttribute('aria-pressed',String(on))});document.querySelectorAll('.ichart').forEach(box=>{const c=CHARTS[box.dataset.chart];if(c&&c.ranged!==false){c.span=null;c.end=null;chartRedraw(box)}});return}

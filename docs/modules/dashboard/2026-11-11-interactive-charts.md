@@ -30,3 +30,8 @@ Cash flow trend · Average monthly spend by year · Bank balance history (dashbo
 ## Touch anywhere (build `3w`, owner: "chart only data show when click joint")
 - Cause found: pages opened before the `3u` deploy kept the old charts (values only on a dot) until reloaded. The live `3u` charts already respond to a touch anywhere (checked with a real touch event in headless Chrome, mobile emulation: tapping an empty spot showed "Mar 2026 · ₹74,595 Money in · ₹47,855 Spending").
 - Extra robustness: a transparent full-size hit layer (`.ichart-hit`) on every chart and a click fallback, so browsers that do not hit-test empty SVG areas (e.g. Safari) still show the nearest date.
+
+## Ball on the touched point, auto-hide outside (build `3x`, owner: "when i touch outside it still show data … like in joint touch ball … touch outside it hide auto")
+- Touching a chart puts a ball (series colour, white ring) on every visible line at that date; the tooltip sits beside the crosshair (right, or left near the edge) so the balls stay visible.
+- Touching or clicking anywhere outside a chart closes its tooltip, crosshair and balls; outside a share bar closes its readout (`chartDismissOutside`, capture-phase `pointerdown`).
+- Verified with real touch events in headless Chrome (mobile emulation): inside tap → tooltip + 2 balls; outside tap → all hidden.
