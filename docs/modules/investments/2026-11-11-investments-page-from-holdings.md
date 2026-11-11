@@ -1,6 +1,7 @@
 # 2026-11-11 — Investments menu total did not match the dashboard; holdings came from snapshots
 
 - **Status:** code committed on `claude-dev`; tests pass (117); checked read-only against Production data; not deployed
+- **Status update 2026-11-11:** deployed to Production (`main` `041fc03`, build `20261111-claude-plan-3l`).
 - **Plan:** follows the bank page fix ([accounts](../accounts/2026-11-11-bank-balances-live-and-account-details.md)): pages come from the tables, no static data
 
 ## Symptoms

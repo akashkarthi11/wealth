@@ -1,6 +1,7 @@
 # 2026-11-11 — Activity (Transactions) page: no totals, raw dates, risky delete, filters reset
 
 - **Status:** code committed on `claude-dev`; tests pass; checked read-only against Production data; not deployed
+- **Status update 2026-11-11:** deployed to Production (`main` `041fc03`, build `20261111-claude-plan-3l`).
 - **Files:** `app.js` (`activitiesHtml`, `activityRowsHtml`, `activityPresetRange`, `actFlows`), `style.css` (`.act-*`), `scripts/tests/activity.test.mjs`
 
 ## Problems
