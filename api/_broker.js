@@ -98,3 +98,32 @@ export async function brokerSummary(uid, db = sql) {
     cash: r2(r.cash), mtfBalance: r2(r.mtf_balance), mtfLast: r.mtf_last, first: r.first, last: r.last, matchedTransfers: r.matched,
     years: years.filter(y => y.broker === r.broker).map(y => ({ year: y.year, added: r2(y.added), withdrawn: r2(y.withdrawn), charges: r2(y.charges) })) }));
 }
+
+// Broker realised P&L report (Angel One "Equity P&L" sheet). Only sold positions; FIFO as computed by the broker.
+// Stored as one wealth_snapshots record (kind 'broker_pnl'); no name, PAN or client id is kept.
+const pnlDate = s => { const m = String(s || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };
+export function parsePnlSheet(rows) {
+  const val = key => { const r = rows.find(x => String(x[0]).trim() === key); return r ? r[1] : null; };
+  const from = pnlDate(val('From Date')), to = pnlDate(val('To Date'));
+  if (!from || !to) throw new Error('P&L sheet: From Date / To Date not found');
+  const section = title => {
+    const start = rows.findIndex(r => String(r[0]).trim() === title); if (start < 0) return [];
+    const head = rows.findIndex((r, i) => i > start && r[0] === 'Scrip Symbol'); if (head < 0) return [];
+    const out = [];
+    for (const r of rows.slice(head + 1)) {
+      if (r[0] === 'Total' || r[0] === 'Disclaimer' || r[0] === 'Intraday PnL' || !r[0]) break;
+      const n = i => Number(r[i]) || 0;
+      out.push({ symbol: String(r[0]).trim(), name: String(r[1] || '').trim(), quantity: n(2), avgBuy: n(3), buyValue: n(4), avgSell: n(5), sellValue: n(6), gross: n(7), net: n(r.length - 1) });
+    }
+    return out;
+  };
+  const delivery = section('Delivery PnL'), intraday = section('Intraday PnL');
+  const r2 = x => Math.round(x * 100) / 100, sum = (a, k) => r2(a.reduce((s, x) => s + x[k], 0));
+  const summary = { gross: Number(val('Total Gross PnL')) || 0, net: Number(val('Net PnL')) || 0, intradayNet: Number(val('Intraday Net PnL')) || 0,
+    charges: r2(['Total Brokerage', 'Total GST', 'Total Exchange Service Tax', 'Total Turnover Tax', 'Total SEBI Charges', 'Total Stamp Duty', 'Total STT', 'Total Other Charges', 'Total IPFT Charges'].reduce((s, k) => s + (Number(val(k)) || 0), 0)) };
+  summary.deliveryNet = r2(summary.net - summary.intradayNet);
+  if (Math.abs(sum(delivery, 'net') - summary.deliveryNet) > 0.05) throw new Error(`P&L sheet: delivery rows (${sum(delivery, 'net')}) do not match Net − Intraday (${summary.deliveryNet})`);
+  if (Math.abs(sum(intraday, 'net') - summary.intradayNet) > 0.05) throw new Error(`P&L sheet: intraday rows (${sum(intraday, 'net')}) do not match Intraday Net PnL (${summary.intradayNet})`);
+  return { kind: 'broker_pnl', broker: 'angel_one', method: 'FIFO (broker report)', period: { from, to }, summary, delivery, intraday };
+}
+export const pnlSourceKey = p => `angelone-pnl-${p.period.from}..${p.period.to}`;

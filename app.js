@@ -1,4 +1,4 @@
-const APP_BUILD_ID='20261111-claude-plan-3m';
+const APP_BUILD_ID='20261111-claude-plan-3n';
 (function promptForUpdatedApp(){
   try {
     const key='wealth-ledger:app-build';
@@ -409,6 +409,13 @@ function equityLive(){const rows=positions.filter(p=>INV_GROUPS[0].test(p));cons
 // Broker ledger panel (0011): lifetime money put in vs value now, from the uploaded Angel One ledger statement.
 let brokerLedger=[];
 function brokerMonth(d){const x=new Date(String(d)+'T00:00:00');return Number.isFinite(x.getTime())?x.toLocaleDateString('en-IN',{month:'short',year:'numeric'}):String(d||'')}
+// Latest broker P&L report (kind broker_pnl in the owner's snapshots): realised profit on sold stocks.
+function brokerPnl(){const list=(window.__wealthSnapshots||[]).map(x=>{let p=x.payload;if(typeof p==='string'){try{p=JSON.parse(p)}catch{p=null}}return p}).filter(p=>p&&p.kind==='broker_pnl'&&p.broker==='angel_one');return list.sort((a,b)=>String(b.period?.to).localeCompare(String(a.period?.to)))[0]||null}
+function brokerPnlHtml(){const p=brokerPnl();if(!p)return '';const sign=v=>(v>=0?'+':'−')+money(Math.abs(v));const held=typeof equityLive==='function'?equityLive():null;const unreal=held&&held.rows.length?held.pnl:null;
+ const rows=(p.delivery||[]).slice().sort((a,b)=>b.net-a.net).map(r=>'<tr><td>'+esc(r.symbol)+'</td><td>'+esc(String(r.quantity))+'</td><td>'+esc(money(r.buyValue))+'</td><td>'+esc(money(r.sellValue))+'</td><td class="'+(r.net>=0?'positive':'negative')+'">'+esc(sign(r.net))+'</td></tr>').join('');
+ return '<div class="broker-pnl"><span><small>Booked profit (sold)</small><b class="'+(p.summary.net>=0?'positive':'negative')+'">'+esc(sign(p.summary.net))+'</b><em>since '+esc(brokerMonth(p.period.from))+' · after brokerage &amp; taxes</em></span>'
+  +(unreal==null?'':'<span><small>Still holding</small><b class="'+(unreal>=0?'positive':'negative')+'">'+esc(sign(unreal))+'</b><em>unrealised on current stocks</em></span>')+'</div>'
+  +'<details class="broker-years"><summary>Sold stocks ('+(p.delivery||[]).length+')'+(p.intraday?.length?' · intraday '+esc(sign(p.summary.intradayNet)):'')+'</summary><table><thead><tr><th>Stock</th><th>Qty</th><th>Bought</th><th>Sold</th><th>Net</th></tr></thead><tbody>'+rows+'</tbody></table></details>'}
 function brokerPanelHtml(stocksValue){
  const s=brokerLedger.find(b=>b.broker==='angel_one');if(!s)return '';
  const now=stocksValue+s.cash,gain=now-s.netPutIn,pct=s.netPutIn>0?gain/s.netPutIn*100:null,sign=v=>(v>=0?'+':'−')+money(Math.abs(v));
@@ -419,7 +426,7 @@ function brokerPanelHtml(stocksValue){
   +'<div><small>Value now</small><b>'+esc(money(now))+'</b><em>stocks &amp; ETFs '+(Math.abs(s.cash)>=0.005?'+ cash '+esc(sign(s.cash)):'')+'</em></div>'
   +'<div><small>Overall gain</small><b class="'+(gain>=0?'positive':'negative')+'">'+esc(sign(gain))+(pct==null?'':' ('+(pct>=0?'+':'−')+Math.abs(pct).toFixed(1)+'%)')+'</b><em>includes profits already taken</em></div>'
   +'<div><small>Broker charges</small><b>'+esc(money(s.charges))+'</b><em>'+esc(money(s.chargesThisYear))+' this year</em></div></div>'
-  +(years?'<details class="broker-years"><summary>By year</summary><table><thead><tr><th>Year</th><th>Added</th><th>Withdrawn</th><th>Net</th><th>Charges</th></tr></thead><tbody>'+years+'</tbody></table></details>':'')
+  +brokerPnlHtml()+(years?'<details class="broker-years"><summary>By year</summary><table><thead><tr><th>Year</th><th>Added</th><th>Withdrawn</th><th>Net</th><th>Charges</th></tr></thead><tbody>'+years+'</tbody></table></details>':'')
   +'<p class="broker-note">'+[mtf,s.matchedTransfers?s.matchedTransfers+' bank transfer'+(s.matchedTransfers===1?'':'s')+' matched to the ledger':'','Dividends paid to your bank are not included'].filter(Boolean).map(esc).join(' · ')+'</p></div>';
 }
 // Investments page (2026-11-11): built only from the holdings the dashboard counts (wealthPosition), so the totals always match. No snapshot tables.

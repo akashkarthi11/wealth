@@ -701,3 +701,8 @@ em.in{color:var(--green)}em.out{color:#ff9b9b}
 .broker-years th{font-size:10px;color:#8fa2bd;font-weight:600}
 .broker-note{margin:8px 0 0;font-size:11px;color:#8fa2bd}
 @media(max-width:700px){.broker-panel{margin:4px 11px 10px}.broker-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.broker-pnl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px}
+.broker-pnl>span{display:block;min-width:0;background:#111f33;border:1px solid #24364f;border-radius:10px;padding:9px 10px}
+.broker-pnl small{display:block;margin:0;font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:#8fa2bd}
+.broker-pnl b{display:block;margin-top:4px;font-size:15px;font-variant-numeric:tabular-nums}
+.broker-pnl em{display:block;margin-top:3px;font-style:normal;font-size:10px;color:#7f93ad}

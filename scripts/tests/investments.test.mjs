@@ -27,8 +27,8 @@ const positions = [
 const items = [{ kind: 'investment', category: 'SIP', amount: '1000', occurred_on: '2026-11-03', account: 'HDFC' }, { kind: 'expense', category: 'Food', amount: '50', occurred_on: '2026-11-03' }];
 
 function render() {
-  const ctx = { positions, items, accounts: [], esc: s => String(s), money: v => 'INR ' + Number(v).toFixed(2), accountKey: s => s, latestAngelOneEquitySummary: null, brokerLedger: globalThis.__broker || [], Number, String, Date, Math, Set, Object, JSON };
-  vm.runInNewContext(consts + ['usHoldingInrValue', 'wealthPosition', 'dayChangeOf', 'istDayKey', 'dayChangeLabel', 'invTime', 'invPriceTag', 'invHolding', 'invPnlHtml', 'investmentsPageModel', 'brokerMonth', 'brokerPanelHtml', 'investmentsPageHtml'].map(fn).join('\n')
+  const ctx = { positions, items, accounts: [], esc: s => String(s), money: v => 'INR ' + Number(v).toFixed(2), accountKey: s => s, latestAngelOneEquitySummary: null, brokerLedger: globalThis.__broker || [], window: { __wealthSnapshots: globalThis.__snaps || [] }, Number, String, Date, Math, Set, Object, JSON };
+  vm.runInNewContext(consts + ['usHoldingInrValue', 'wealthPosition', 'dayChangeOf', 'istDayKey', 'dayChangeLabel', 'invTime', 'invPriceTag', 'invHolding', 'invPnlHtml', 'investmentsPageModel', 'brokerMonth', 'equityLive', 'brokerPnl', 'brokerPnlHtml', 'brokerPanelHtml', 'investmentsPageHtml'].map(fn).join('\n')
     + ';globalThis.model=investmentsPageModel();globalThis.html=investmentsPageHtml();', ctx);
   return ctx;
 }
@@ -86,4 +86,17 @@ test('Angel One ledger panel: net put in, value now (stocks + broker cash), over
 test('no ledger uploaded → no panel', () => {
   const { html } = render();
   assert.doesNotMatch(html, /broker-panel/);
+});
+
+test('P&L report adds booked profit, unrealised on current stocks and the sold list to the Angel One panel', () => {
+  globalThis.__broker = [{ broker: 'angel_one', added: 1000, withdrawn: 0, netPutIn: 1000, charges: 0, chargesThisYear: 0, cash: 0, mtfBalance: 0, mtfLast: null, first: '2022-04-02', last: '2026-11-06', matchedTransfers: 0, years: [] }];
+  globalThis.__snaps = [{ payload: JSON.stringify({ kind: 'broker_pnl', broker: 'angel_one', period: { from: '2023-10-01', to: '2026-11-10' }, summary: { net: 24173, intradayNet: -54.49 },
+    delivery: [{ symbol: 'AWL', quantity: 65, buyValue: 20584.7, sellValue: 17736.35, net: -2945.71 }, { symbol: 'VEDL', quantity: 46, buyValue: 15320.1, sellValue: 19907.4, net: 4518.4 }], intraday: [{}] }) }];
+  try {
+    const { html } = render();
+    assert.match(html, /Booked profit \(sold\)<\/small><b class="positive">\+INR 24173\.00<\/b><em>since Oct 2023/);
+    assert.match(html, /Still holding<\/small><b class="(positive|negative)">/);
+    assert.match(html, /Sold stocks \(2\) · intraday −INR 54\.49/);
+    assert.ok(html.indexOf('<td>VEDL</td>') < html.indexOf('<td>AWL</td>'), 'best first');
+  } finally { delete globalThis.__broker; delete globalThis.__snaps; }
 });
