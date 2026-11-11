@@ -1,33 +1,62 @@
 # Assistant Operating Rules — Wealth Project
 
-This file is an instruction document for the AI assistant working on this Wealth project. Read and follow it before performing any Wealth database, ledger, balance, or related code operation. These rules take precedence over convenience or assumptions.
+This file contains the user's instructions to the AI assistant. Read and follow it before every Wealth database, ledger, portfolio, code, migration, or deployment task. These are operating instructions for the assistant, not merely application documentation.
 
-## 1. Recording transactions
-- Insert a new transaction into `wealth_transactions` only.
-- Do not modify `wealth_accounts` when recording a transaction.
-- Do not insert, update, or delete rows in `wealth_account_balances` when recording a transaction.
-- Do not automatically deduct a transaction amount from an account balance or recalculate account balances as a side effect.
-- Check for an existing transaction/reference before inserting so the same transaction is not recorded twice.
+## 1. Transaction recording — strict database boundary
+- When adding a transaction, insert it into `wealth_transactions` only.
+- Do not change `wealth_accounts` while recording a transaction.
+- Do not insert, update, or delete rows in `wealth_account_balances` while recording a transaction.
+- Do not automatically deduct transaction amounts from account balances or recalculate balances as a side effect.
+- Check for an existing transaction/reference before inserting; do not create duplicates.
 - Preserve the correct user, transaction kind, category, description, amount, account label/account_id when known, occurrence date, and external reference when available.
+- Verify the inserted transaction by its external reference or ID and report the result.
 
 ## 2. Balance updates
-- Update balances only when the user explicitly requests a balance update or a workflow specifically requires one.
+- Do not update balances as part of transaction insertion.
+- Only update a balance when the user explicitly requests it or a specific authorized workflow requires it.
 - Use `verified` only when supported by a bank screenshot, bank statement, or equivalent direct bank evidence.
-- Use `stale` for an estimated balance (including calculations based on an earlier balance and later transactions).
+- Use `stale` for an estimate, including a calculated balance based on an earlier balance and later transactions.
 - Never use `pending_reconciliation`.
-- Never present an estimated balance as verified. Preserve the evidence timestamp and explain the estimate where the schema supports a note.
+- Never describe an estimate as verified. Preserve the evidence timestamp and explain the estimate where the schema supports a note.
 
-## 3. Environment safety
-- Treat the Production database as protected. Never switch environments or write to a different project/branch implicitly.
-- Follow the user's explicitly selected target environment and branch for code changes.
-- Do not modify unrelated data or create duplicate ledger entries.
+## 3. Production and Development database safety
+- Treat Production as protected. Do not alter Production during a Development migration or test.
+- When the user requests a Production-only operation, use the Production project only.
+- When the user explicitly selects Development, use Development only.
+- Never switch database projects/environments implicitly.
+- For a Production-to-Development migration, preserve Production untouched; migrate the requested data to Development and verify records/data after migration.
+- Do not claim a migration or database change succeeded until it has actually been executed and verified.
+- Do not modify unrelated records or schema.
 
-## 4. Verification
-- After inserting a transaction, verify the row in `wealth_transactions` using its external reference or inserted ID.
-- Confirm that `wealth_accounts` and `wealth_account_balances` were not changed by the transaction-insertion operation.
-- Report what was actually verified; do not claim a balance update unless it was explicitly requested and completed.
+## 4. Branch and deployment rules
+- Respect the branch the user explicitly names.
+- The user has a `v2` branch; do not merge into, overwrite, or otherwise disturb `v2` when the user says to leave v2 alone.
+- When asked to work on Development, use the Development branch and keep unrelated branches untouched.
+- When asked to create a new Vercel URL for `v2`, configure the Vercel project/deployment for that branch; do not silently change the Production deployment.
+- When asked to commit, make the requested commit and report the branch and commit SHA. Do not claim a commit was made if it was not.
 
-## 5. Assistant responsibility
+## 5. Spending ledger rules
+- For a spending entry, use the bank/account explicitly mentioned by the user.
+- If the user does not mention a source bank, default to BOI.
+- If BOI does not have sufficient available balance, ask the user which bank/account to use; do not choose another account yourself.
+- Deduct spending from the selected source bank in the wealth ledger/accounting workflow as applicable, and include it in today's, this week's, this month's, and this year's spending totals.
+- Keep transaction insertion subject to Section 1: adding the transaction itself writes only to `wealth_transactions`. Do not mutate account or balance tables as a side effect.
+
+## 6. Portfolio and stock-analysis rules
+Whenever the user asks about their portfolio or stocks:
+- Review overall portfolio diversification.
+- Review MTF exposure and associated risk.
+- Suggest ways to reduce borrowing/interest costs.
+- Recommend only strong, high-quality growth stocks.
+- Maintain balance across permitted sectors.
+- Keep small-cap exposure within the user's defined limits; do not expand it casually.
+- Apply BUY / HOLD / SELL logic consistently and explicitly.
+- Keep explanations concise and avoid unnecessary long write-ups.
+- Do not suggest F&O or non-Indian markets unless the user explicitly asks.
+
+## 7. Assistant responsibility and verification
 - Apply these rules yourself; do not treat them merely as application documentation.
-- Before any future Wealth operation, consult this file on the selected working branch.
-- If a requested action conflicts with these rules or the available evidence, stop and explain the conflict rather than silently guessing.
+- Before a Wealth operation, consult this file on the selected working branch when accessible.
+- If the user has already specified a constraint, do not ask them to repeat it.
+- If a requested action conflicts with these rules, or required evidence/access is missing, explain the exact blocker rather than guessing or claiming success.
+- Report only actions actually completed and verified.
