@@ -93,3 +93,24 @@ The production database was updated and verified on 11 Nov 2026. The earlier dev
   note "Sample data for demo account". Never `verified`, never `pending_reconciliation`.
 - 3 subscriptions: provider keys `demo-streaming-plus`, `demo-music-unlimited`, `demo-cloud-storage`.
 - All writes used `wealth.actor = 'agent'`. Removing the user (`wealth_users` row) cascades to most of these rows — check before deleting.
+
+
+---
+
+## Issue: Expense transaction does not automatically reconcile the displayed account balance (reported 12 Nov 2026)
+
+### What happened
+- A ₹150 UPI expense to Yogeswaran V was inserted into Production `wealth_transactions` for Slice Savings ••3731, category `Travel`, on 12 Nov 2026.
+- The transaction insert correctly followed `rules.md` §1 and changed only `wealth_transactions`; it did not mutate the account balance.
+- The user expected the Slice Savings balance to reduce when the expense was added, but the displayed balance remained unchanged until a separate balance update was requested.
+
+### Immediate correction applied (Production)
+- Previous recorded balance: ₹42,877.46 (status `stale`, last recorded 11 Nov 2026).
+- Expense: ₹150.00.
+- Updated `wealth_accounts.current_balance` to **₹42,727.46** and retained status `stale`; this is an estimate, not a bank-verified balance.
+- The transaction row remains recorded once; no duplicate was inserted.
+
+### Follow-up
+- Review the transaction-entry / spending-ledger workflow and make the balance impact explicit to the user.
+- Preserve the strict database boundary in `rules.md`: transaction insertion itself must write only `wealth_transactions`. Any balance reconciliation must be a separate, explicitly authorized workflow, must retain `stale` status for estimates, and must not imply bank verification.
+- Ensure the UI refreshes the displayed account balance after an authorized balance reconciliation.
