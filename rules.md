@@ -54,6 +54,19 @@ This file contains the user's instructions to the AI assistant. Read and follow 
 - Deduct spending from the selected source bank in the wealth ledger/accounting workflow as applicable, and include it in today's, this week's, this month's, and this year's spending totals.
 - Keep transaction insertion subject to Section 1: adding the transaction itself writes only to `wealth_transactions`. Do not mutate account or balance tables as a side effect.
 
+## 5a. Slice credit-card spending and Monies rewards
+- A purchase charged to the Slice credit card is an expense against the card account, not an immediate cash deduction from Slice Savings or another bank account.
+- Record each card purchase once against the Slice credit-card account in `wealth_transactions`; include it in spending totals and increase the estimated card liability under the existing card-liability calculation.
+- A Slice credit-card purchase (including a card-funded investment purchase) earns Monies under the active Slice scheme. Count only eligible `expense` / `investment` transactions attached to a Slice account whose account type is `credit_card`; exclude Slice Savings spends, card-bill transfers/payments, refunds, cashback credits, duplicate rows and statement-summary/liability rows.
+- The Slice Monies rate is tiered: 1% below 3,00,000 Monies, 1.5% from 3,00,000, and 2% from 5,00,000. Use the scheme and recorded balance as the source of truth; do not invent a reward credit.
+- **Before recording anything from a screenshot or statement, query the relevant Production/selected-environment transaction table for the same user, date, amount, merchant/description, account, and external reference.** Compare every visible entry individually. Treat existing matching rows as already recorded; do not insert them again or add their amount/reward a second time. Insert only genuinely missing transactions, and verify the final rows and totals after the operation.
+- When a screenshot lists multiple transactions, classify each row by its actual account and direction: card purchase, savings/debit purchase, cashback/income, refund, transfer, or other. Do not assume every row in a Slice Activity screen is a card purchase. Confirm the linked `account_id` and `account_type` from `wealth_accounts`; a displayed merchant or card brand alone is not enough.
+- Record cashback separately as income in the account where it was credited (for example, Slice Savings); never include cashback as card spend or as Monies-earning spend unless the active scheme explicitly says otherwise.
+- Calculate Monies only from eligible, non-duplicate card purchases not already represented in the reward ledger/balance baseline. Apply the correct tier rate and rounding rules. Do not count transactions already reflected in a newer reward balance screenshot.
+- Show Monies earned from eligible card purchases after the latest recorded reward-balance timestamp as a clearly labelled **estimated** accrued amount added to the displayed effective Monies balance/value. Do not write estimated Monies into `wealth_reward_balances` or create reward events automatically. When a newer bank/app reward balance screenshot is recorded, its timestamp becomes the new baseline so the same card purchases are not counted twice.
+- A card bill payment is a transfer that reduces the card liability and cash account balance as appropriate; it is not a second expense and does not earn Monies.
+- Keep rewards/points value separate from net worth unless the user explicitly confirms it is withdrawable cash or a realizable asset.
+
 ## 6. Portfolio and stock-analysis rules
 Whenever the user asks about their portfolio or stocks:
 - Review overall portfolio diversification.
