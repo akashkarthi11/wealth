@@ -54,6 +54,15 @@ This file contains the user's instructions to the AI assistant. Read and follow 
 - Deduct spending from the selected source bank in the wealth ledger/accounting workflow as applicable, and include it in today's, this week's, this month's, and this year's spending totals.
 - Keep transaction insertion subject to Section 1: adding the transaction itself writes only to `wealth_transactions`. Do not mutate account or balance tables as a side effect.
 
+## 5a. Slice credit-card spending and Monies rewards
+- A purchase charged to the Slice credit card is an expense against the card account, not an immediate cash deduction from Slice Savings or another bank account.
+- Record each card purchase once against the Slice credit-card account in `wealth_transactions`; include it in spending totals and increase the estimated card liability under the existing card-liability calculation.
+- A Slice credit-card purchase (including a card-funded investment purchase) earns Monies under the active Slice scheme. Count only eligible `expense` / `investment` transactions attached to a Slice account whose account type is `credit_card`; exclude Slice Savings spends, card-bill transfers/payments, refunds, cashback credits, duplicate rows and statement-summary/liability rows.
+- The Slice Monies rate is tiered: 1% below 3,00,000 Monies, 1.5% from 3,00,000, and 2% from 5,00,000. Use the scheme and recorded balance as the source of truth; do not invent a reward credit.
+- Show Monies earned from eligible card purchases after the latest recorded reward-balance timestamp as a clearly labelled **estimated** accrued amount added to the displayed effective Monies balance/value. Do not write estimated Monies into `wealth_reward_balances` or create reward events automatically. When a newer bank/app reward balance screenshot is recorded, its timestamp becomes the new baseline so the same card purchases are not counted twice.
+- A card bill payment is a transfer that reduces the card liability and cash account balance as appropriate; it is not a second expense and does not earn Monies.
+- Keep rewards/points value separate from net worth unless the user explicitly confirms it is withdrawable cash or a realizable asset.
+
 ## 6. Portfolio and stock-analysis rules
 Whenever the user asks about their portfolio or stocks:
 - Review overall portfolio diversification.
