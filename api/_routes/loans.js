@@ -1,6 +1,6 @@
 import { json, handle, invalidateUserCaches, cachedValue, sendCached } from '../_lib.js';
 import { shareLink, decideLendRequest } from '../_lendshare.js';
-import { loansOverview, savePerson, addPersonEntry, createSplit, cancelSplit, moveEntry, markSharePaid, roundOff, setRecordStatus, savePersonName, mergePeople } from '../_loans.js';
+import { loansOverview, savePerson, addPersonEntry, createSplit, cancelSplit, moveEntry, setEntryNote, addOwnerComment, markSharePaid, roundOff, setRecordStatus, savePersonName, mergePeople } from '../_loans.js';
 
 // Money lent and bill splits (TSD Claude Plan 4, Part B). Owner only — personal money is sensitive.
 // GET  /api/loans                 people with what each owes, split bills, suggestions to review
@@ -17,9 +17,9 @@ import { loansOverview, savePerson, addPersonEntry, createSplit, cancelSplit, mo
 // POST /api/loans/requests/decide accept (records the money, can add it to the bank balance and close the lend) or decline
 // POST /api/loans/roundoff        close everything open with a person into one new amount (already back decided by the owner)
 // Every POST takes ?dryRun=1.
-const OWNER = { ingest: false };
+const OWNER = { ingest: false, user: true };
 const POSTS = { 'loans/people': savePerson, 'loans/entries': addPersonEntry, 'loans/splits': createSplit, 'loans/splits/cancel': cancelSplit,
-  'loans/entries/move': moveEntry, 'loans/shares/paid': markSharePaid, 'loans/roundoff': roundOff, 'loans/records': setRecordStatus,
+  'loans/entries/move': moveEntry, 'loans/entries/note': setEntryNote, 'loans/comments': addOwnerComment, 'loans/shares/paid': markSharePaid, 'loans/roundoff': roundOff, 'loans/records': setRecordStatus,
   'loans/share': shareLink, 'loans/people/names': savePersonName, 'loans/people/merge': mergePeople, 'loans/requests/decide': decideLendRequest };
 
 export default handle('wealth-loans', { methods: ['GET', 'POST'], auth: () => OWNER }, async ({ req, res, who, body, dryRun }) => {

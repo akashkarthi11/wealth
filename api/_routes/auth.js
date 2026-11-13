@@ -1,3 +1,4 @@
+import {menusForRole} from '../_roles.js';
 import {sql,schema,hash,check,token,cookie,json,body,sessionUser,passwordProblem,PASSWORD_MAX,safeEqual,rateLimit,rateCount,rateReset,clientIp} from '../_lib.js';
 
 const validEmail = e => e.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
@@ -26,7 +27,8 @@ export default async function handler(req,res){
    const uid=await sessionUser(req);
    if(!uid)return json(res,200,{user:null});
    const rows=await sql.query('SELECT id,email,role,created_at FROM wealth_users WHERE id=$1',[uid]);
-   return json(res,200,{user:rows[0]||null});
+   const u=rows[0]||null;if(u)u.menus=await menusForRole(u.role).catch(()=>null);
+   return json(res,200,{user:u});
   }
   if(req.method!=='POST')return json(res,405,{error:'Method not allowed'});
   if(action==='logout'){cookie(res,'');return json(res,200,{ok:true});}
@@ -48,7 +50,7 @@ export default async function handler(req,res){
    }
    await rateReset('login:email:'+e);
    cookie(res,token(user.id,user.session_version));
-   return json(res,200,{user:{id:user.id,email:user.email,role:user.role}});
+   return json(res,200,{user:{id:user.id,email:user.email,role:user.role,menus:await menusForRole(user.role).catch(()=>null)}});
   }
 
   // Register and reset share an IP limit so they cannot be used to brute-force the access key.

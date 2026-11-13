@@ -52,8 +52,9 @@ export async function publicLendView(token, { db = sql, now = Date.now() } = {})
   const reqs = await db.query(`SELECT amount::float8 AS amount, paid_on::text AS paid_on, method, status, created_at, accepted_amount::float8 AS accepted_amount
     FROM wealth_lend_requests WHERE person_id = $1 ORDER BY created_at DESC LIMIT 10`, [p.id]);
   return { name: me.name, owed: me.owed, lent: me.lent, repaid: me.repaid, status: me.status, asOf: o.asOf,
-    items: me.items.map(i => ({ on: i.on, label: i.label, amount: i.amount, direction: i.direction, writtenOff: !!i.writtenOff,
-      detail: i.type === 'bill' ? i.detail : null, paid: i.type === 'bill' ? !!i.paid : undefined })),
+    items: me.items.map(i => ({ entryId: i.entryId || null, shareId: i.shareId || null, on: i.on, label: i.label, amount: i.amount, direction: i.direction, writtenOff: !!i.writtenOff,
+      detail: i.type === 'bill' ? i.detail : null, note: i.note || null, comments: (i.comments || []).map(c => ({ author: c.author, body: c.body, at: c.at })),
+      paid: i.type === 'bill' ? !!i.paid : undefined })),
     requests: reqs.map(r => ({ amount: r.amount, paidOn: r.paid_on, method: r.method, status: r.status, sentAt: r.created_at, acceptedAmount: r.accepted_amount })) };
 }
 
@@ -141,4 +142,27 @@ export async function decideLendRequest(uid, b, { db = sql, actor = 'owner', dry
   const [upd] = await withActor(db, actor, stmts);
   if (!upd.length) throw httpError(409, 'This request was already decided');
   return { stored: true, transactionId: upd[0].transaction_id, ...summary };
+}
+
+// POST from the shared page: {entryId | shareId, body} — a remark on one row. Only rows of the person the link belongs to;
+// up to 20 remarks a day per person (the owner answers from the People page).
+export async function addLendComment(token, b, { db = sql, now = Date.now() } = {}) {
+  const p = await personByToken(db, token);
+  if (!p) throw httpError(404, 'This link is not valid any more. Ask for a new one.');
+  const body = text(String(b?.body ?? '').replace(/[\u0000-\u001f]/g, ' '), 300);
+  if (!body) throw httpError(400, 'Write your comment first');
+  const byEntry = b?.entryId != null;
+  if (byEntry === (b?.shareId != null)) throw httpError(400, 'Choose a row to comment on');
+  const id = byEntry ? b.entryId : b.shareId;
+  if (!isUuid(id)) throw httpError(400, 'Choose a row to comment on');
+  const [row] = byEntry
+    ? await db.query(`SELECT e.id FROM wealth_person_entries e WHERE e.id = $1 AND e.person_id = $2 AND e.status <> 'removed'`, [id, p.id])
+    : await db.query(`SELECT sh.id FROM wealth_bill_split_shares sh JOIN wealth_bill_splits s ON s.id = sh.split_id AND s.status = 'active' WHERE sh.id = $1 AND sh.person_id = $2`, [id, p.id]);
+  if (!row) throw httpError(404, 'That row was not found');
+  const since = new Date(now - 24 * 3600e3).toISOString();
+  const [w] = await db.query(`SELECT count(*)::int n FROM wealth_lend_comments WHERE person_id = $1 AND author = 'person' AND created_at > $2`, [p.id, since]);
+  if (w.n >= 20) throw httpError(429, 'You have sent a lot of comments today. Please try again tomorrow.');
+  const [ins] = await withActor(db, 'lend-link', [[`INSERT INTO wealth_lend_comments (person_id, entry_id, share_id, author, body) VALUES ($1,$2,$3,'person',$4) RETURNING id`,
+    [p.id, byEntry ? id : null, byEntry ? null : id, body]]]);
+  return { stored: true, commentId: ins[0].id };
 }

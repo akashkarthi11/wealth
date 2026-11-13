@@ -4,9 +4,9 @@ import { splitsForAccount, recordSplitBalance, recordSplitMove } from '../_split
 // GET  /api/splits?accountId=…   splits of one account with estimated balances (owner)
 // POST /api/splits/balances      balance from a screenshot (owner or agent; ?dryRun=1)
 // POST /api/splits/moves         + into / − out of a split, optionally linked to a transaction (owner or agent; ?dryRun=1)
-const AUTH = { 'splits': { ingest: false } };
+const AUTH = { 'splits': { ingest: false, user: true } };
 
-export default handle('wealth-splits', { methods: ['GET', 'POST'], auth: req => AUTH[req.route] || {} }, async ({ req, res, who, q, body, dryRun }) => {
+export default handle('wealth-splits', { methods: ['GET', 'POST'], auth: req => AUTH[req.route] || { user: true } }, async ({ req, res, who, q, body, dryRun }) => {
   const route = req.route || 'splits';
   if (route === 'splits') {
     if (req.method !== 'GET') return json(res, 405, { error: 'Method not allowed' });

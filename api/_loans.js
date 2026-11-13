@@ -72,7 +72,7 @@ export function personFigures(moves, { annualRate = null, dueOn = null, status =
 
 export async function loansOverview(uid, { db = sql, now = Date.now() } = {}) {
   const today = istToday(now);
-  const [people, entries, shares, splits, rollups, requests, aliases, unlinked] = await Promise.all([
+  const [people, entries, shares, splits, rollups, requests, aliases, unlinked, comments] = await Promise.all([
     db.query(`SELECT id, name, kind, due_on::text AS due_on, annual_rate::float8 AS annual_rate, status, note, share_created_at, hidden FROM wealth_people WHERE user_id = $1 AND status <> 'removed' ORDER BY lower(name)`, [uid]),
     db.query(`SELECT e.id, e.person_id, e.direction, e.amount::float8 AS amount, e.occurred_on::text AS on, e.transaction_id, e.note, e.split_id, e.rollup_id, e.rollup_ref, e.status,
         t.description AS tx_description, coalesce(a.account_name, nullif(t.account, '')) AS account
@@ -92,6 +92,8 @@ export async function loansOverview(uid, { db = sql, now = Date.now() } = {}) {
       .catch(e => { if (e?.code === '42P01') return []; throw e; }),
     db.query(`SELECT person_id, alias FROM wealth_person_aliases WHERE user_id = $1 ORDER BY created_at`, [uid]).catch(e => { if (e?.code === '42P01') return []; throw e; }),
     unlinkedTransfers(db, uid),
+    db.query(`SELECT c.id, c.entry_id, c.share_id, c.author, c.body, c.created_at FROM wealth_lend_comments c JOIN wealth_people p ON p.id = c.person_id AND p.user_id = $1 ORDER BY c.created_at`, [uid])
+      .catch(e => { if (e?.code === '42P01') return []; throw e; }),
   ]);
   // Every name a person goes by → that person (their own name and their other names).
   const keyToPerson = new Map();
@@ -101,15 +103,18 @@ export async function loansOverview(uid, { db = sql, now = Date.now() } = {}) {
   const matchOf = t => keyToPerson.get(nameKey(t.description)) || null;
   const splitById = new Map(splits.map(s => [s.id, s]));
   const nameById = new Map(people.map(p => [p.id, p.name]));
+  // Remarks per row (migration 0026): the person's comments and the owner's answers, oldest first.
+  const commentsByEntry = new Map(), commentsByShare = new Map();
+  for (const c of comments) { const m = c.entry_id ? commentsByEntry : commentsByShare, k = c.entry_id || c.share_id; if (!m.has(k)) m.set(k, []); m.get(k).push({ id: c.id, author: c.author, body: c.body, at: c.created_at }); }
   // A share counts as paid when a payment back is linked to it ("Mark paid").
   const paidShare = new Map(entries.filter(e => e.split_id && e.direction === 'in' && e.status === 'active').map(e => [e.person_id + ':' + e.split_id, e]));
   const entryItem = e => ({ type: e.transaction_id ? 'transfer' : e.rollup_ref ? 'carried' : 'manual', direction: e.direction, amount: e.amount, on: e.on,
     transactionId: e.transaction_id, entryId: e.id, splitId: e.split_id || null, rollupId: e.rollup_id || null, writtenOff: e.status === 'written_off',
     label: e.rollup_ref ? 'Carried from round-off' : e.split_id ? 'Paid share of ' + (splitById.get(e.split_id)?.title || 'a bill') : e.direction === 'out' ? 'Lent' : 'Paid back',
-    detail: e.tx_description || e.note, account: e.account });
+    detail: e.tx_description || null, note: e.note || null, comments: commentsByEntry.get(e.id) || [], account: e.account });
   const shareItem = s => { const b = splitById.get(s.split_id), paid = paidShare.get(s.person_id + ':' + s.split_id);
     return { type: 'bill', direction: 'out', amount: s.amount, on: b.on, splitId: b.id, shareId: s.id, transactionId: b.transaction_id, rollupId: s.rollup_id || null, writtenOff: s.status === 'written_off',
-      label: 'Share of ' + b.title, detail: s.tax ? `₹${s.base} + ₹${s.tax} GST` : null, paid: !!paid, paidOn: paid?.on || null }; };
+      label: 'Share of ' + b.title, detail: s.tax ? `₹${s.base} + ₹${s.tax} GST` : null, comments: commentsByShare.get(s.id) || [], paid: !!paid, paidOn: paid?.on || null }; };
   const out = people.map(p => {
     const all = [...entries.filter(e => e.person_id === p.id).map(entryItem), ...shares.filter(s => s.person_id === p.id).map(shareItem)]
       .sort((a, b) => String(b.on).localeCompare(String(a.on)));
@@ -503,4 +508,35 @@ export async function mergePeople(uid, b, { db = sql, actor = 'owner', dryRun = 
     [`UPDATE wealth_people SET status = 'open', updated_at = now() WHERE id = $1 AND status = 'settled'`, [into.id]],
   ]);
   return { stored: true, from: from.name, into: into.name, personId: into.id };
+}
+
+// POST /api/loans/entries/note {entryId, note} — the owner's description of a lent / paid-back entry (empty clears it).
+// It is shown on the People page and on that person's shared page (the bank's own transaction text is not).
+export async function setEntryNote(uid, b, { db = sql, actor = 'owner', dryRun = false } = {}) {
+  if (!isUuid(b?.entryId)) throw httpError(400, 'entryId must be an entry id');
+  const [e] = await db.query(`SELECT e.id, e.person_id FROM wealth_person_entries e JOIN wealth_people p ON p.id = e.person_id AND p.user_id = $2
+    WHERE e.id = $1 AND e.status <> 'removed'`, [b.entryId, uid]);
+  if (!e) throw httpError(404, 'Entry not found');
+  const note = text(String(b.note ?? '').replace(/[\u0000-\u001f]/g, ' '), 200);
+  if (dryRun) return { dryRun, entryId: e.id, note };
+  await withActor(db, actor, [[`UPDATE wealth_person_entries SET note = $2 WHERE id = $1`, [e.id, note]]]);
+  return { stored: true, entryId: e.id, note };
+}
+
+// POST /api/loans/comments {entryId | shareId, body} — the owner answers a remark on a row. Shown on the shared page too.
+export async function addOwnerComment(uid, b, { db = sql, actor = 'owner', dryRun = false } = {}) {
+  const body = text(String(b?.body ?? '').replace(/[\u0000-\u001f]/g, ' '), 300);
+  if (!body) throw httpError(400, 'Write the comment first');
+  const byEntry = b?.entryId != null;
+  if (byEntry === (b?.shareId != null)) throw httpError(400, 'Give either entryId or shareId');
+  const id = byEntry ? b.entryId : b.shareId;
+  if (!isUuid(id)) throw httpError(400, (byEntry ? 'entryId' : 'shareId') + ' must be an id');
+  const [row] = byEntry
+    ? await db.query(`SELECT e.person_id FROM wealth_person_entries e JOIN wealth_people p ON p.id = e.person_id AND p.user_id = $2 WHERE e.id = $1 AND e.status <> 'removed'`, [id, uid])
+    : await db.query(`SELECT sh.person_id FROM wealth_bill_split_shares sh JOIN wealth_bill_splits s ON s.id = sh.split_id AND s.user_id = $2 WHERE sh.id = $1`, [id, uid]);
+  if (!row) throw httpError(404, 'That row was not found');
+  if (dryRun) return { dryRun, personId: row.person_id, body };
+  const [ins] = await withActor(db, actor, [[`INSERT INTO wealth_lend_comments (person_id, entry_id, share_id, author, body) VALUES ($1,$2,$3,'owner',$4) RETURNING id`,
+    [row.person_id, byEntry ? id : null, byEntry ? null : id, body]]]);
+  return { stored: true, commentId: ins[0].id, personId: row.person_id };
 }
