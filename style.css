@@ -1081,3 +1081,12 @@ b.pj-medium{color:#f5c26b}
 .of-days>span{width:100%;color:var(--muted);font-size:12px}
 .of-day{display:flex!important;align-items:center;gap:4px;grid-template-columns:none}
 label.pend-offer{display:flex;align-items:center;gap:8px;cursor:pointer}
+
+/* Upload: screenshots */
+.up-saved{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.up-saved li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;background:#0b1626;border:1px solid var(--line);border-radius:12px}
+.up-saved li span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.up-saved li b{overflow-wrap:anywhere}
+.up-saved li small{color:var(--muted)}
+.up-pick{display:flex;flex-direction:column;gap:6px;margin:10px 0;color:var(--muted);font-size:13px}
+.up-pick select{min-height:44px}

@@ -1,0 +1,226 @@
+<title>Payment Posting Plan</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column; tables and the flow diagram scroll inside their own box. Slate neutrals, teal for "do this", amber for "decide this", red for "wrong today". */
+:root{
+  --bg:#f5f7fa; --panel:#ffffff; --fg:#17212b; --muted:#566475; --line:#d9e0e8;
+  --accent:#0f766e; --accent-soft:#dff3f0; --warn:#9a5b00; --warn-soft:#fdf0d8; --bad:#b42336; --bad-soft:#fbe4e8; --code:#eef2f6;
+  --f-body:'Inter',system-ui,sans-serif; --f-head:'Space Grotesk','Inter',system-ui,sans-serif; --f-mono:'IBM Plex Mono',ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e151c; --panel:#151f29; --fg:#e6edf4; --muted:#9bacbd; --line:#26343f;
+  --accent:#4cc9bb; --accent-soft:#12302f; --warn:#f0b955; --warn-soft:#33270f; --bad:#ff8a9a; --bad-soft:#3a1820; --code:#1b2833; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e151c; --panel:#151f29; --fg:#e6edf4; --muted:#9bacbd; --line:#26343f;
+  --accent:#4cc9bb; --accent-soft:#12302f; --warn:#f0b955; --warn-soft:#33270f; --bad:#ff8a9a; --bad-soft:#3a1820; --code:#1b2833; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.6;
+  padding-block:32px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:36px}
+h1,h2,h3{font-family:var(--f-head);line-height:1.2;text-wrap:balance;margin:0}
+h1{font-size:clamp(28px,5vw,40px);letter-spacing:-.5px}
+h2{font-size:22px;letter-spacing:-.2px}
+h3{font-size:16px}
+p{margin:0}
+.lede{font-size:17px;color:var(--muted);max-width:62ch}
+.eyebrow{font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent)}
+section{display:flex;flex-direction:column;gap:14px}
+code,.mono{font-family:var(--f-mono);font-size:12.5px;background:var(--code);padding:1px 6px;border-radius:5px;word-break:break-word}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:14px}
+th,td{text-align:left;vertical-align:top;padding:11px 14px;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+th{font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);font-weight:600;background:var(--code)}
+.tag{display:inline-block;font-size:11px;font-weight:600;padding:2px 9px;border-radius:999px;white-space:nowrap}
+.t-ok{background:var(--accent-soft);color:var(--accent)} .t-bad{background:var(--bad-soft);color:var(--bad)} .t-ask{background:var(--warn-soft);color:var(--warn)}
+ul.plain{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+.pre-wrap{overflow-x:auto}
+pre.mermaid{margin:0;text-align:center}
+ol.phases{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px;counter-reset:p}
+ol.phases>li{counter-increment:p;display:grid;grid-template-columns:36px minmax(0,1fr);gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+ol.phases>li::before{content:counter(p);display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-family:var(--f-head);font-weight:700}
+ol.phases h3{margin-bottom:4px}
+.meta{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:8px;font-size:13px;color:var(--muted)}
+.ask{border-left:3px solid var(--warn);padding:2px 0 2px 14px}
+.ask b{display:block}
+footer{font-size:13px;color:var(--muted)}
+@media (max-width:560px){ol.phases>li{grid-template-columns:1fr}}
+</style>
+
+<div class="wrap">
+<header style="display:flex;flex-direction:column;gap:12px">
+  <span class="eyebrow">Wealth app · plan for the next session</span>
+  <h1>Payments should move the balance on their own</h1>
+  <p class="lede">ChatGPT saves each payment as a row, but the account balance, the credit card amount owed and the reward points are not updated with it. This plan shows what the app already does (checked in the code on 14 Nov 2026), what is still missing, and the order to fix it.</p>
+</header>
+
+<section>
+  <h2>How it works today</h2>
+  <div class="box pre-wrap">
+<pre class="mermaid">
+flowchart LR
+  A[Gmail payment mail] --> B[ChatGPT hourly task]
+  B -->|inserts row, never touches balances| C[(Transactions: pending)]
+  U[Upload sheet] --> C
+  C --> D{Owner clicks}
+  D -->|Accept| E[Source account balance ± amount]
+  D -->|Dismiss| F[Row kept, balance unchanged]
+  E --> G[Matching offers shown]
+  G -->|marked used| H[Offer use saved with expected benefit]
+</pre>
+  </div>
+  <ul class="plain">
+    <li><b>ChatGPT is told not to change balances.</b> <code>task.md</code> says “NEVER change balances” and “Never change balances from email”. It only inserts the transaction through <code>recordEmailImport</code> in <code>api/_ingest.js</code>.</li>
+    <li><b>New rows wait as “pending”</b> (migration 0029; the column default is <code>pending</code>, so ChatGPT rows and uploaded rows both wait). Older rows have no status and are never listed.</li>
+    <li><b>Accept moves one balance.</b> <code>acceptTransaction</code> in <code>api/_accept.js</code> adds or subtracts the amount on the row’s own account, saved as a “reported” balance. On a credit card or loan the balance is the amount owed, so a purchase raises it.</li>
+    <li><b>Offers are shown, not credited.</b> <code>recordOfferUses</code> in <code>api/_offers.js</code> saves that an offer was used and its expected benefit in <code>wealth_offer_uses</code>. Nothing is added to a reward balance and no cashback transaction is created.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>What still goes wrong</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>#</th><th>Case</th><th>What happens today</th><th>Where</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Card bill paid from savings</td><td>Savings goes down. The card’s amount owed does not go down, because the row has only one account.</td><td><span class="tag t-bad">Wrong</span> <code>signedDelta</code> uses only <code>account_id</code></td></tr>
+      <tr><td>2</td><td>Transfer between your own accounts</td><td>Only the sending account changes. The receiving account is not increased.</td><td><span class="tag t-bad">Wrong</span> same reason</td></tr>
+      <tr><td>3</td><td>Row not accepted</td><td>Balances stay old until someone clicks Accept on every row.</td><td><span class="tag t-ask">By design</span> pending list</td></tr>
+      <tr><td>4</td><td>Payment older than a verified balance</td><td>Accept adds the amount to the latest balance without comparing dates. If the balance came from a newer screenshot, the payment is counted twice.</td><td><span class="tag t-bad">Risk</span> no date check in <code>acceptTransaction</code> (to confirm with a test)</td></tr>
+      <tr><td>5</td><td>Card or account has no balance yet</td><td>Accept is refused: “Record a balance for this account first”.</td><td><span class="tag t-ok">Safe</span> but needs a first balance</td></tr>
+      <tr><td>6</td><td>Offer used (points or cashback)</td><td>Saved as an offer use only. Points and coins are not added to the reward program; cashback is not recorded as money.</td><td><span class="tag t-bad">Missing</span> <code>api/_rewards.js</code> is never called</td></tr>
+      <tr><td>7</td><td>Loan EMI</td><td>The loan balance drops by the whole EMI, but part of an EMI is interest.</td><td><span class="tag t-ask">Decide</span> amount split is not in the data</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>How it should work</h2>
+  <p class="lede" style="font-size:15px">ChatGPT still only inserts the row. The app does all the posting, in one step, once per row.</p>
+  <div class="box pre-wrap">
+<pre class="mermaid">
+flowchart TD
+  A["Gmail mail or Upload sheet"] --> B["ChatGPT or Upload inserts the row<br/>with account and, when known, the other account"]
+  B --> C[("Transaction: pending")]
+  C --> D{"Can it be posted?<br/>balance exists, payment newer than balance,<br/>kind clear, other account known if needed"}
+  D -->|"No"| F["Stays pending<br/>app asks: first balance, or Paid to"]
+  F --> D
+  D -->|"Yes"| G{"Automatic posting<br/>on for this account?"}
+  G -->|"No"| H["Owner clicks Accept<br/>sees every line before confirming"]
+  G -->|"Yes"| I["Posted automatically"]
+  H --> J["One posting step, once per row"]
+  I --> J
+  J --> K["Own account balance"]
+  J --> L["Other account balance<br/>card owed or receiving account"]
+  J --> M["Reward event or cashback income"]
+  J --> N["Row marked accepted"]
+</pre>
+  </div>
+</section>
+
+<section>
+  <h2>What each payment changes</h2>
+  <div class="box pre-wrap">
+<pre class="mermaid">
+flowchart TD
+  T["Payment row"] --> K{"Kind"}
+  K -->|"expense"| E1{"Account type"}
+  E1 -->|"savings or current"| E2["Balance down"]
+  E1 -->|"credit card"| E3["Amount owed up"]
+  K -->|"income or refund"| I1{"Account type"}
+  I1 -->|"savings or current"| I2["Balance up"]
+  I1 -->|"credit card"| I3["Amount owed down"]
+  K -->|"liability: card bill or EMI"| L1["Own balance down"]
+  L1 --> L2["Other account owed down<br/>EMI: principal part, owner decides"]
+  K -->|"transfer"| X1{"To whom"}
+  X1 -->|"own account"| X2["Sending balance down"]
+  X2 --> X3["Receiving balance up"]
+  X1 -->|"a person"| X4["Balance down<br/>lending entry handles the person"]
+  K -->|"investment"| V1["Balance down<br/>holdings come from broker data"]
+  E2 --> R{"Matching offer<br/>marked used?"}
+  E3 --> R
+  R -->|"points, coins, monies"| R1["Reward event: earned"]
+  R -->|"cashback as money"| R2["Income on the card<br/>when it arrives"]
+  R -->|"no"| R3["Nothing more"]
+</pre>
+  </div>
+</section>
+
+<section>
+  <h2>Rules for posting a payment</h2>
+  <p class="lede" style="font-size:15px">The same rules as a table. The second and third columns are what the app should write when a row is accepted.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Payment</th><th>Own account</th><th>Other account</th><th>Rewards</th></tr></thead>
+    <tbody>
+      <tr><td>Expense on a savings or current account</td><td>Balance down</td><td>none</td><td>Offer, if one matches</td></tr>
+      <tr><td>Expense on a credit card</td><td>Amount owed up</td><td>none</td><td>Offer points or cashback</td></tr>
+      <tr><td>Income or refund on savings</td><td>Balance up</td><td>none</td><td>none</td></tr>
+      <tr><td>Refund or cashback credited to a card</td><td>Amount owed down</td><td>none</td><td>Cashback credit event</td></tr>
+      <tr><td>Card bill payment from savings</td><td>Savings down</td><td><b>Card owed down</b> (new)</td><td>none</td></tr>
+      <tr><td>Transfer between own accounts</td><td>Sending down</td><td><b>Receiving up</b> (new)</td><td>none</td></tr>
+      <tr><td>Transfer to a person</td><td>Balance down</td><td>none (lending entry handles the person)</td><td>none</td></tr>
+      <tr><td>Investment purchase</td><td>Balance down</td><td>none (holdings come from broker data)</td><td>none</td></tr>
+      <tr><td>Loan EMI</td><td>Savings down</td><td>Loan owed down by the principal part</td><td><span class="tag t-ask">Decide</span></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>The fix, in three parts</h2>
+  <div class="box">
+    <h3>A. One posting function</h3>
+    <p>Move the money rules out of <code>signedDelta</code> into one function that returns every movement a payment causes: own account, other account and reward. Accept, Upload and any later automatic posting all call it, so the rules live in one place. It posts once per row, so clicking twice cannot double count.</p>
+  </div>
+  <div class="box">
+    <h3>B. A second account on the payment</h3>
+    <p>Add an optional “other account” to each transaction (a new column, so this needs your approval before it is built). ChatGPT fills it for card payments and own-account transfers when the mail names the card or account. At Accept, a “Paid to” dropdown lets you set or fix it. Without it, cases 1 and 2 cannot be right.</p>
+  </div>
+  <div class="box">
+    <h3>C. Rewards at Accept</h3>
+    <p>When you tick an offer as used, the app also writes the reward. Points, coins and monies go in as a reward event “earned” on the program linked to that account (<code>recordRewardEvent</code> already exists). Cashback that arrives as money is recorded as income on the card, as <code>rules.md</code> already says. The Accept screen shows the line to be written before you confirm, for example “Add 120 points to the HDFC Swiggy program”.</p>
+  </div>
+  <p class="ask"><b>What ChatGPT keeps doing</b>Only inserting the transaction (and the other account when known). It still never writes balances or rewards. The app does that after the rules above, so a forgotten step in the ChatGPT prompt can no longer leave a balance wrong.</p>
+</section>
+
+<section>
+  <h2>Build order</h2>
+  <div class="box pre-wrap">
+<pre class="mermaid">
+flowchart LR
+  P1["1 Date check<br/>no double count"] --> P2["2 Other account<br/>two-sided posting"]
+  P2 --> P3["3 Rewards<br/>at Accept"]
+  P3 --> P4["4 Automatic posting<br/>optional"]
+  P4 --> P5["5 ChatGPT prompt<br/>and rules.md"]
+  P2 -.->|"needs your approval:<br/>new column"| A1(("Approval"))
+</pre>
+  </div>
+  <ol class="phases">
+    <li><div><h3>Close the double-count risk</h3><p>Before posting, compare the payment date with the date of the latest balance. If the balance is newer, do not add the amount; show “Already included in the latest balance” and mark the row accepted without a balance change. Add tests for both dates.</p><div class="meta"><span>No new table</span><span><code>api/_accept.js</code></span><span>Test: <code>accept-offers.test.mjs</code></span></div></div></li>
+    <li><div><h3>Other account and two-sided posting</h3><p>Add the column, the “Paid to” dropdown at Accept, and the second balance row for card payments and own-account transfers. The new rules table above becomes the test list.</p><div class="meta"><span>New migration (needs approval)</span><span><code>api/_accept.js</code>, <code>api/_ingest.js</code>, <code>app.js</code></span></div></div></li>
+    <li><div><h3>Rewards at Accept</h3><p>Show the reward line for each used offer and write it with the accept, in one step, so the balance and the reward cannot get out of step.</p><div class="meta"><span>Uses <code>api/_rewards.js</code></span><span>Needs the program-to-account link filled in</span></div></div></li>
+    <li><div><h3>Optional automatic posting</h3><p>For accounts you choose, accept a row automatically when everything is known: a balance exists, the other account is known where needed, the balance is older than the payment, and the kind is clear. Everything else stays pending. Add a Data quality warning for rows pending more than a day.</p><div class="meta"><span>Setting per account</span><span>Only if you want it</span></div></div></li>
+    <li><div><h3>Tell ChatGPT and update the rules</h3><p>Update <code>task.md</code> so ChatGPT sends the other account for card payments and transfers, and update <code>rules.md</code> with the posting table. Keep “never write balances” in the prompt.</p><div class="meta"><span>Docs only</span></div></div></li>
+  </ol>
+</section>
+
+<section>
+  <h2>What I need you to decide</h2>
+  <p class="ask"><b>1. Click or automatic?</b>Keep the Accept click for every row, or post automatically for safe cases (phase 4)? I recommend click first, then automatic for savings once it has run clean for a while.</p>
+  <p class="ask"><b>2. Loan EMI</b>The data does not say how much of an EMI is interest. Reduce the loan by the full EMI, or ask you for the principal part at Accept?</p>
+  <p class="ask"><b>3. Cashback</b>For offers that give cashback, record it when the offer is used (expected amount) or only when the money actually arrives and shows in a statement or mail?</p>
+  <p class="ask"><b>4. Older rows</b>Rows from before 14 Nov have no status. Leave them as they are (recommended), or list them once so you can accept them?</p>
+</section>
+
+<section>
+  <h2>Safety rules for the build</h2>
+  <ul class="plain">
+    <li>Every balance written is a new row with who and when; nothing is overwritten. An “undo accept” writes a reversing row.</li>
+    <li>A row is posted once. Accept twice returns “already handled”.</li>
+    <li>A verified balance from a screenshot is never changed by posting; posting only adds a newer “reported” balance.</li>
+    <li>Money amounts are rounded to 2 decimals in one place.</li>
+    <li>No new table or column, and no change to ChatGPT’s permissions, without your approval first.</li>
+  </ul>
+</section>
+
+<footer>Source: <code>api/_accept.js</code>, <code>api/_offers.js</code>, <code>api/_rewards.js</code>, <code>api/_ingest.js</code>, <code>task.md</code>, <code>rules.md</code>, migrations 0029 and 0030 · written 14 Nov 2026.</footer>
+</div>
