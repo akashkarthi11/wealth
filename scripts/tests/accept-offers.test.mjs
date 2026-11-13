@@ -9,6 +9,7 @@ import { collectIssues } from '../../api/_dataquality.js';
 import { confirmBalance, rejectBalance } from '../../api/_balancereview.js';
 import { pendingTransactions, acceptTransaction, dismissTransaction, signedDelta } from '../../api/_accept.js';
 import { saveOffer, listOffers, deleteOffer, matchOffers, offerBenefit, activeOffersFor } from '../../api/_offers.js';
+import { upsertRewardProgram } from '../../api/_rewards.js';
 
 const NOW = Date.parse('2026-11-14T10:00:00Z');
 const read = p => readFileSync(new URL('../../' + p, import.meta.url), 'utf8');
@@ -168,10 +169,10 @@ test('offer validation', async () => {
 });
 
 test('wiring: routes, menu, roles and screens', () => {
-  const router = read('api/router.js'), roles = read('api/_roles.js'), app = read('app.js');
+  const router = read('api/router.js'), roles = read('api/_roles.js'), app = read('app.js') + read('offers.js');
   assert.match(router, /'transaction-accept': \(\) => import/); assert.match(router, /'account-offers': \(\) => import/);
-  assert.match(roles, /key: 'offers', label: 'Account offers'/); assert.match(roles, /'account-offers': \['offers'\]/); assert.match(roles, /'transaction-accept': \['transactions', 'overview'\]/);
-  for (const s of ['loadPendingTx', 'data-tx-accept', 'balanceReviewRowHtml', 'data-bal-confirm', '/api/account-offers', "view==='offers'", 'data-offer-add']) assert.ok(app.includes(s), s);
+  assert.match(roles, /key: 'offers', label: 'Account offers'/); assert.match(roles, /'account-offers': \['offers', 'rewards'\]/); assert.match(roles, /'transaction-accept': \['transactions', 'overview'\]/);
+  for (const s of ['loadPendingTx', 'data-tx-accept', 'balanceReviewRowHtml', 'data-bal-confirm', '/api/account-offers', "view==='offers'", 'data-of-add']) assert.ok(app.includes(s), s);
   assert.match(read('index.html'), /data-view="offers"/);
   assert.match(read('api/_routes/data-quality.js'), /confirm_balance/);
   for (const m of ['0028_balance_review', '0029_transaction_review', '0030_account_offers']) assert.doesNotMatch(read(`scripts/migrations/${m}.sql`), /\bDROP TABLE\b|\bTRUNCATE\b|DELETE FROM/i);
@@ -199,8 +200,8 @@ test('one-time offer: usable once; after it is used it no longer matches; Undo b
   let p = await pendingTransactions(uid, { db: a });
   assert.equal(p.find(x => x.id === t1).offers[0].couponCode, 'WELCOME100');
   assert.equal(p.find(x => x.id === t1).offers[0].oneTime, true);
-  const r = await acceptTransaction(uid, { transactionId: t1, usedOfferIds: [id] }, { db: a, now: NOW });
-  assert.deepEqual(r.usedOffers.map(u => [u.title, u.benefit]), [['Welcome 100', 100]]);
+  const r = await acceptTransaction(uid, { transactionId: t1 }, { db: a, now: NOW });
+  assert.deepEqual(r.applied.map(u => [u.title, u.inr]), [['Welcome 100', 100]]);
   p = await pendingTransactions(uid, { db: a });
   assert.deepEqual(p.find(x => x.id === t2).offers, [], 'used up');
   assert.equal((await listOffers(uid, { db: a })).offers[0].standing.exhausted, 'used up');
@@ -214,10 +215,10 @@ test('a one-time offer cannot be used twice even if two payments are ticked; an 
   const { a, uid, card, sav, tx } = await setup();
   const { id } = await saveOffer(uid, { accountId: card, title: 'Once', benefitType: 'flat', benefitValue: 50, frequency: 'one_time' }, { db: a });
   const t1 = await tx(card, 'expense', 'Food', 'A', 100), t2 = await tx(card, 'expense', 'Food', 'B', 100);
-  assert.equal((await acceptTransaction(uid, { transactionId: t1, usedOfferIds: [id] }, { db: a, now: NOW })).usedOffers.length, 1);
-  assert.equal((await acceptTransaction(uid, { transactionId: t2, usedOfferIds: [id] }, { db: a, now: NOW + 1000 })).usedOffers.length, 0);
+  assert.equal((await acceptTransaction(uid, { transactionId: t1 }, { db: a, now: NOW })).applied.length, 1);
+  assert.equal((await acceptTransaction(uid, { transactionId: t2, applyOfferIds: [id] }, { db: a, now: NOW + 1000 })).applied.length, 0, 'a used-up one-time offer cannot be forced');
   const t3 = await tx(sav, 'expense', 'Food', 'C', 100);
-  assert.equal((await acceptTransaction(uid, { transactionId: t3, usedOfferIds: [id] }, { db: a, now: NOW + 2000 })).usedOffers.length, 0, 'other account');
+  assert.equal((await acceptTransaction(uid, { transactionId: t3, applyOfferIds: [id] }, { db: a, now: NOW + 2000 })).applied.length, 0, 'other account');
   assert.equal((await a.query(`SELECT count(*)::int n FROM wealth_offer_uses`))[0].n, 1);
 });
 
@@ -252,21 +253,22 @@ test('per-period limits: HDFC Swiggy style 1,500 per billing cycle, and N uses p
 
 test('UPI offers (Slice UPI), credit-card-only offers, and weekday offers', async () => {
   const { a, uid, sav, card } = await setup();
-  await saveOffer(uid, { accountId: sav, title: 'UPI cashback', benefitType: 'percent', benefitValue: 2, paymentMode: 'upi', rewardUnit: 'monies' }, { db: a });
+  const prog = (await upsertRewardProgram(uid, { programKey: 'slice-monies', provider: 'Slice', name: 'Slice Monies', unit: 'Monies', inrPerUnit: 0.01, rateSource: 'test', accountId: sav }, { db: a })).programId;
+  await saveOffer(uid, { accountId: sav, title: 'UPI cashback', benefitType: 'percent', benefitValue: 2, paymentMode: 'upi', rewardUnit: 'monies', programId: prog }, { db: a });
   await saveOffer(uid, { accountId: card, title: 'Card only', benefitType: 'flat', benefitValue: 10, paymentMode: 'card' }, { db: a });
   await saveOffer(uid, { accountId: sav, title: 'Weekend', benefitType: 'flat', benefitValue: 7, weekdays: [0, 6] }, { db: a });
   const s = (await activeOffersFor(uid, [sav], { db: a })), c = (await activeOffersFor(uid, [card], { db: a }));
   const base = { kind: 'expense', category: 'Food', amount: 500, occurred_on: '2026-11-13' };   // Friday
-  assert.deepEqual(matchOffers(s.offers, { ...base, account_id: sav, description: 'UPI payment to Cafe' }, []).map(o => o.title), ['UPI cashback']);
-  assert.deepEqual(matchOffers(s.offers, { ...base, account_id: sav, description: 'Cafe' }, []).map(o => o.title), [], 'not a UPI payment');
-  assert.deepEqual(matchOffers(s.offers, { ...base, account_id: sav, description: 'UPI to Cafe', occurred_on: '2026-11-14' }, []).map(o => o.title).sort(), ['UPI cashback', 'Weekend'], 'Saturday');
+  assert.deepEqual(matchOffers(s.offers, { ...base, account_id: sav, description: 'UPI payment to Cafe' }, [], s.programs).map(o => o.title), ['UPI cashback']);
+  assert.deepEqual(matchOffers(s.offers, { ...base, account_id: sav, description: 'Cafe' }, [], s.programs).map(o => o.title), [], 'not a UPI payment');
+  assert.deepEqual(matchOffers(s.offers, { ...base, account_id: sav, description: 'UPI to Cafe', occurred_on: '2026-11-14' }, [], s.programs).map(o => o.title).sort(), ['UPI cashback', 'Weekend'], 'Saturday');
   assert.deepEqual(matchOffers(c.offers, { ...base, account_id: card, subtype_code: 'credit_card', description: 'x' }, []).map(o => o.title), ['Card only']);
   assert.deepEqual(matchOffers(c.offers, { ...base, account_id: card, subtype_code: 'savings', description: 'x' }, []).map(o => o.title), []);
   assert.equal((await listOffers(uid, { db: a })).offers.find(o => o.title === 'UPI cashback').reward_unit, 'monies');
 });
 
 test('wiring: usage tracking in the screen and the route', () => {
-  const app = read('app.js');
-  for (const s of ['data-offer-use', 'data-offer-undo', 'One-time only', 'Statement day', 'Paid by UPI', 'usedOfferIds']) assert.ok(app.includes(s), s);
+  const app = read('offers.js');
+  for (const s of ['data-of-undo', 'Once only', 'Statement day', 'Ask me each time', 'applyOfferIds', '/api/account-offers', 'data-of-save']) assert.ok(app.includes(s), s);
   assert.match(read('api/_routes/account-offers.js'), /undo_use/);
 });

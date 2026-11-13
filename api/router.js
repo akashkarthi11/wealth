@@ -15,6 +15,7 @@ export const ROUTES = {
   'uploads': () => import('./_routes/uploads.js'),
   'transaction-accept': () => import('./_routes/transaction-accept.js'),
   'account-offers': () => import('./_routes/account-offers.js'),
+  'offer-earnings': () => import('./_routes/offer-earnings.js'),
   'health': () => import('./_routes/health.js'),
   'ledger': () => import('./_routes/ledger.js'),
   'planned-bills': () => import('./_routes/planned-bills.js'),
