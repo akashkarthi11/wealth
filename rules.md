@@ -15,6 +15,8 @@ This file contains the user's instructions to the AI assistant. Read and follow 
 - Do not update balances as part of transaction insertion.
 - Only update a balance when the user explicitly requests it or a specific authorized workflow requires it.
 - Use `verified` only when supported by a bank screenshot, bank statement, or equivalent direct bank evidence.
+- **Change 2026-11-14:** a balance you write from a screenshot (Bearer ingest) is stored by the app as `reported`, not `verified`, even if you send `verified`. It waits in Data quality for the owner to Confirm or Reject. Do not try to work around this. Interest still starts from it until it is rejected.
+- **Change 2026-11-14:** new transactions are saved as `pending`. The owner accepts them in the app (Transactions, "Waiting for review"); accepting writes the new balance on the account. You still must not change balances when inserting transactions.
 - Use `stale` for an estimate, including a calculated balance based on an earlier balance and later transactions.
 - Never use `pending_reconciliation`.
 - Never describe an estimate as verified. Preserve the evidence timestamp and explain the estimate where the schema supports a note.

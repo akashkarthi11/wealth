@@ -4,6 +4,8 @@ import { sql, configStatus } from './_lib.js';
 import { accountHierarchyRows } from './_queries.js';
 import { valuePortfolio } from './_valuation.js';
 import { jobActivity } from './_jobs.js';
+import { priceJumps } from './_pricereview.js';
+import { unconfirmedBalances } from './_balancereview.js';
 
 const HOUR = 3600e3;
 const ageH = (x, now) => (x ? (now - new Date(x).getTime()) / HOUR : Infinity);
@@ -51,12 +53,25 @@ export async function collectIssues(uid, { db = sql, now = Date.now(), env = pro
   const mismatched = await db.query(`SELECT a.id, a.bank_name, a.account_name, a.current_balance::float8 AS shown, a.balance_as_of AS shown_at,
       b.balance::float8 AS latest, b.as_of AS latest_at, b.status AS latest_status
     FROM wealth_accounts a
-    JOIN LATERAL (SELECT balance, as_of, status FROM wealth_account_balances WHERE account_id = a.id ORDER BY as_of DESC LIMIT 1) b ON true
+    JOIN LATERAL (SELECT balance, as_of, status FROM wealth_account_balances WHERE account_id = a.id AND rejected_at IS NULL ORDER BY as_of DESC LIMIT 1) b ON true
     WHERE a.user_id=$1 AND a.status='active' AND a.subtype_code IN ('savings','current','credit_card') AND a.current_balance IS NOT NULL
       AND (abs(a.current_balance - b.balance) >= 0.01 OR a.balance_as_of < b.as_of)`, [uid]).catch(() => []);
   for (const m of mismatched) add(`balance_mismatch:${m.id}`, 'high', 'balance_mismatch',
     `${m.bank_name} · ${m.account_name}: dashboard shows ₹${fmt(m.shown)} (${new Date(m.shown_at).toISOString().slice(0, 10)}) but the newest balance is ₹${fmt(m.latest)} (${new Date(m.latest_at).toISOString().slice(0, 10)}, ${m.latest_status})`,
     'Confirm the real balance and record it (POST /api/balances); one value must win', { shown: m.shown, shownAt: m.shown_at, latest: m.latest, latestAt: m.latest_at });
+  // Price review (2026-11-12): the latest price jumped far from the one before it. Medium (yellow) and high (red) by size;
+  // the owner can reject it (previous price is used again), change it, or accept it as genuine.
+  const jumps = await priceJumps(uid, { db }).catch(e => { if (e?.code === '42703') return []; throw e; });   // before 0025
+  for (const j of jumps) add(`price_jump:${j.instrumentId}:${j.latest.asOf}`, j.severity, 'price_jump',
+    `${j.symbol} price moved ${j.changePct > 0 ? '+' : ''}${j.changePct}% — ${fmt(j.previous.price)} → ${fmt(j.latest.price)} ${j.currency}`,
+    'Reject it (the previous price is used again), change the price, or accept it as genuine', j);
+
+  // Balance review (0028): a balance the assistant read from a screenshot is not verified until the owner confirms it.
+  const unconfirmed = await unconfirmedBalances(uid, { db }).catch(e => { if (e?.code === '42703') return []; throw e; });
+  for (const u of unconfirmed) add(`balance_review:${u.accountId}:${u.asOf}`, 'medium', 'balance_review',
+    `${u.name}: balance ₹${fmt(u.balance)} from a screenshot is not verified yet${u.previous ? ` (before: ₹${fmt(u.previous.balance)})` : ''}`,
+    'Confirm it (becomes verified) or reject it (the previous balance is used again)', u);
+
   const holds = await db.query(`SELECT id, symbol, price_hold_reason FROM wealth_instruments WHERE price_hold_reason IS NOT NULL`).catch(() => []);
   for (const h of holds) add(`price_hold:${h.id}`, 'medium', 'price_hold', `${h.symbol}: price updates are on hold — ${h.price_hold_reason}`,
     'Confirm the quantity (PUT /api/holdings with releasePriceHold) to resume prices');

@@ -6,7 +6,7 @@ import { startJob, finishJob } from '../_jobs.js';
 // POST /api/interest/rates     verified rate period (TR3-3.2, agent or owner; ?dryRun=1)
 // POST /api/interest/run       accrue through yesterday IST, idempotent (TR3-3.5, cron / agent / owner; ?dryRun=1)
 // POST /api/interest/credits   actual credit with bank evidence (TR3-3.6, owner or agent; unique reference)
-const AUTH = { 'interest': {}, 'interest/rates': {}, 'interest/run': { cron: true }, 'interest/credits': {} };
+const AUTH = { 'interest': { user: true }, 'interest/rates': {}, 'interest/run': { cron: true }, 'interest/credits': {} };
 
 export default handle('wealth-interest', { methods: ['GET', 'POST'], auth: req => AUTH[req.route] || { ingest: false } }, async ({ req, res, who, body, dryRun }) => {
   const route = req.route || 'interest';

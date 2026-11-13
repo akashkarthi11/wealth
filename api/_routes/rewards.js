@@ -5,9 +5,9 @@ import { rewardsOverview, recordRewardBalance, recordRewardEvent, upsertRewardPr
 // POST /api/rewards/balances   new balance from a screenshot or statement (owner or agent; ?dryRun=1)
 // POST /api/rewards/events     earned / redeemed / expired / adjusted (owner or agent; ?dryRun=1)
 // POST /api/rewards/programs   create a program, or set its ₹ rate (with source) and redemption details (owner or agent)
-const AUTH = { 'rewards': { ingest: false } };
+const AUTH = { 'rewards': { ingest: false, user: true } };
 
-export default handle('wealth-rewards', { methods: ['GET', 'POST'], auth: req => AUTH[req.route] || {} }, async ({ req, res, who, body, dryRun }) => {
+export default handle('wealth-rewards', { methods: ['GET', 'POST'], auth: req => AUTH[req.route] || { user: true } }, async ({ req, res, who, body, dryRun }) => {
   const route = req.route || 'rewards';
   if (route === 'rewards') {
     if (req.method !== 'GET') return json(res, 405, { error: 'Method not allowed' });

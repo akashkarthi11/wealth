@@ -36,7 +36,7 @@ async function buildDashboard(uid,asked){
   if(!hierarchy||hierarchy.error){console.error('[wealth-dashboard:v2]',hierarchy?.error?.message||'not loaded');model={version:'v2',error:'Account model is not available yet.'}}
   else{try{model={version:'v2',generatedAt:new Date().toISOString(),...valuePortfolio(hierarchy)}}catch(e){console.error('[wealth-dashboard:v2]',e?.message||e);model={version:'v2',error:'Account model is not available yet.'}}}
  }
- return {broker,rewards:admin?rewards:null,transactions:page.transactions,nextCursor:page.nextCursor,spending:spending,snapshots:admin?snapshots:[],
+ return {broker,rewards,transactions:page.transactions,nextCursor:page.nextCursor,spending:spending,snapshots,
   template:templates[0]?.config||null,accounts,positions,interest,interestStatements,categorySymbols:Object.fromEntries(symbolRows.map(r=>[r.category_key,r.display_symbol])),model};
 }
 

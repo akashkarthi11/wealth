@@ -1,5 +1,5 @@
 import { json, body as readBody, rateLimit, clientIp, httpError, sendError } from '../_lib.js';
-import { publicLendView, createLendRequest, validToken } from '../_lendshare.js';
+import { publicLendView, createLendRequest, addLendComment, validToken } from '../_lendshare.js';
 
 // Public (no sign-in): /l/<secret> → this route (vercel.json rewrite).
 // GET  the person's own lending summary as a small page.   POST {amount, paidOn, method, note} — "I've paid" request.
@@ -24,12 +24,19 @@ label{display:grid;gap:6px;font-size:12px;color:#b6c6dc;margin:10px 0}input,sele
 button[disabled]{opacity:.5}.msg{min-height:18px;font-size:13px;margin-top:8px}.msg.err{color:#ffb2a9}.msg.ok{color:var(--green)}
 .row .pill{display:inline-block;align-self:center;height:auto}.pill{display:inline-block;font-size:11px;padding:2px 8px;border-radius:12px;border:1px solid var(--line);color:var(--muted)}.pill.wait{color:var(--amber);border-color:#6b5230}.pill.done{color:var(--green);border-color:#2d5a4c}
 footer{margin-top:22px;font-size:11px;color:#60728d;text-align:center}
+.item{border-bottom:1px solid #1f2e44}.item:last-child{border-bottom:0}.item .row{border-bottom:0}.cm{margin:0 0 8px 10px;padding:8px 10px;border-radius:10px;background:#0f1b2d;border:1px solid #22344e;font-size:13px}.cm p{margin:2px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}.cm small{color:var(--muted);font-size:11px}.cm-owner{border-color:#2f5a4a;background:#10261f}.cm-owner b{color:var(--green)}.cm-me b{color:var(--blue)}
+.cform{display:flex;gap:8px;margin:2px 0 12px 10px}.cform input{padding:9px 10px;font-size:13px}.cform button{width:auto;margin-top:0;padding:9px 14px}
 </style></head><body><main>${inner}</main></body></html>`;
 }
 
 export function viewHtml(v) {
   const settled = !(v.owed > 0);
-  const items = v.items.map(i => `<div class="row"><span><b>${esc(i.label)}</b><small>${esc(day(i.on))}${i.detail ? ' · ' + esc(i.detail) : ''}${i.writtenOff ? ' · written off' : ''}${i.paid ? ' · paid' : ''}</small></span><b class="${i.direction === 'out' ? 'out' : 'in'}${i.writtenOff ? ' off' : ''}">${i.direction === 'out' ? '' : '−'}${esc(inr(i.amount))}</b></div>`).join('');
+  const items = v.items.map(i => {
+    const ref = i.entryId ? `data-entry="${esc(i.entryId)}"` : i.shareId ? `data-share="${esc(i.shareId)}"` : '';
+    const cms = (i.comments || []).map(c => `<div class="cm ${c.author === 'owner' ? 'cm-owner' : 'cm-me'}"><b>${c.author === 'owner' ? 'Karthi' : 'You'}</b> <small>${esc(day(c.at))}</small><p>${esc(c.body)}</p></div>`).join('');
+    const form = ref ? `<form class="cform" ${ref}><input name="body" maxlength="300" placeholder="Add a comment on this row" aria-label="Comment on this row" required><button type="submit">Send</button></form>` : '';
+    return `<div class="item"><div class="row"><span><b>${esc(i.label)}</b><small>${esc(day(i.on))}${i.detail ? ' · ' + esc(i.detail) : ''}${i.note ? ' · “' + esc(i.note) + '”' : ''}${i.writtenOff ? ' · written off' : ''}${i.paid ? ' · paid' : ''}</small></span><b class="${i.direction === 'out' ? 'out' : 'in'}${i.writtenOff ? ' off' : ''}">${i.direction === 'out' ? '' : '−'}${esc(inr(i.amount))}</b></div>${cms}${form}</div>`;
+  }).join('');
   const reqs = v.requests.map(r => `<div class="row"><span><b>You said you paid ${esc(inr(r.amount))}</b><small>${esc(day(r.paidOn))} · ${esc(METHOD[r.method] || r.method)}</small></span><span class="pill ${r.status === 'pending' ? 'wait' : r.status === 'accepted' ? 'done' : ''}">${r.status === 'pending' ? 'Waiting' : r.status === 'accepted' ? 'Confirmed' : 'Not confirmed'}</span></div>`).join('');
   const today = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
   const form = settled ? '' : `<section class="card"><h2 style="margin:0;font-size:17px">I've paid</h2><p class="muted" style="margin:4px 0 0">Tell Karthi you paid. It is marked as paid once confirmed.</p>
@@ -48,7 +55,13 @@ document.getElementById('paid').addEventListener('submit',async e=>{e.preventDef
 ${reqs ? `<section class="card"><h2 style="margin:0 0 4px;font-size:15px">Your payments</h2>${reqs}</section>` : ''}
 ${form}
 <section class="card"><h2 style="margin:0 0 4px;font-size:15px">Details</h2>${items || '<p class="muted">Nothing yet.</p>'}</section>
-<footer>This page shows only your entries. Keep the link private.</footer>`);
+<footer>This page shows only your entries. Keep the link private.</footer>
+<script>
+document.querySelectorAll('.cform').forEach(f=>f.addEventListener('submit',async e=>{e.preventDefault();const b=f.querySelector('button'),i=f.querySelector('input');b.disabled=true;
+ try{const d={kind:'comment',body:i.value};if(f.dataset.entry)d.entryId=f.dataset.entry;else d.shareId=f.dataset.share;const r=await fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(j.error||'Could not send. Please try again.');location.reload()}
+ catch(err){alert(err.message);b.disabled=false}}));
+</script>`);
 }
 
 export default async function handler(req, res) {
@@ -66,9 +79,11 @@ export default async function handler(req, res) {
       return res.end(viewHtml(v));
     }
     if (req.method !== 'POST') return json(res, 405, { error: 'Method not allowed' });
-    const lim = await rateLimit('lend-link:' + clientIp(req), 10, 3600).catch(() => ({ allowed: true }));
+    const b = await readBody(req);
+    const isComment = b?.kind === 'comment';
+    const lim = await rateLimit((isComment ? 'lend-comment:' : 'lend-link:') + clientIp(req), isComment ? 30 : 10, 3600).catch(() => ({ allowed: true }));
     if (lim && lim.allowed === false) return json(res, 429, { error: 'Too many tries. Please wait a while.' });
-    const r = await createLendRequest(token, await readBody(req));
+    const r = isComment ? await addLendComment(token, b) : await createLendRequest(token, b);
     return json(res, 201, r);
   } catch (e) { return sendError(res, e, 'wealth-lend-view'); }
 }

@@ -226,7 +226,7 @@ export function clientIp(req){return String(req.headers['x-forwarded-for']||'').
 // signed-out browser must ask again and gets 401 — nothing is shown without a session.
 export function cookie(res,v){res.setHeader('Set-Cookie',v?'wealth_session='+v+'; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800':'wealth_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0')}
 export function json(res,status,data){res.statusCode=status;res.setHeader('Content-Type','application/json; charset=utf-8');res.setHeader('Cache-Control','no-store');res.end(JSON.stringify(data))}
-export async function body(req){let s='';for await(const c of req)s+=c;if(s.length>20000)throw new Error('Request too large');return JSON.parse(s||'{}')}
+export async function body(req,max=20000){let s='';for await(const c of req)s+=c;if(s.length>max)throw new Error('Request too large');return JSON.parse(s||'{}')}
 
 
 // ── Write APIs (TSD Claude Plan 3, TR3-2.5) ─────────────────────────────────────────────────────────────────
@@ -234,7 +234,9 @@ export async function body(req){let s='';for await(const c of req)s+=c;if(s.leng
 // (Bearer CRON_SECRET). Agents and cron act for the owner account, resolved server-side — never from the request.
 export function bearer(req){const h=String(req.headers.authorization||'');return h.startsWith('Bearer ')?h.slice(7).trim():''}
 export async function ownerId(db=sql){const r=await db.query("SELECT id FROM wealth_users WHERE role='admin' ORDER BY created_at LIMIT 1");return r[0]?.id||null}
-export async function authorize(req,{ingest=true,cron=false,session=true}={},env=process.env){
+// `user:true` opens a route to any signed-in user, acting on THEIR OWN data (who.uid is the session user, never the owner).
+// Agents and cron still act only for the owner; routes without `user:true` stay owner-only.
+export async function authorize(req,{ingest=true,cron=false,session=true,user=false}={},env=process.env){
  const t=bearer(req);
  if(t){
   const ingestSecret=String(env.WEALTH_INGEST_SECRET||'').trim(),cronSecret=String(env.CRON_SECRET||'').trim();
@@ -249,7 +251,8 @@ export async function authorize(req,{ingest=true,cron=false,session=true}={},env
  if(!session)return {status:401,error:'Bad or missing token'};
  const uid=await sessionUser(req);if(!uid)return {status:401,error:'Sign in required'};
  const [u]=await sql.query('SELECT role FROM wealth_users WHERE id=$1',[uid]);
- return u?.role==='admin'?{uid,actor:'owner'}:{status:403,error:'Owner only'};
+ if(u?.role==='admin')return {uid,actor:'owner'};
+ return u&&user?{uid,actor:'user'}:{status:403,error:'Owner only'};
 }
 // Run statements in one database transaction. `stmts` = [[text, params], …]; returns one row array per statement.
 // Neon's HTTP driver runs the batch as a single transaction; test adapters may provide txBatch themselves.
