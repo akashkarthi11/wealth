@@ -18,11 +18,14 @@ export const round8 = x => Math.round(x * 1e8) / 1e8;
 export const round2 = x => Math.round(x * 100) / 100;   // banks credit whole paise
 export const endOfIstDay = d => Date.parse(d + 'T23:59:59+05:30');
 
+// A balance the interest accrues from: verified, or one the assistant read from a screenshot / the owner accepted a transaction into
+// (status 'reported', entered_by agent or accept) - those wait in Data quality for Confirm and are trusted until Rejected (0028).
+export const isBase = b => b.status === 'verified' || (b.status === 'reported' && (b.entered_by === 'agent' || b.entered_by === 'accept'));
 // Daily-credited products (Slice Savings, Atom): balance after day `through` = latest verified balance + interest
 // credited on each day from the verified balance's IST date through `through` (each day rounded to paise).
 // null when nothing was credited after the verified balance, or a verified balance is already newer.
 export function estimatedBalance({ balances = [], dayTotals = new Map(), through }) {
-  const base = balances.filter(b => b.status === 'verified').sort((x, y) => new Date(y.as_of) - new Date(x.as_of))[0];
+  const base = balances.filter(isBase).sort((x, y) => new Date(y.as_of) - new Date(x.as_of))[0];
   if (!base || new Date(base.as_of).getTime() >= endOfIstDay(through)) return null;
   const from = istDay(new Date(base.as_of).getTime());
   const days = [...dayTotals.entries()].filter(([d]) => d >= from && d <= through).sort(([a], [b]) => a.localeCompare(b));
@@ -42,7 +45,7 @@ export function rateFor(rates, d) {
 // Savings principal for day d: newest verified balance before the end of d and no older than 2 days before d.
 export function savingsPrincipal(balances, d) {
   const end = startOfIstDay(d) + DAY, oldest = startOfIstDay(d) - STALE_PRINCIPAL_DAYS * DAY;
-  const b = balances.filter(x => x.status === 'verified' && new Date(x.as_of).getTime() < end)
+  const b = balances.filter(x => isBase(x) && new Date(x.as_of).getTime() < end)
     .sort((x, y) => new Date(y.as_of) - new Date(x.as_of))[0];
   if (!b) return { problem: 'no verified balance' };
   if (new Date(b.as_of).getTime() < oldest) return { problem: 'stale balance', asOf: new Date(b.as_of).toISOString() };
@@ -96,7 +99,7 @@ export function planAccrual({ kind, balances = [], rates = [], terms = null, led
     from = last ? addDays(last, 1) : terms.bookedOn;
     if (addDays(through, -FD_MAX_DAYS) > from) from = addDays(through, -FD_MAX_DAYS);
   } else {
-    const firstVerified = balances.filter(b => b.status === 'verified').map(b => istDay(new Date(b.as_of).getTime())).sort()[0];
+    const firstVerified = balances.filter(isBase).map(b => istDay(new Date(b.as_of).getTime())).sort()[0];
     from = last ? addDays(last, 1) : firstVerified;
     if (!from) return { status: 'stale_balance', rows, skipped: [{ day: through, reason: 'no verified balance' }], last };
     if (addDays(through, -MAX_CATCH_UP_DAYS) > from) from = addDays(through, -MAX_CATCH_UP_DAYS);
@@ -173,7 +176,7 @@ export async function runAccrual(uid, { db = sql, now = Date.now(), dryRun = fal
     const [rates, balances, ledger] = await Promise.all([
       db.query(`SELECT id, annual_rate::float8 AS annual_rate, effective_from::text AS effective_from, effective_to::text AS effective_to, source_url
         FROM wealth_interest_rates WHERE product_id=$1 OR (product_id IS NULL AND product_key=$2)`, [l.product_id, l.product_key]),
-      db.query(`SELECT as_of, balance::float8 AS balance, status FROM wealth_account_balances WHERE account_id=$1 AND as_of > $2::timestamptz ORDER BY as_of`,
+      db.query(`SELECT as_of, balance::float8 AS balance, status, entered_by FROM wealth_account_balances WHERE account_id=$1 AND rejected_at IS NULL AND as_of > $2::timestamptz ORDER BY as_of`,
         [l.account_id, new Date(now - (MAX_CATCH_UP_DAYS + 5) * DAY).toISOString()]),
       db.query(`SELECT id, accrual_date::text AS accrual_date, revision, interest_amount::float8 AS interest_amount, calculation_status, entry_type
         FROM wealth_interest_ledger WHERE user_id=$1 AND account_key=$2 AND product_key=$3 AND partition_key=$4`, [uid, l.account_key, l.product_key, l.partition_key]),
@@ -204,7 +207,7 @@ export async function runAccrual(uid, { db = sql, now = Date.now(), dryRun = fal
         const [stored] = await withActor(db, actor, [
           // One rolling estimate per verified balance: move the estimate that follows the latest verified balance forward
           // (it is derived data — verified balance + ledger — so no information is lost); insert only when there is none.
-          [`WITH base AS (SELECT max(as_of) AS v FROM wealth_account_balances WHERE account_id = $1 AND status = 'verified'),
+          [`WITH base AS (SELECT max(as_of) AS v FROM wealth_account_balances WHERE account_id = $1 AND rejected_at IS NULL AND (status = 'verified' OR (status = 'reported' AND entered_by IN ('agent', 'accept')))),
             upd AS (UPDATE wealth_account_balances b SET as_of = $2, balance = $3, note = $4 FROM base
                     WHERE b.account_id = $1 AND b.status = 'estimated' AND b.as_of > coalesce(base.v, '-infinity'::timestamptz) AND b.as_of < $2
                       AND b.as_of = (SELECT max(as_of) FROM wealth_account_balances WHERE account_id = $1 AND status = 'estimated')

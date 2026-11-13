@@ -1,4 +1,5 @@
-import { json } from './_lib.js';
+import { json, sql, sessionUser } from './_lib.js';
+import { menusForRole, routeAllowed, guardedRoute, adminOnlyRoute } from './_roles.js';
 
 // The only Vercel Function in this project. The Hobby plan allows at most 12 functions per deployment, so every
 // /api/<name> URL is rewritten here (vercel.json) and dispatched to its handler in api/_routes/ (folders starting
@@ -10,6 +11,11 @@ export const ROUTES = {
   'clear-session': () => import('./_routes/clear-session.js'),
   'dashboard': () => import('./_routes/dashboard.js'),
   'data-quality': () => import('./_routes/data-quality.js'),
+  'roles': () => import('./_routes/roles.js'),
+  'uploads': () => import('./_routes/uploads.js'),
+  'transaction-accept': () => import('./_routes/transaction-accept.js'),
+  'account-offers': () => import('./_routes/account-offers.js'),
+  'offer-earnings': () => import('./_routes/offer-earnings.js'),
   'health': () => import('./_routes/health.js'),
   'ledger': () => import('./_routes/ledger.js'),
   'planned-bills': () => import('./_routes/planned-bills.js'),
@@ -76,6 +82,14 @@ export default async function handler(req, res) {
   if (!load) return json(res, 404, { error: 'Not found' });
   req.url = cleanUrl;            // handlers see the original path and query
   req.route = route;             // shared modules (interest, email-imports) branch on the sub-path
+  // Role management (0027): a signed-in non-admin cannot call the data behind a menu their role does not have.
+  if (guardedRoute(route) || adminOnlyRoute(route)) {
+    const uid = await sessionUser(req).catch(() => null);
+    if (uid) {
+      const [u] = await sql.query('SELECT role FROM wealth_users WHERE id=$1', [uid]);
+      if (u && u.role !== 'admin' && (adminOnlyRoute(route) || !routeAllowed(route, await menusForRole(u.role).catch(() => null)))) return json(res, 403, { error: 'Your role cannot open this menu.' });
+    }
+  }
   const mod = await load();
   return mod.default(req, res);
 }

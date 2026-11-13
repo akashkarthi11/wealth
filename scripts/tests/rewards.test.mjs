@@ -172,7 +172,7 @@ test('reward alerts (ready / near / expiring) and the dashboard tile', () => {
 test('Rewards page: grouped by bank/app, account chips, compact cards, filters, scheme, update form with account select', () => {
   const src = readFileSync(new URL('../../app.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   const block = src.slice(src.indexOf('// Rewards page (2026-11-11'), src.indexOf('// Activity page (2026-11-11)'));
-  const ctx = { esc: s => String(s ?? ''), money: v => '₹' + Number(v).toFixed(2), $: () => null, api: async () => ({}), Number, String, Date, Math, Object, JSON, Array, Set, FormData: class {},
+  const ctx = { ofCall: () => '', esc: s => String(s ?? ''), money: v => '₹' + Number(v).toFixed(2), $: () => null, api: async () => ({}), Number, String, Date, Math, Object, JSON, Array, Set, FormData: class {},
     accounts: [{ id: 'acc-slice', bank_name: 'Slice', account_name: 'Slice Savings', masked_identifier: '••3731' }, { id: 'acc-roar', bank_name: 'Roarbank', account_name: 'Roarbank Credit Card' }] };
   vm.runInNewContext(block + ';globalThis.t={rewardsPageHtml,rewardsForBankHtml,set:d=>{rewardsData=d},setOpen:id=>{rewardsOpen=id},setFilter:f=>{rewardsFilter=f}};', ctx);
   const d = { month: '2026-11', totals: { value: 1428.14, valuedPrograms: 2, unvaluedPrograms: 2 }, cashback: { month: 450, year: 3692.85, all_time: 3698.55, count: 46, categories: [{ category: 'Cashback', n: 19, amount: 732.7, last: '2026-11-06' }] },

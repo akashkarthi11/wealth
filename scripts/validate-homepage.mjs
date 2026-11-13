@@ -2,9 +2,10 @@ import { readFileSync, existsSync, mkdirSync, copyFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
 const html = readFileSync('index.html', 'utf8');
-const js = readFileSync('app.js', 'utf8');
+const js = readFileSync('app.js', 'utf8') + ' ' + readFileSync('offers.js', 'utf8');
 
-const syntax = spawnSync(process.execPath, ['--check', 'app.js'], { encoding: 'utf8' });
+const syntaxOf = file => spawnSync(process.execPath, ['--check', file], { encoding: 'utf8' });
+const syntax = [syntaxOf('app.js'), syntaxOf('offers.js')].find(r => r.status !== 0) || { status: 0 };
 if (syntax.status !== 0) {
   process.stderr.write(syntax.stderr || 'app.js syntax validation failed\n');
   process.exit(1);
@@ -12,7 +13,7 @@ if (syntax.status !== 0) {
 
 const ids = new Set([...html.matchAll(/id=["']([^"']+)["']/g)].map(m => m[1]));
 const refs = new Set([...js.matchAll(/[$][(]["']([^"']+)["'][)]/g)].map(m => m[1]));
-const runtimeGeneratedIds = new Set(['fdMsg', 'activitySearch', 'activityKind', 'activityAccount', 'activityFrom', 'activityTo', 'activityCount', 'activityRows', 'activityFilterBadge', 'activityActiveFilters', 'activityClearAll', 'activityAdvancedFilters', 'activityFilterToggle', 'activitySummary', 'recordsList', 'recordsSearch', 'rewardsBox', 'lendingBox', 'splitOverlay']); // Elements created by app.js when their feature view is rendered.
+const runtimeGeneratedIds = new Set(['fdMsg', 'offerOverlay', 'rolesBox', 'pendingTx', 'offersBox', 'uploadBox', 'uploadSaved', 'uploadAccount', 'uploadFile', 'uploadPw', 'rmCount', 'activitySearch', 'activityKind', 'activityAccount', 'activityFrom', 'activityTo', 'activityCount', 'activityRows', 'activityFilterBadge', 'activityActiveFilters', 'activityClearAll', 'activityAdvancedFilters', 'activityFilterToggle', 'activitySummary', 'recordsList', 'recordsSearch', 'rewardsBox', 'lendingBox', 'splitOverlay']); // Elements created by app.js when their feature view is rendered.
 const missing = [...refs].filter(id => !ids.has(id) && !runtimeGeneratedIds.has(id));
 if (missing.length) {
   console.error('Homepage is missing HTML elements referenced by app.js:', missing.join(', '));
@@ -36,7 +37,7 @@ for (const required of ['auth', 'app', 'loginTab', 'authForm', 'viewContent']) {
 }
 
 mkdirSync('public', { recursive: true });
-for (const file of ['index.html', 'app.js', 'style.css']) {
+for (const file of ['index.html', 'app.js', 'offers.js', 'style.css']) {
   copyFileSync(file, 'public/' + file);
 }
 

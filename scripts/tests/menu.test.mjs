@@ -12,11 +12,11 @@ const viewsIn = s => [...s.matchAll(/data-view="([^"]+)"/g)].map(m => m[1]);
 test('desktop menu: Money · Activity · Tools, in that order', () => {
   const groups = [...nav.matchAll(/<div class="nav-group" aria-label="([^"]+)">([\s\S]*?)<\/div>/g)].map(m => [m[1], viewsIn(m[2])]);
   assert.deepEqual(groups, [
-    ['Money', ['overview', 'banks', 'investments', 'interest', 'rewards', 'lending']],
-    ['Activity', ['transactions', 'alerts', 'subscriptions']],
+    ['Money', ['overview', 'banks', 'investments', 'interest', 'rewards', 'lending', 'offers']],
+    ['Activity', ['transactions', 'alerts', 'subscriptions', 'upload']],
   ]);
   const tools = viewsIn(nav.match(/id="toolsMenu"[\s\S]*$/)[0]);
-  assert.deepEqual(tools, ['stock-advisor', 'angel-one', 'other', 'data-quality']);
+  assert.deepEqual(tools, ['stock-advisor', 'angel-one', 'other', 'data-quality', 'settings']);
   assert.match(nav, /data-view="data-quality"[^>]*data-owner-only/, 'data quality is owner-only');
 });
 

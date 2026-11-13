@@ -15,6 +15,8 @@ This file contains the user's instructions to the AI assistant. Read and follow 
 - Do not update balances as part of transaction insertion.
 - Only update a balance when the user explicitly requests it or a specific authorized workflow requires it.
 - Use `verified` only when supported by a bank screenshot, bank statement, or equivalent direct bank evidence.
+- **Change 2026-11-14:** a balance you write from a screenshot (Bearer ingest) is stored by the app as `reported`, not `verified`, even if you send `verified`. It waits in Data quality for the owner to Confirm or Reject. Do not try to work around this. Interest still starts from it until it is rejected.
+- **Change 2026-11-14:** new transactions are saved as `pending`. The owner accepts them in the app (Transactions, "Waiting for review"); accepting writes the new balance on the account. You still must not change balances when inserting transactions.
 - Use `stale` for an estimate, including a calculated balance based on an earlier balance and later transactions.
 - Never use `pending_reconciliation`.
 - Never describe an estimate as verified. Preserve the evidence timestamp and explain the estimate where the schema supports a note.
@@ -30,6 +32,12 @@ This file contains the user's instructions to the AI assistant. Read and follow 
   row per account (Slice Savings, Atom) and updates that same row every night; a new row starts each month.
 - If an older scheduled prompt has an "interest accrual" or "interest credit" step, skip it — report only.
 - The current scheduled-task prompts are in [`task.md`](task.md) (daily check). Use those, not older copies.
+
+## 2b. Offers and cashback — the app works out the expectation, you record only what really arrived
+- The owner keeps the offers of each account in the app (Account offers, or "+ Add offer" on the Rewards page). When the owner accepts a payment, the app applies the offers that match it by itself: cashback is stored as **expected** on that payment, points are counted against their reward program.
+- **Never** create an income transaction, a reward event or a balance for an expected cashback or for points an offer should earn. That would count the same money twice.
+- When the real cashback credit arrives (statement, e-mail, screenshot), record it as an income transaction on the account that received it, as before (category "Credit card cashback" or "Cashback", with a reference when there is one). The app links it to the expected cashback on its own, or the owner links it in Rewards.
+- Reward-point balances still come from screenshots (`verified`). Points earned by offers are shown by the app as an estimate until the next balance.
 
 ## 3. Production and Development database safety
 - Treat Production as protected. Do not alter Production during a Development migration or test.

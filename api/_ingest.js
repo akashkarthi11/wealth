@@ -147,20 +147,22 @@ async function ownAccount(db, uid, accountId) {
 export async function recordBalance(uid, b, { db = sql, actor = 'owner', dryRun = false, now = Date.now() } = {}) {
   const a = await ownAccount(db, uid, b?.accountId);
   if (a.status !== 'active' || a.valuation !== 'balance') throw httpError(400, 'Balances are recorded only on active cash, deposit, provident-fund or liability accounts');
-  const balance = num(b.balance), asOf = when(b.asOf || new Date(now).toISOString()), status = String(b.status || 'verified');
+  const balance = num(b.balance), asOf = when(b.asOf || new Date(now).toISOString()), asked = String(b.status || 'verified');
   if (!Number.isFinite(balance) || Math.abs(balance) > 1e12) throw httpError(400, 'balance must be a number');
   if (!notFuture(asOf, now)) throw httpError(400, 'asOf must be a date-time, not in the future');
-  if (!['verified', 'reported', 'pending_reconciliation'].includes(status)) throw httpError(400, 'status must be verified, reported or pending_reconciliation');
+  if (!['verified', 'reported', 'pending_reconciliation'].includes(asked)) throw httpError(400, 'status must be verified, reported or pending_reconciliation');
+  // A balance written by the assistant (agent) is never stored as verified (owner, 2026-11-14): it is 'reported' and waits in Data quality for Confirm or Reject.
+  const status = actor === 'agent' && asked === 'verified' ? 'reported' : asked;
   const note = b.note ? String(b.note).slice(0, 300) : null;
   if (dryRun) return { dryRun, accountId: a.id, wouldStore: { balance, asOf: asOf.toISOString(), status } };
   // Bank accounts are also shown by the legacy dashboard: keep its columns in step for verified, newer balances.
-  const legacy = ['savings', 'current'].includes(a.subtype_code) && status === 'verified';
-  const stmts = [[`INSERT INTO wealth_account_balances (account_id, as_of, balance, status, note) VALUES ($1,$2,$3,$4,$5)
-    ON CONFLICT (account_id, as_of) DO NOTHING RETURNING as_of`, [a.id, asOf.toISOString(), balance, status, note]]];
-  if (legacy) stmts.push([`UPDATE wealth_accounts SET current_balance=$3, balance_as_of=$4, balance_status='verified', updated_at=now()
-    WHERE user_id=$1 AND id=$2 AND (balance_as_of IS NULL OR balance_as_of < $4) RETURNING id`, [uid, a.id, balance, asOf.toISOString()]]);
+  const legacy = ['savings', 'current'].includes(a.subtype_code) && (status === 'verified' || (actor === 'agent' && asked === 'verified'));
+  const stmts = [[`INSERT INTO wealth_account_balances (account_id, as_of, balance, status, note, entered_by) VALUES ($1,$2,$3,$4,$5,$6)
+    ON CONFLICT (account_id, as_of) DO NOTHING RETURNING as_of`, [a.id, asOf.toISOString(), balance, status, note, String(actor || 'external')]]];
+  if (legacy) stmts.push([`UPDATE wealth_accounts SET current_balance=$3, balance_as_of=$4, balance_status=$5, updated_at=now()
+    WHERE user_id=$1 AND id=$2 AND (balance_as_of IS NULL OR balance_as_of < $4) RETURNING id`, [uid, a.id, balance, asOf.toISOString(), status === 'verified' ? 'verified' : 'stale']]);
   const [ins, upd = []] = await withActor(db, actor, stmts);
-  return { accountId: a.id, stored: ins.length > 0, result: ins.length ? 'stored' : 'already_stored', legacyUpdated: upd.length > 0 };
+  return { accountId: a.id, stored: ins.length > 0, result: ins.length ? 'stored' : 'already_stored', status, needsReview: actor === 'agent', legacyUpdated: upd.length > 0 };
 }
 
 export async function updateHolding(uid, b, { db = sql, actor = 'owner', dryRun = false, now = Date.now() } = {}) {
@@ -255,8 +257,11 @@ export async function markDuplicate(uid, b, { db = sql, actor = 'owner' } = {}) 
     if (kept.duplicate_of) throw httpError(409, 'The kept transaction is itself marked as a duplicate');
     if (kept.kind !== tx.kind || Number(kept.amount) !== Number(tx.amount)) throw httpError(400, 'Only a transaction with the same kind and amount can be a duplicate');
   }
-  await withActor(db, actor, [[`UPDATE wealth_transactions SET duplicate_of=$3, duplicate_marked_at=CASE WHEN $3::uuid IS NULL THEN NULL ELSE now() END
-    WHERE user_id=$1 AND id=$2`, [uid, tx.id, keep]]]);
+  // A duplicate payment earns nothing: its expected rewards are cancelled (kept, no longer counted). Unmarking does not bring them back; apply offers again from the transaction.
+  await withActor(db, actor, [
+    [`UPDATE wealth_transactions SET duplicate_of=$3, duplicate_marked_at=CASE WHEN $3::uuid IS NULL THEN NULL ELSE now() END WHERE user_id=$1 AND id=$2`, [uid, tx.id, keep]],
+    [`UPDATE wealth_offer_uses SET status='cancelled', credited_transaction_id=NULL, credited_on=NULL, updated_at=now() WHERE user_id=$1 AND transaction_id=$2 AND status <> 'cancelled' AND $3::uuid IS NOT NULL RETURNING id`, [uid, tx.id, keep]],
+  ]);
   return { transactionId: tx.id, duplicateOf: keep };
 }
 

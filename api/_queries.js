@@ -1,6 +1,7 @@
 // Shared, named queries (TSD §11). Handlers call these instead of repeating SQL.
 import { sql } from './_lib.js';
 import { splitsForAccount } from './_splits.js';
+import { earningsForTransactions } from './_offers.js';
 
 const TX_COLUMNS = `t.id,t.kind,t.category,t.description,t.amount,t.account_id,
   COALESCE(NULLIF(trim(a.account_name || ' ' || COALESCE(a.masked_identifier,'')),''),NULLIF(t.account,''),'Unassigned') AS account,
@@ -24,6 +25,15 @@ export function decodeCursor(cursor) {
   } catch { return null; }
 }
 
+// What offers earned on each payment (0031): cashback expected / received, points earned. Shown on the Transactions page.
+// A database without 0031 yet has none.
+async function attachRewards(uid, rows, db) {
+  let by = new Map();
+  try { by = await earningsForTransactions(uid, rows.map(r => r.id), { db }); }
+  catch (e) { if (e?.code !== '42703' && e?.code !== '42P01') throw e; }
+  for (const r of rows) r.rewards = by.get(r.id) || [];
+}
+
 // Keyset pagination, newest first (TR-3.2). Stable under inserts because the key is unique.
 export async function pageTransactions(uid, { cursor = null, limit = PAGE_DEFAULT } = {}, db = sql) {
   const n = Math.min(Math.max(Number(limit) || PAGE_DEFAULT, 1), PAGE_MAX);
@@ -34,6 +44,7 @@ export async function pageTransactions(uid, { cursor = null, limit = PAGE_DEFAUL
         ORDER BY t.occurred_on DESC,t.created_at DESC,t.id DESC LIMIT $5`, [uid, ...after, n])
     : await db.query(`SELECT ${TX_COLUMNS} FROM wealth_transactions t LEFT JOIN wealth_accounts a ON a.user_id=t.user_id AND a.id=t.account_id
         WHERE t.user_id=$1 ORDER BY t.occurred_on DESC,t.created_at DESC,t.id DESC LIMIT $2`, [uid, n]);
+  await attachRewards(uid, rows, db);
   return { transactions: rows, nextCursor: rows.length === n ? encodeCursor(rows[rows.length - 1]) : null };
 }
 
@@ -103,7 +114,7 @@ export async function accountHierarchyRows(uid, db = sql) {
       throw e;
     }),
     db.query(`SELECT fx_to_inr::float8 AS rate, fetched_at AS as_of FROM wealth_instrument_prices
-      WHERE fx_to_inr > 0 ORDER BY fetched_at DESC LIMIT 1`),
+      WHERE fx_to_inr > 0 AND rejected_at IS NULL ORDER BY fetched_at DESC LIMIT 1`),
   ]);
   const moves = await cardMovesSinceBalance(uid, db).catch(() => []);
   return { accounts, balances: applyCardMoves(balances, moves), holdings, marketFx: fx[0] || null };
@@ -124,7 +135,7 @@ export async function cardMovesSinceBalance(uid, db = sql) {
     FROM wealth_transactions t
     JOIN wealth_accounts a ON a.id = t.account_id AND a.user_id = $1 AND a.subtype_code = 'credit_card'
     JOIN wealth_v_latest_balances b ON b.account_id = t.account_id
-    WHERE t.user_id = $1 AND t.duplicate_of IS NULL
+    WHERE t.user_id = $1 AND t.duplicate_of IS NULL AND coalesce(t.review_status, '') <> 'dismissed'
       AND (t.occurred_on > (b.as_of AT TIME ZONE 'Asia/Kolkata')::date
            OR (t.occurred_on = (b.as_of AT TIME ZONE 'Asia/Kolkata')::date AND t.created_at > b.as_of))
     GROUP BY t.account_id`, [uid]);
@@ -203,7 +214,7 @@ export async function legacyPositionRows(uid, db = sql){
   LEFT JOIN wealth_instruments ins ON ins.asset_class=a.asset_class
    AND ins.symbol=coalesce(p.ticker,CASE WHEN a.asset_class='precious_metal' THEN upper(p.record_type) ELSE p.name END)
   LEFT JOIN LATERAL (SELECT ip.price,ip.as_of FROM wealth_instrument_prices ip
-   WHERE ip.instrument_id=ins.id AND mp.source_timestamp IS NOT NULL
+   WHERE ip.instrument_id=ins.id AND ip.rejected_at IS NULL AND mp.source_timestamp IS NOT NULL
      AND ip.as_of < (date_trunc('day',mp.source_timestamp AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata')
    ORDER BY ip.as_of DESC,ip.fetched_at DESC LIMIT 1) pc ON true`;
  try{
@@ -242,7 +253,7 @@ export async function accountDetail(uid, accountId, db = sql, { now = Date.now()
   const month = new Date(now + 5.5 * 3600e3).toISOString().slice(0, 7);
   const notDup = await db.query(`SELECT 1 FROM information_schema.columns WHERE table_name='wealth_transactions' AND column_name='duplicate_of'`).then(r => r.length ? ' AND t.duplicate_of IS NULL' : '');
   const [history, flows, transactions, interest, upcoming, counts] = await Promise.all([
-    db.query(`SELECT as_of, balance::float8 AS balance, status, note FROM wealth_account_balances WHERE account_id = $1 ORDER BY as_of DESC LIMIT 30`, [acc.id]),
+    db.query(`SELECT as_of, balance::float8 AS balance, status, note FROM wealth_account_balances WHERE account_id = $1 AND rejected_at IS NULL ORDER BY as_of DESC LIMIT 30`, [acc.id]),
     db.query(`SELECT to_char(t.occurred_on, 'YYYY-MM') AS month, t.kind, sum(t.amount)::float8 AS total, count(*)::int AS n
       FROM wealth_transactions t WHERE t.user_id = $1 AND t.account_id = $2${notDup} AND t.occurred_on >= (date_trunc('month', (now() AT TIME ZONE 'Asia/Kolkata')::date) - interval '5 months')
       GROUP BY 1, 2 ORDER BY 1 DESC, 2`, [uid, acc.id]),
