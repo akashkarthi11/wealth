@@ -121,23 +121,6 @@ test('Monies tiers (1% → 1.5% at 3,00,000 → 2% at 5,00,000) and HDFC 5% on S
   assert.deepEqual([m2.rate, m2.next.at, m2.unitsPerRupee], [0.015, 500000, 1.5]);
 });
 
-test('Slice Monies adds estimated eligible card spend after the latest recorded balance to effective units and value', async () => {
-  const { db, a, uid } = await setup();
-  const REPAIR = readFileSync(new URL('../db/repairs/2026-11-11-reward-schemes-tiers-and-swiggy.sql', import.meta.url), 'utf8');
-  await db.exec(REPAIR);
-  const [cc] = await a.query(`SELECT id FROM wealth_accounts WHERE bank_name='Slice' AND account_type='credit_card'`);
-  const [sv] = await a.query(`INSERT INTO wealth_accounts(user_id,account_key,bank_name,account_name,account_type,subtype_code,currency,masked_identifier)
-    VALUES($1,'slice-sv','Slice','Slice Savings','savings','savings','INR','••3731') RETURNING id`, [uid]);
-  await a.query(`INSERT INTO wealth_transactions(user_id,kind,category,description,amount,account,account_id,occurred_on) VALUES
-    ($1,'expense','Shopping','After baseline purchase',1000,'',$2,'2026-11-11'),
-    ($1,'transfer','Card payment','Slice bill payment',5000,'',$2,'2026-11-11'),
-    ($1,'expense','Food','Slice savings spend',700,'',$3,'2026-11-11')`, [uid, cc.id, sv.id]);
-  const o = await rewardsOverview(uid, { db: a, now: NOW });
-  const m = o.programs.find(p => p.program_key === 'slice-monies');
-  assert.deepEqual([m.recordedUnits, m.schemeInfo.accruedSpend, m.schemeInfo.accruedUnits], [142378, 1000, 10]);
-  assert.deepEqual([m.units, m.value], [142388, 1423.88], 'effective balance includes estimated Monies without changing the recorded snapshot');
-});
-
 test('every program linked to an account; Spark keeps counting its account-less credits; link can be changed', async () => {
   const { db, a, uid } = await setup();
   const add = (key, bank, name, type, mi) => a.query(`INSERT INTO wealth_accounts(user_id,account_key,bank_name,account_name,account_type,subtype_code,currency,masked_identifier,status)
@@ -189,7 +172,7 @@ test('reward alerts (ready / near / expiring) and the dashboard tile', () => {
 test('Rewards page: grouped by bank/app, account chips, compact cards, filters, scheme, update form with account select', () => {
   const src = readFileSync(new URL('../../app.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   const block = src.slice(src.indexOf('// Rewards page (2026-11-11'), src.indexOf('// Activity page (2026-11-11)'));
-  const ctx = { esc: s => String(s ?? ''), money: v => '₹' + Number(v).toFixed(2), $: () => null, api: async () => ({}), Number, String, Date, Math, Object, JSON, Array, Set, FormData: class {},
+  const ctx = { ofCall: () => '', esc: s => String(s ?? ''), money: v => '₹' + Number(v).toFixed(2), $: () => null, api: async () => ({}), Number, String, Date, Math, Object, JSON, Array, Set, FormData: class {},
     accounts: [{ id: 'acc-slice', bank_name: 'Slice', account_name: 'Slice Savings', masked_identifier: '••3731' }, { id: 'acc-roar', bank_name: 'Roarbank', account_name: 'Roarbank Credit Card' }] };
   vm.runInNewContext(block + ';globalThis.t={rewardsPageHtml,rewardsForBankHtml,set:d=>{rewardsData=d},setOpen:id=>{rewardsOpen=id},setFilter:f=>{rewardsFilter=f}};', ctx);
   const d = { month: '2026-11', totals: { value: 1428.14, valuedPrograms: 2, unvaluedPrograms: 2 }, cashback: { month: 450, year: 3692.85, all_time: 3698.55, count: 46, categories: [{ category: 'Cashback', n: 19, amount: 732.7, last: '2026-11-06' }] },

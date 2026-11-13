@@ -1,5 +1,5 @@
 import { sql, withActor, isUuid, httpError } from './_lib.js';
-import { activeOffersFor, matchOffers, recordOfferUses } from './_offers.js';
+import { activeOffersFor, matchOffers, applyOffers } from './_offers.js';
 
 // Accept a transaction (0029, owner 2026-11-14). New transactions wait as 'pending'. Accept writes a new balance on the source
 // account (last balance plus or minus the amount, status 'reported', entered_by 'accept') and shows the account's offers that
@@ -33,7 +33,7 @@ const SELECT = `SELECT t.id, t.kind, t.category, t.description, t.amount::float8
 export async function pendingTransactions(uid, { db = sql } = {}) {
   const rows = await db.query(`${SELECT} WHERE t.user_id = $1 AND t.review_status = 'pending' AND t.duplicate_of IS NULL
     ORDER BY t.occurred_on DESC, t.created_at DESC LIMIT 100`, [uid]);
-  const { offers, uses } = await activeOffersFor(uid, [...new Set(rows.map(r => r.account_id))], { db });
+  const { offers, uses, programs } = await activeOffersFor(uid, [...new Set(rows.map(r => r.account_id))], { db });
   return rows.map(r => {
     const d = signedDelta({ acctCategory: r.acct_category, valuation: r.valuation, kind: r.kind, category: r.category, amount: r.amount });
     const can = d.delta != null && r.balance != null;
@@ -42,12 +42,12 @@ export async function pendingTransactions(uid, { db = sql } = {}) {
       account: [r.bank_name, r.account_name].filter(Boolean).join(' · ') + (r.masked_identifier ? ' ' + r.masked_identifier : ''),
       balance: r.balance, delta: d.delta, after: can ? r2(r.balance + d.delta) : null,
       cannot: d.delta == null ? d.reason : r.balance == null ? 'Record a balance for this account first, then accept.' : null,
-      owes: r.acct_category === 'LIABILITY', offers: matchOffers(offers, r, uses),
+      owes: r.acct_category === 'LIABILITY', offers: matchOffers(offers, r, uses, programs),
     };
   });
 }
 
-export async function acceptTransaction(uid, { transactionId, usedOfferIds = [] } = {}, { db = sql, actor = 'user', now = Date.now() } = {}) {
+export async function acceptTransaction(uid, { transactionId, applyOfferIds, usedOfferIds } = {}, { db = sql, actor = 'user', now = Date.now() } = {}) {
   if (!isUuid(transactionId)) throw httpError(400, 'transactionId must be a transaction id');
   const [t] = await db.query(`${SELECT} WHERE t.user_id = $1 AND t.id = $2`, [uid, transactionId]);
   if (!t) throw httpError(404, 'Transaction not found');
@@ -71,10 +71,25 @@ export async function acceptTransaction(uid, { transactionId, usedOfferIds = [] 
         AND EXISTS (SELECT 1 FROM wealth_transactions WHERE id=$3 AND review_status='accepted' AND reviewed_at=$4::timestamptz) RETURNING id`, [t.account_id, uid, transactionId, at]],
   ]);
   if (!ins.length) throw httpError(409, 'This transaction was already handled.');
-  const { offers: all, uses } = await activeOffersFor(uid, [t.account_id], { db });
-  const offers = matchOffers(all, t, uses);
-  const usedOffers = await recordOfferUses(uid, t, usedOfferIds, { db });
-  return { accepted: true, before: t.balance, delta: d.delta, after: ins[0].balance, offers, usedOffers };
+  // Rewards: the offers of this account that match are applied now (the automatic ones, or exactly the ones the owner left switched on).
+  // A failure here never undoes the accepted balance; the owner can apply the offers again from the transaction.
+  let offerResult = { applied: [], matched: [] }, offerError = null;
+  try { offerResult = await applyOffers(uid, t, Array.isArray(applyOfferIds) ? applyOfferIds : Array.isArray(usedOfferIds) ? usedOfferIds : undefined, { db, actor }); }
+  catch (e) { offerError = e?.message || 'Offers could not be applied.'; }
+  return { accepted: true, before: t.balance, delta: d.delta, after: ins[0].balance, offers: offerResult.matched, applied: offerResult.applied, offerError };
+}
+
+// Work out and apply the offers of a payment that was already accepted (or any past payment out): for a payment accepted before the
+// offer existed, or when the owner switched an offer off and wants it back. Offers already applied to the payment are left as they are.
+export async function applyOffersToTransaction(uid, { transactionId, applyOfferIds } = {}, { db = sql, actor = 'user' } = {}) {
+  if (!isUuid(transactionId)) throw httpError(400, 'transactionId must be a transaction id');
+  const [t] = await db.query(`${SELECT} WHERE t.user_id = $1 AND t.id = $2`, [uid, transactionId]);
+  if (!t) throw httpError(404, 'Transaction not found (it needs an account)');
+  const [state] = await db.query('SELECT review_status, duplicate_of FROM wealth_transactions WHERE id=$1 AND user_id=$2', [transactionId, uid]);
+  if (state.duplicate_of || state.review_status === 'dismissed') throw httpError(409, 'Offers are not applied to a duplicate or dismissed transaction.');
+  if (state.review_status === 'pending') throw httpError(409, 'Accept the transaction first; offers are applied when it is accepted.');
+  const r = await applyOffers(uid, t, Array.isArray(applyOfferIds) ? applyOfferIds : undefined, { db, actor });
+  return { offers: r.matched, applied: r.applied };
 }
 
 export async function dismissTransaction(uid, { transactionId } = {}, { db = sql, actor = 'user', now = Date.now() } = {}) {

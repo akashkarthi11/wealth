@@ -66,7 +66,8 @@ export const ROUTE_MENUS = {
   'account-detail': ['banks'],
   'uploads': ['upload'],
   'transaction-accept': ['transactions', 'overview'],
-  'account-offers': ['offers'],
+  'account-offers': ['offers', 'rewards'],
+  'offer-earnings': ['rewards', 'transactions', 'offers', 'overview'],
 };
 // menus = null means every menu.
 export function routeAllowed(route, menus) {

@@ -257,8 +257,11 @@ export async function markDuplicate(uid, b, { db = sql, actor = 'owner' } = {}) 
     if (kept.duplicate_of) throw httpError(409, 'The kept transaction is itself marked as a duplicate');
     if (kept.kind !== tx.kind || Number(kept.amount) !== Number(tx.amount)) throw httpError(400, 'Only a transaction with the same kind and amount can be a duplicate');
   }
-  await withActor(db, actor, [[`UPDATE wealth_transactions SET duplicate_of=$3, duplicate_marked_at=CASE WHEN $3::uuid IS NULL THEN NULL ELSE now() END
-    WHERE user_id=$1 AND id=$2`, [uid, tx.id, keep]]]);
+  // A duplicate payment earns nothing: its expected rewards are cancelled (kept, no longer counted). Unmarking does not bring them back; apply offers again from the transaction.
+  await withActor(db, actor, [
+    [`UPDATE wealth_transactions SET duplicate_of=$3, duplicate_marked_at=CASE WHEN $3::uuid IS NULL THEN NULL ELSE now() END WHERE user_id=$1 AND id=$2`, [uid, tx.id, keep]],
+    [`UPDATE wealth_offer_uses SET status='cancelled', credited_transaction_id=NULL, credited_on=NULL, updated_at=now() WHERE user_id=$1 AND transaction_id=$2 AND status <> 'cancelled' AND $3::uuid IS NOT NULL RETURNING id`, [uid, tx.id, keep]],
+  ]);
   return { transactionId: tx.id, duplicateOf: keep };
 }
 

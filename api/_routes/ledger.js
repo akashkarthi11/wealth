@@ -1,4 +1,5 @@
 import {sql,schema,json,body,sessionUser,invalidateUserCaches,cachedForUser,sendCached} from '../_lib.js';
+import {deleteTransaction} from '../_offers.js';
 import {pageTransactions,PAGE_DEFAULT} from '../_queries.js';
 
 // Only the default first page is cached (by data version); later pages and custom sizes always read Neon.
@@ -42,7 +43,7 @@ export default async function handler(req,res){
  }
  if(req.method==='DELETE'){
   const id=new URL(req.url,'https://local').searchParams.get('id');if(!id||!/^[0-9a-f-]{36}$/i.test(id))return json(res,400,{error:'Transaction id required'});
-  const rows=await sql.query('DELETE FROM wealth_transactions WHERE id=$1 AND user_id=$2 RETURNING id',[id,uid]);
+  const rows=await deleteTransaction(uid,id);
   if(rows.length)await invalidateUserCaches(uid);return json(res,200,{deleted:rows.length===1})
  }
  return json(res,405,{error:'Method not allowed'});

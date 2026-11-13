@@ -1,6 +1,7 @@
 // Rewards & points (TSD Claude Plan 4, Part A). Programs, an append-only balance history and events (migration 0014).
 // ₹ value only when the program has a rate with a source; cashback paid as money is read from income transactions.
 import { sql, withActor, httpError, isUuid, isDay } from './_lib.js';
+import { listOffers, listEarnings } from './_offers.js';
 
 const r2 = x => Math.round(x * 100) / 100;
 const num = v => (v === null || v === undefined || v === '' ? NaN : Number(v));
@@ -59,45 +60,53 @@ export async function rewardsOverview(uid, { db = sql, now = Date.now() } = {}) 
     if (!(baseRate > 0) || !(perUnit > 0)) continue;
     const byAccount = s.spend_scope === 'account' && p.account_id, merchant = s.merchant ? String(s.merchant) : null;
     const [sp] = await db.query(`SELECT coalesce(sum(t.amount) FILTER (WHERE to_char(t.occurred_on,'YYYY-MM') = $3), 0)::float8 AS month,
-        coalesce(sum(t.amount) FILTER (WHERE t.occurred_on >= (now() AT TIME ZONE 'Asia/Kolkata')::date - 90), 0)::float8 AS last90,
-        coalesce(sum(t.amount) FILTER (WHERE $7::timestamptz IS NOT NULL AND t.occurred_on > ($7::timestamptz AT TIME ZONE 'Asia/Kolkata')::date), 0)::float8 AS sinceBalance
+        coalesce(sum(t.amount) FILTER (WHERE t.occurred_on >= (now() AT TIME ZONE 'Asia/Kolkata')::date - 90), 0)::float8 AS last90
       FROM wealth_transactions t JOIN wealth_accounts a ON a.id = t.account_id
       WHERE t.user_id = $1 AND t.duplicate_of IS NULL
         AND (t.kind = 'expense' OR (t.kind = 'investment' AND a.account_type = 'credit_card'))  -- a card purchase of gold etc. is a card spend too
         AND (CASE WHEN $4::uuid IS NOT NULL THEN t.account_id = $4 ELSE a.bank_name = $2 END)
         AND ($6::text IS NULL OR a.account_type = $6)
         AND ($5::text IS NULL OR (coalesce(t.category,'') || ' ' || coalesce(t.description,'')) ~* $5)`,
-      [uid, String(s.spend_bank || p.provider), month, byAccount ? p.account_id : null, merchant, s.spend_account_type ? String(s.spend_account_type) : null, p.as_of || null]).catch(() => [null]);
+      [uid, String(s.spend_bank || p.provider), month, byAccount ? p.account_id : null, merchant, s.spend_account_type ? String(s.spend_account_type) : null]).catch(() => [null]);
     const tiers = (Array.isArray(s.tiers) ? s.tiers : []).filter(t => Number(t.at) > 0 && Number(t.rate) > 0).sort((x, y) => x.at - y.at);
     const reached = p.units == null ? [] : tiers.filter(t => p.units >= Number(t.at));
     const rate = reached.length ? Number(reached[reached.length - 1].rate) : baseRate;
     const next = p.units == null ? null : tiers.find(t => Number(t.at) > p.units) || null;
     const unitsPerRupee = rate / perUnit, avgMonth = sp ? r2(sp.last90 / 3) : null;
-    const accruedSpend = sp ? r2(sp.sinceBalance || 0) : 0;
-    const accruedUnits = p.as_of && !cashProgram ? r2(accruedSpend * unitsPerRupee) : 0;
-    const effectiveUnits = p.units == null ? null : r2(p.units + accruedUnits);
-    const toNext = next ? r2(Number(next.at) - (effectiveUnits ?? p.units)) : null;
+    const toNext = next ? r2(Number(next.at) - p.units) : null;
     schemeInfo.set(p.id, { basis: 'spend', rate, baseRate, cash: cashProgram, spendBank: String(s.spend_bank || p.provider),
-      accruedSpend, accruedUnits, effectiveUnits, effectiveValue: effectiveUnits == null ? null : rewardValue(p, effectiveUnits),
-      accruedAsOf: p.as_of || null,
       spendLabel: String(s.label || (merchant ? merchant.charAt(0).toUpperCase() + merchant.slice(1) + ' orders' : (s.spend_bank || p.provider) + ' spends')), unitsPerRupee: r2(unitsPerRupee),
       tiers: [{ at: 0, rate: baseRate }].concat(tiers.map(t => ({ at: Number(t.at), rate: Number(t.rate), label: t.label || null }))),
       next: next ? { at: Number(next.at), rate: Number(next.rate), label: next.label || 'Next tier' } : null,
-      progressPct: next && effectiveUnits != null ? r2(effectiveUnits / Number(next.at) * 100) : null, toNext, toNextSpend: toNext == null ? null : r2(toNext / unitsPerRupee),
+      progressPct: next && p.units != null ? r2(p.units / Number(next.at) * 100) : null, toNext, toNextSpend: toNext == null ? null : r2(toNext / unitsPerRupee),
       monthSpend: sp ? r2(sp.month) : null, monthUnitsEst: sp ? r2(sp.month * unitsPerRupee) : null, avgMonthlySpend: avgMonth,
       monthsToNext: toNext != null && avgMonth > 0 ? Math.ceil(toNext / (avgMonth * unitsPerRupee)) : null });
   }
-  const list = programs.map(p => {
-    const si = schemeInfo.get(p.id) || null, effectiveUnits = si?.effectiveUnits ?? p.units;
-    return { ...p, recordedUnits: p.units, units: effectiveUnits, schemeInfo: si, cashEarned: cashEarned.get(p.id) || null,
-      value: si?.effectiveValue ?? rewardValue(p, p.units),
-    toRedeem: p.min_redeem && effectiveUnits != null ? Math.max(0, r2(p.min_redeem - effectiveUnits)) : null,
+  // Offers (0030/0031): how each program earns beyond its scheme, and what was earned on the user's payments.
+  // A database that has not applied 0031 yet simply has none (the page then looks as before).
+  const missing = e => e?.code === '42703' || e?.code === '42P01';
+  const offerData = await listOffers(uid, { db, today: new Date(now + 5.5 * 3600e3).toISOString().slice(0, 10) }).catch(e => { if (missing(e)) return { offers: [], accounts: [], programs: [] }; throw e; });
+  const earn = await listEarnings(uid, { db, limit: 30 }).catch(e => { if (missing(e)) return { earnings: [], totals: { money_expected: 0, money_received: 0, money_expected_count: 0 } }; throw e; });
+  const pointRows = await db.query(`SELECT program_id, used_on::text AS used_on, units::float8 AS units FROM wealth_offer_uses
+    WHERE user_id = $1 AND kind = 'points' AND status <> 'cancelled' AND program_id IS NOT NULL AND units IS NOT NULL`, [uid]).catch(e => { if (missing(e)) return []; throw e; });
+  const istDay = ts => new Date(new Date(ts).getTime() + 5.5 * 3600e3).toISOString().slice(0, 10);
+  // Points earned on accepted payments are an ESTIMATE on top of the last balance: only payments on a day after the balance was
+  // recorded count (the balance already includes earlier ones), so nothing is added twice. The next balance replaces the estimate.
+  const earnedBy = p => {
+    const mine = pointRows.filter(r => r.program_id === p.id), since = p.as_of ? istDay(p.as_of) : null;
+    const after = since ? mine.filter(r => r.used_on > since) : mine;
+    const units = r2(after.reduce((n, r) => n + r.units, 0));
+    return { count: after.length, units, since, estimatedUnits: p.units != null ? r2(Number(p.units) + units) : null, estimatedValue: p.units != null && p.inr_per_unit != null ? r2((Number(p.units) + units) * Number(p.inr_per_unit)) : null };
+  };
+  const offersOf = p => offerData.offers.filter(o => o.program_id === p.id || (!o.program_id && p.account_id && o.account_id === p.account_id));
+  const list = programs.map(p => ({ ...p, schemeInfo: schemeInfo.get(p.id) || null, cashEarned: cashEarned.get(p.id) || null, value: rewardValue(p, p.units),
+    toRedeem: p.min_redeem && p.units != null ? Math.max(0, r2(p.min_redeem - p.units)) : null,
     history: history.filter(h => h.program_id === p.id).map(h => ({ asOf: h.as_of, units: h.units, status: h.status })),
-    events: events.filter(e => e.program_id === p.id).slice(0, 10) };
-  });
+    events: events.filter(e => e.program_id === p.id).slice(0, 10), offers: offersOf(p), earned: earnedBy(p) }));
   const valued = list.filter(p => p.value != null);
+  const linked = new Set(list.flatMap(p => p.offers.map(o => o.id)));
   return { month, programs: list, totals: { value: r2(valued.reduce((n, p) => n + p.value, 0)), valuedPrograms: valued.length, unvaluedPrograms: list.length - valued.length },
-    cashback: { ...cash, categories: byCategory } };
+    cashback: { ...cash, categories: byCategory }, offers: offerData.offers, otherOffers: offerData.offers.filter(o => !linked.has(o.id)), earnings: earn.earnings, earningTotals: earn.totals };
 }
 
 async function ownProgram(db, uid, programId) {

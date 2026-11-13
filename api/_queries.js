@@ -1,6 +1,7 @@
 // Shared, named queries (TSD §11). Handlers call these instead of repeating SQL.
 import { sql } from './_lib.js';
 import { splitsForAccount } from './_splits.js';
+import { earningsForTransactions } from './_offers.js';
 
 const TX_COLUMNS = `t.id,t.kind,t.category,t.description,t.amount,t.account_id,
   COALESCE(NULLIF(trim(a.account_name || ' ' || COALESCE(a.masked_identifier,'')),''),NULLIF(t.account,''),'Unassigned') AS account,
@@ -24,6 +25,15 @@ export function decodeCursor(cursor) {
   } catch { return null; }
 }
 
+// What offers earned on each payment (0031): cashback expected / received, points earned. Shown on the Transactions page.
+// A database without 0031 yet has none.
+async function attachRewards(uid, rows, db) {
+  let by = new Map();
+  try { by = await earningsForTransactions(uid, rows.map(r => r.id), { db }); }
+  catch (e) { if (e?.code !== '42703' && e?.code !== '42P01') throw e; }
+  for (const r of rows) r.rewards = by.get(r.id) || [];
+}
+
 // Keyset pagination, newest first (TR-3.2). Stable under inserts because the key is unique.
 export async function pageTransactions(uid, { cursor = null, limit = PAGE_DEFAULT } = {}, db = sql) {
   const n = Math.min(Math.max(Number(limit) || PAGE_DEFAULT, 1), PAGE_MAX);
@@ -34,6 +44,7 @@ export async function pageTransactions(uid, { cursor = null, limit = PAGE_DEFAUL
         ORDER BY t.occurred_on DESC,t.created_at DESC,t.id DESC LIMIT $5`, [uid, ...after, n])
     : await db.query(`SELECT ${TX_COLUMNS} FROM wealth_transactions t LEFT JOIN wealth_accounts a ON a.user_id=t.user_id AND a.id=t.account_id
         WHERE t.user_id=$1 ORDER BY t.occurred_on DESC,t.created_at DESC,t.id DESC LIMIT $2`, [uid, n]);
+  await attachRewards(uid, rows, db);
   return { transactions: rows, nextCursor: rows.length === n ? encodeCursor(rows[rows.length - 1]) : null };
 }
 
