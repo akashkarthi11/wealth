@@ -1231,6 +1231,23 @@ b.pj-medium{color:#f5c26b}
 .of-setup-x{position:absolute;top:6px;right:8px;min-height:32px;width:32px;padding:0;border:0;background:none;color:var(--muted);font-size:20px;line-height:1}
 .of-setup-x:hover{color:#fff}
 .of-setup>div:first-of-type{padding-right:28px}
+
+/* Rewards that need a manual choice (two or more match): yellow, like a medium price jump */
+.pd-rewards.choose{border-color:#8a6d1f;background:#2a2412}
+.pd-rewards.choose .pd-rewards-head{color:#f5c26b}
+.pd-choose-hint{margin:2px 0 8px;color:#e8d29a;font-size:13px;line-height:1.5}
+.pd-yellow{color:#f5c26b;font-weight:600}
+.act-tag.reward.need{background:#3a2e0e;color:#f5c26b;border:1px solid #8a6d1f}
+.of-map{margin-top:10px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#0f1a2c;display:flex;flex-direction:column;gap:8px}
+.of-map.need{border-color:#8a6d1f;background:#2a2412}
+.of-map-head{font-weight:700;font-size:13px}
+.of-map.need .of-map-head{color:#f5c26b}
+.of-map-actions{display:flex;justify-content:flex-end}
+
+/* Cashback: the account that receives it */
+.pd-recv,.of-recv{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:4px 0 8px 44px;color:var(--muted);font-size:12px}
+.pd-recv select,.of-recv select{min-height:36px;max-width:100%;font-size:13px}
+.of-txline .of-recv{margin:6px 0 0}
 /* Interest on your accounts (2026-11-14) */
 .in-page>.chart-head{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:12px 16px}
 .in-add{min-height:40px;padding:9px 18px;font-size:13px;white-space:nowrap}

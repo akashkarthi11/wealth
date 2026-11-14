@@ -1,4 +1,4 @@
-// Interest set up by the owner (migration 0033, 2026-11-14): add a savings account with its rate per year and how often the interest is
+// Interest set up by the owner (migration 0034, 2026-11-14): add a savings account with its rate per year and how often the interest is
 // paid (daily, monthly, every 2 months, quarterly ...). The nightly run works the interest out, lists it, and adds it to the balance
 // when it is paid: daily = one "interest this month" row updated every night; periodic = one row per period, on the day it is paid.
 import test from 'node:test';
@@ -139,7 +139,7 @@ test('wiring: route, router, nightly runs every user, migration is additive and 
   assert.match(read('api/router.js'), /'interest\/accounts': \(\) => import/);
   const n = read('api/_routes/nightly.js');
   assert.match(n, /SELECT DISTINCT a\.user_id FROM wealth_interest_links/);
-  const m = read('scripts/migrations/0033_interest_accounts.sql');
+  const m = read('scripts/migrations/0034_interest_accounts.sql');
   assert.doesNotMatch(m, /\bDROP TABLE\b|\bTRUNCATE\b|DELETE FROM|DROP COLUMN/i);
   assert.match(m, /'bimonthly'/);
   assert.match(m, /UPDATE wealth_transactions SET review_status = NULL/);
