@@ -14,11 +14,19 @@ export default async function handler(req, res) {
   const out = {};
   const accrualRun = await startJob('interest-accrual');
   try {
+    // The owner, and every other user who set up an interest account (2026-11-14). One user failing does not stop the others.
     const uid = await ownerId();
+    const others = (await sql.query(`SELECT DISTINCT a.user_id FROM wealth_interest_links l JOIN wealth_accounts a ON a.id = l.account_id
+      WHERE a.status = 'active'`).catch(() => [])).map(r => r.user_id).filter(u => u && u !== uid);
     const r = uid ? await runAccrual(uid, { actor: 'cron' }) : { accounts: [] };
-    out.interest = { through: r.through, accounts: r.accounts.map(a => ({ accountKey: a.accountKey, status: a.status, rowsWritten: a.rowsWritten })) };
-    await finishJob(accrualRun, 'succeeded', { through: r.through, rows: r.accounts.reduce((s, a) => s + a.rowsWritten, 0) });
+    out.interest = { through: r.through, accounts: r.accounts.map(a => ({ accountKey: a.accountKey, status: a.status, rowsWritten: a.rowsWritten })), otherUsers: others.length };
+    let rows = r.accounts.reduce((s, a) => s + a.rowsWritten, 0), failed = 0;
     if (uid) await invalidateUserCaches(uid);
+    for (const u of others) {
+      try { const o = await runAccrual(u, { actor: 'cron' }); rows += o.accounts.reduce((s, a) => s + a.rowsWritten, 0); await invalidateUserCaches(u); }
+      catch (e) { failed++; console.error('[wealth-nightly:interest:user]', e?.message || e); }
+    }
+    await finishJob(accrualRun, failed ? 'partial' : 'succeeded', { through: r.through, rows, users: 1 + others.length, failed });
   } catch (e) {
     out.interest = { error: 'failed' };
     console.error('[wealth-nightly:interest]', e?.message || e);
