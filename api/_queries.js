@@ -1,7 +1,7 @@
 // Shared, named queries (TSD §11). Handlers call these instead of repeating SQL.
 import { sql } from './_lib.js';
 import { splitsForAccount } from './_splits.js';
-import { earningsForTransactions } from './_offers.js';
+import { earningsForTransactions, choicesForTransactions } from './_offers.js';
 
 const TX_COLUMNS = `t.id,t.kind,t.category,t.description,t.amount,t.account_id,
   COALESCE(NULLIF(trim(a.account_name || ' ' || COALESCE(a.masked_identifier,'')),''),NULLIF(t.account,''),'Unassigned') AS account,
@@ -32,6 +32,11 @@ async function attachRewards(uid, rows, db) {
   try { by = await earningsForTransactions(uid, rows.map(r => r.id), { db }); }
   catch (e) { if (e?.code !== '42703' && e?.code !== '42P01') throw e; }
   for (const r of rows) r.rewards = by.get(r.id) || [];
+  // Rewards still to map by hand (two or more available and none mapped yet = needsMapping, shown in yellow).
+  let ch = new Map();
+  try { ch = await choicesForTransactions(uid, rows.map(r => r.id), { db }); }
+  catch (e) { if (e?.code !== '42703' && e?.code !== '42P01') throw e; }
+  for (const r of rows) { const c = ch.get(r.id); r.rewardChoices = c ? c.choices : []; r.needsMapping = !!(c && c.needsMapping); }
 }
 
 // Keyset pagination, newest first (TR-3.2). Stable under inserts because the key is unique.

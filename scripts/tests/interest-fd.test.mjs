@@ -11,7 +11,7 @@ const engine = src.slice(src.indexOf('// Interactive charts (2026-11-11)'), src.
 const block = engine + src.slice(start, src.indexOf('\n', src.indexOf('function interestViewHtml(')));
 
 function page({ rows = [], positions = [] } = {}) {
-  const ctx = { interestRows: rows, interestStatements: [], positions, activeView: 'overview', esc: s => String(s), money: v => 'INR ' + Number(v).toFixed(2),
+  const ctx = { ofCall: () => '', interestRows: rows, interestStatements: [], positions, activeView: 'overview', esc: s => String(s), money: v => 'INR ' + Number(v).toFixed(2),
     Number, String, Date, Math, Set, Map, Object, JSON, Array };
   vm.runInNewContext(block + ';globalThis.api={interestDailySeries,interestSummaryHtml,activeInterestListHtml,interestViewHtml,interestSeriesKey};', ctx);
   return ctx.api;

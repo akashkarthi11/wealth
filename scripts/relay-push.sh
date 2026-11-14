@@ -17,7 +17,7 @@ BASE="$(git rev-parse -q --verify "refs/relay/$BRANCH" || git rev-parse "origin/
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/repo" "$WORK/sec" "$WORK/job"
 git -c core.autocrlf=false -c core.eol=lf archive "$HEAD_SHA" | tar -x -C "$WORK/repo"          # file contents come from the commit, not the working tree
-git diff --name-status "$BASE" "$HEAD_SHA" > "$WORK/job/changes.txt"
+git diff --no-renames --name-status "$BASE" "$HEAD_SHA" > "$WORK/job/changes.txt"
 printf '%s' "$MESSAGE" > "$WORK/job/message.txt"
 cp "$SECRET_FILE" "$WORK/sec/secret.txt"
 echo "Sending $(wc -l < "$WORK/job/changes.txt") changed files ($BASE..$HEAD_SHA) to $BRANCH"
