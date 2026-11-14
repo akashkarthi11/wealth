@@ -43,6 +43,7 @@ for (let i = 0; i < up.length; i += 8) {
   const { blobs } = await post({ action: 'blobs', files: batch.map(p => ({ path: p, content: readFileSync('/repo/' + p).toString('base64') })) });
   for (const p of batch) tree.push({ path: p, sha: blobs[p] });
   console.log('blobs', Math.min(i + 8, up.length) + '/' + up.length);
+  await new Promise(res => setTimeout(res, 2500));   // stay under GitHub's secondary rate limit
 }
 for (let i = 0; i < tree.length; i += 280) {
   const part = tree.slice(i, i + 280), r = await post({ action: 'commit', branch: BRANCH, message: process.env.MESSAGE + (tree.length > 280 ? ' (part ' + (i / 280 + 1) + ')' : ''), tree: part });
