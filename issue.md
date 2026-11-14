@@ -94,9 +94,8 @@ The production database was updated and verified on 11 Nov 2026. The earlier dev
 - 3 subscriptions: provider keys `demo-streaming-plus`, `demo-music-unlimited`, `demo-cloud-storage`.
 - All writes used `wealth.actor = 'agent'`. Removing the user (`wealth_users` row) cascades to most of these rows — check before deleting.
 
----
 
--
+---
 
 ## Issue: Expense transaction does not automatically reconcile the displayed account balance (reported 12 Nov 2026)
 
@@ -115,4 +114,3 @@ The production database was updated and verified on 11 Nov 2026. The earlier dev
 - Review the transaction-entry / spending-ledger workflow and make the balance impact explicit to the user.
 - Preserve the strict database boundary in `rules.md`: transaction insertion itself must write only `wealth_transactions`. Any balance reconciliation must be a separate, explicitly authorized workflow, must retain `stale` status for estimates, and must not imply bank verification.
 - Ensure the UI refreshes the displayed account balance after an authorized balance reconciliation.
-
