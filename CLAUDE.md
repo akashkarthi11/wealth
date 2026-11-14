@@ -6,9 +6,20 @@
 - Key points: a new transaction goes into `wealth_transactions` only; never set a balance to `pending_reconciliation`;
   never switch between Production and Development implicitly; leave `v2` untouched; report branch and commit SHA.
 
-## Pushing to GitHub (relay only, `claude-dev`)
-This laptop cannot reach github.com, so **the only way to push code to GitHub is the `karthi-github-relay` Vercel project**.
-Never use `git push`, never ask the owner to connect GitHub, and never build another route to GitHub.
+## GitHub through the relay: push, pull, merge (`claude-dev`)
+This laptop cannot reach github.com, so **the only way to push, pull or merge on GitHub is the `karthi-github-relay` Vercel project**.
+Never use `git push`, `git pull` or `git fetch` against GitHub, never ask the owner to connect GitHub, and never build another route to it.
+- **Pull** (only when asked, and before a push if others may have pushed): `scripts/relay-pull.sh <branch>`. Read only. It brings the files
+  that changed on GitHub since the last known GitHub commit onto a NEW local branch `relay/<branch>-<sha>` in a separate worktree
+  (`../wealth-pull-<sha>`), without touching the working folder or any branch. Tell the owner what it found (the script prints the commit
+  titles) and merge it only when asked: `git merge relay/<branch>-<sha>` on the target branch. The last GitHub commit seen is a marker file
+  `.git/relay-remote/<branch>`.
+- **Merge on GitHub** (only when asked): `scripts/relay-merge.sh <from> <into>`, for example `claude-dev development`. Only `claude-dev` and
+  `development`; never from or into `main`. A conflict stops with a message and changes nothing (do not force); resolve it locally, push again.
+  Afterwards run `scripts/relay-pull.sh <into>` to bring the merge result down.
+- **Push stops if GitHub has moved** since the last known commit (another push or merge): run `scripts/relay-pull.sh <branch>` first, merge what
+  it brings, then push again. Never override that stop.
+- **Push** (below).
 - **Only when the owner asks** ("push", "push to dev"). Never push on your own after a commit or a deploy. Before sending, tell the
   owner which files are going out.
 - **Default branch is `claude-dev`.** The relay also allows `development` when the owner asks for it. It refuses `main`, never forces,

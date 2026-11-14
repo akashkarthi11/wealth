@@ -20,6 +20,14 @@ const post = async (body, tries = 3) => {
   }
 };
 
+// Stop if GitHub has commits this laptop has not seen (someone else pushed or merged): sending now could overwrite their work.
+if (process.env.EXPECT) {
+  const s = await post({ action: 'status', branch: BRANCH });
+  if (s.sha !== process.env.EXPECT) {
+    console.log('STOP: GitHub ' + BRANCH + ' has moved (' + s.sha.slice(0, 7) + ' — ' + s.message + '). Run scripts/relay-pull.sh ' + BRANCH + ' first, merge what it brings, then push again.');
+    process.exit(2);
+  }
+}
 const tree = [], upload = [];
 for (const [status, path] of lines) {
   if (status === 'D') tree.push({ path, sha: null });
