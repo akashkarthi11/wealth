@@ -11,6 +11,8 @@ import { upsertRewardProgram, recordRewardBalance, rewardsOverview } from '../..
 import { pageTransactions } from '../../api/_queries.js';
 
 const NOW = Date.parse('2026-11-14T10:00:00Z');
+// Earnings made before cashback was written to the history (status expected, no history row): the receive / link machinery still serves them.
+const legacyExpected = async a => { await a.query(`UPDATE wealth_offer_uses SET status='expected', credited_transaction_id=NULL, credited_on=NULL WHERE kind='cashback'`); await a.query(`DELETE FROM wealth_transactions WHERE external_ref LIKE 'reward:%'`); };
 const read = p => readFileSync(new URL('../../' + p, import.meta.url), 'utf8');
 
 async function setup() {
@@ -71,21 +73,25 @@ test('Spark style: minimum and maximum payment, must be activated (ask me), once
   assert.equal((await a.query(`SELECT count(*)::int n FROM wealth_offer_uses WHERE status <> 'cancelled'`))[0].n, 1, 'once per user');
 });
 
-test('Accept applies the automatic offers by itself; the earning shows on the payment and never as ledger income', async () => {
+test('Accept applies the one automatic reward by itself; its cashback goes into the history as income "Cashback" and moves the balance', async () => {
   const { a, uid, card, tx } = await setup();
   await saveOffer(uid, { accountId: card, title: 'Swiggy 5%', merchants: 'swiggy', benefitType: 'percent', benefitValue: 5, maxBenefit: 100, period: 'cycle', cycleDay: 10, periodMaxBenefit: 1500 }, { db: a });
   const pay = await tx(card, 'expense', 'Food', 'Swiggy order', 800);
   const incomeBefore = (await a.query(`SELECT count(*)::int n FROM wealth_transactions WHERE kind='income'`))[0].n;
   const r = await acceptTransaction(uid, { transactionId: pay }, { db: a, now: NOW });
   assert.deepEqual(r.applied.map(x => [x.title, x.inr, x.percent]), [['Swiggy 5%', 40, 5]]);
-  assert.equal((await a.query(`SELECT count(*)::int n FROM wealth_transactions WHERE kind='income'`))[0].n, incomeBefore, 'no income row is created: the real credit is imported later');
+  assert.equal((await a.query(`SELECT count(*)::int n FROM wealth_transactions WHERE kind='income'`))[0].n, incomeBefore + 1, 'the cashback is a history entry now');
+  const [cb] = await a.query(`SELECT kind, category, amount::float8 AS amt, account_id, review_status, external_ref FROM wealth_transactions WHERE category='Cashback'`);
+  assert.deepEqual([cb.kind, cb.amt, cb.account_id === card, cb.review_status, cb.external_ref.startsWith('reward:')], ['income', 40, true, 'accepted', true]);
+  assert.equal(r.cashbackPosted.length, 1);
+  assert.equal((await a.query(`SELECT balance::float8 AS b FROM wealth_v_latest_balances WHERE account_id=$1`, [card]))[0].b, 2760, 'card owed 2000 + 800 payment - 40 cashback');
   await tx(card, 'income', 'Refund', 'Refund', 10);
   const page = await pageTransactions(uid, {}, a);
   const row = page.transactions.find(x => x.id === pay);
-  assert.deepEqual(row.rewards.map(x => [x.title, x.kind, x.inr, x.status]), [['Swiggy 5%', 'cashback', 40, 'expected']]);
+  assert.deepEqual(row.rewards.map(x => [x.title, x.kind, x.inr, x.status]), [['Swiggy 5%', 'cashback', 40, 'received']]);
   assert.deepEqual(page.transactions.find(x => x.id !== pay).rewards, [], 'other rows have an empty list');
   const [use] = await a.query(`SELECT used_on::text d, status, title FROM wealth_offer_uses`);
-  assert.deepEqual([use.d, use.status, use.title], ['2026-11-13', 'expected', 'Swiggy 5%']);
+  assert.deepEqual([use.d, use.status, use.title], ['2026-11-13', 'received', 'Swiggy 5%']);
 });
 
 test('exclusive tiers: of 10% Swiggy / 5% online / 1% everything, only the best applies', async () => {
@@ -127,6 +133,7 @@ test('cashback to receive: a matching credit is suggested, linking marks it rece
   await saveOffer(uid, { accountId: card, title: 'Swiggy 5%', merchants: 'swiggy', benefitType: 'percent', benefitValue: 5 }, { db: a });
   const p1 = await tx(card, 'expense', 'Food', 'Swiggy order', 800), p2 = await tx(card, 'expense', 'Food', 'Swiggy order 2', 800, '2026-11-12');
   await acceptTransaction(uid, { transactionId: p1 }, { db: a, now: NOW }); await acceptTransaction(uid, { transactionId: p2 }, { db: a, now: NOW + 1000 });
+  await legacyExpected(a);
   const cr = await credit(40, '2026-11-14');
   const e1 = await listEarnings(uid, { db: a });
   assert.equal(e1.totals.money_expected, 80);
@@ -154,6 +161,7 @@ test('history survives: deleting an offer keeps what it earned; removing an earn
   const { id } = await saveOffer(uid, { accountId: card, title: 'Welcome', benefitType: 'flat', benefitValue: 100, frequency: 'one_time' }, { db: a });
   const p1 = await tx(card, 'expense', 'Food', 'A', 500), p2 = await tx(card, 'expense', 'Food', 'B', 500);
   await acceptTransaction(uid, { transactionId: p1 }, { db: a, now: NOW });
+  await legacyExpected(a);
   assert.equal((await listOffers(uid, { db: a })).offers[0].uses_count, 1);
   const [earning] = await a.query(`SELECT id FROM wealth_offer_uses`);
   await setEarningStatus(uid, { earningId: earning.id, status: 'cancelled' }, { db: a });
@@ -236,12 +244,14 @@ test('undoing a received earning frees its credit so it can be suggested and lin
   const { id } = await saveOffer(uid, { accountId: card, title: 'Swiggy 5%', merchants: 'swiggy', benefitType: 'percent', benefitValue: 5 }, { db: a });
   const p = await tx(card, 'expense', 'Food', 'Swiggy order', 1000);
   await acceptTransaction(uid, { transactionId: p }, { db: a, now: NOW });
+  await legacyExpected(a);
   const cr = await credit(50, '2026-11-14');
   const [e] = (await listEarnings(uid, { db: a })).earnings;
   await setEarningStatus(uid, { earningId: e.id, status: 'received', creditedTransactionId: cr }, { db: a });
   await undoLastUse(uid, id, { db: a });
   assert.equal((await a.query(`SELECT credited_transaction_id FROM wealth_offer_uses`))[0].credited_transaction_id, null);
-  await applyOffersToTransaction(uid, { transactionId: p }, { db: a });          // the cancelled earning comes back as expected
+  await applyOffersToTransaction(uid, { transactionId: p }, { db: a });          // the cancelled earning comes back
+  await legacyExpected(a);                                                       // (as an old-style expected one)
   const again = (await listEarnings(uid, { db: a })).earnings.find(x => x.status === 'expected');
   assert.equal(again.suggest.transactionId, cr, 'the credit is suggested again');
   await setEarningStatus(uid, { earningId: again.id, status: 'received', creditedTransactionId: cr }, { db: a });
@@ -254,6 +264,7 @@ test('cashback still to arrive is never cut off by the list limit; the header to
   await saveOffer(uid, { accountId: sav, title: 'Points', benefitType: 'flat', benefitValue: 1, rewardUnit: 'points', programId: prog }, { db: a });
   const old = await tx(card, 'expense', 'Food', 'old order', 300, '2026-10-01');
   await acceptTransaction(uid, { transactionId: old }, { db: a, now: NOW });
+  await legacyExpected(a);
   for (let i = 0; i < 35; i++) await acceptTransaction(uid, { transactionId: await tx(sav, 'expense', 'Food', 'p' + i, 100 + i, '2026-11-1' + (i % 4)) }, { db: a, now: NOW + 1000 + i });
   const r = await listEarnings(uid, { db: a, limit: 30 });
   assert.equal(r.totals.money_expected, 10);
@@ -261,7 +272,7 @@ test('cashback still to arrive is never cut off by the list limit; the header to
   assert.ok(r.earnings.length <= 31);
 });
 
-test('an "ask me" offer never hides the automatic one of its group; switching both on applies only the best', async () => {
+test('an "ask me" offer never hides the automatic one of its group; two rewards = the owner chooses, and may map both', async () => {
   const { a, uid, card, tx } = await setup();
   const mk = (title, v, applyMode) => saveOffer(uid, { accountId: card, title, benefitType: 'percent', benefitValue: v, exclusiveGroup: 'tiers', applyMode }, { db: a });
   const { id: auto } = await mk('1% auto', 1, 'auto'), { id: ask } = await mk('Spark 20% (ask)', 20, 'ask');
@@ -269,10 +280,11 @@ test('an "ask me" offer never hides the automatic one of its group; switching bo
   const m = (await pendingTransactions(uid, { db: a })).find(x => x.id === pay).offers;
   assert.deepEqual(m.map(o => [o.title, o.shadowed]), [['Spark 20% (ask)', null], ['1% auto', null]], 'neither is shadowed in the preview');
   const r = await acceptTransaction(uid, { transactionId: pay }, { db: a, now: NOW });
-  assert.deepEqual(r.applied.map(x => x.title), ['1% auto'], 'by default the automatic one is applied');
+  assert.deepEqual(r.applied, [], 'two rewards are available: nothing is mapped by itself');
+  assert.equal(r.needsChoice, true);
   const p2 = await tx(card, 'expense', 'Food', 'Zepto 2', 1000);
   const r2 = await acceptTransaction(uid, { transactionId: p2, applyOfferIds: [auto, ask] }, { db: a, now: NOW + 1000 });
-  assert.deepEqual(r2.applied.map(x => x.title), ['Spark 20% (ask)'], 'both switched on: only the best of the group applies');
+  assert.deepEqual(r2.applied.map(x => x.title).sort(), ['1% auto', 'Spark 20% (ask)'], 'the owner ticked both: both are mapped');
 });
 
 test('a card repayment or EMI (liability) earns nothing, spending does', async () => {

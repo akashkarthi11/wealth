@@ -281,7 +281,7 @@ export async function runAccrual(uid, { db = sql, now = Date.now(), dryRun = fal
     ORDER BY a.bank_name, a.account_name`, [uid, accountId]);
   const links = await linkQuery(`coalesce(l.credit_frequency, p.credit_frequency) AS credit_frequency, l.credit_anchor::text AS credit_anchor, l.balance_max_age_days, coalesce(l.paused, false) AS paused, l.record_mode`)
     .catch(e => { if (e?.code !== '42703') throw e; return linkQuery('p.credit_frequency AS credit_frequency, NULL::text AS credit_anchor, NULL::int AS balance_max_age_days, false AS paused, NULL::text AS record_mode')
-      .catch(e2 => { if (e2?.code === '42703') return linkQuery('NULL::text AS credit_frequency, NULL::text AS credit_anchor, NULL::int AS balance_max_age_days, false AS paused, NULL::text AS record_mode'); throw e2; }); });   // before 0033 / 0009
+      .catch(e2 => { if (e2?.code === '42703') return linkQuery('NULL::text AS credit_frequency, NULL::text AS credit_anchor, NULL::int AS balance_max_age_days, false AS paused, NULL::text AS record_mode'); throw e2; }); });   // before 0034 / 0009
   const unlinked = await db.query(`SELECT a.account_key, a.bank_name, a.account_name FROM wealth_accounts a
     WHERE a.user_id=$1 AND a.status='active' AND a.subtype_code IN ('savings','fixed_deposit')
       AND NOT EXISTS (SELECT 1 FROM wealth_interest_links l WHERE l.account_id = a.id) ORDER BY 2, 3`, [uid]);
@@ -410,7 +410,7 @@ export async function recordCredit(uid, b, { db = sql, actor = 'owner' } = {}) {
   }
 }
 
-// ---- Interest set up by the owner (0033, 2026-11-14) -------------------------------------------------------------------------
+// ---- Interest set up by the owner (0034, 2026-11-14) -------------------------------------------------------------------------
 // The owner adds a savings or current account on the Interest page with its rate per year and how often the bank pays the interest
 // (every day, every month, every 2 months, quarterly, half-yearly, yearly). The app then works out the interest every night from the
 // account's latest recorded balance, lists it, and adds it to the balance when it is paid. The rate belongs to the owner (a product of

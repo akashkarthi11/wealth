@@ -260,6 +260,8 @@ export async function markDuplicate(uid, b, { db = sql, actor = 'owner' } = {}) 
   // A duplicate payment earns nothing: its expected rewards are cancelled (kept, no longer counted). Unmarking does not bring them back; apply offers again from the transaction.
   await withActor(db, actor, [
     [`UPDATE wealth_transactions SET duplicate_of=$3, duplicate_marked_at=CASE WHEN $3::uuid IS NULL THEN NULL ELSE now() END WHERE user_id=$1 AND id=$2`, [uid, tx.id, keep]],
+    // The cashback the app wrote to the history for this payment (ref reward:<earning id>) goes with it. Balances are not reversed, as for any deleted transaction.
+    [`DELETE FROM wealth_transactions WHERE user_id=$1 AND $3::uuid IS NOT NULL AND external_ref IN (SELECT 'reward:' || id FROM wealth_offer_uses WHERE user_id=$1 AND transaction_id=$2) RETURNING id`, [uid, tx.id, keep]],
     [`UPDATE wealth_offer_uses SET status='cancelled', credited_transaction_id=NULL, credited_on=NULL, updated_at=now() WHERE user_id=$1 AND transaction_id=$2 AND status <> 'cancelled' AND $3::uuid IS NOT NULL RETURNING id`, [uid, tx.id, keep]],
   ]);
   return { transactionId: tx.id, duplicateOf: keep };
