@@ -22,7 +22,13 @@ printf '%s' "$MESSAGE" > "$WORK/job/message.txt"
 cp "$SECRET_FILE" "$WORK/sec/secret.txt"
 echo "Sending $(wc -l < "$WORK/job/changes.txt") changed files ($BASE..$HEAD_SHA) to $BRANCH"
 w() { cygpath -w "$1" 2>/dev/null || echo "$1"; }
-MSYS_NO_PATHCONV=1 docker run --rm -e BRANCH="$BRANCH" \
+# The GitHub commit we last saw. The push stops if GitHub has moved since (someone else pushed or merged): run relay-pull.sh first.
+EXPECT="$(cat "$(git rev-parse --git-common-dir)/relay-remote/$BRANCH" 2>/dev/null || true)"
+MSYS_NO_PATHCONV=1 docker run --rm -e BRANCH="$BRANCH" -e EXPECT="$EXPECT" \
   -v "$(w "$WORK/repo"):/repo:ro" -v "$(w "$WORK/sec"):/sec:ro" -v "$(w "$WORK/job"):/work:ro" \
-  -v "$(w "$(pwd)/scripts/relay-push.mjs"):/relay-push.mjs:ro" node:20-alpine node /relay-push.mjs $DRY
-[ "$DRY" = "dry" ] || git update-ref "refs/relay/$BRANCH" "$HEAD_SHA"
+  -v "$(w "$(pwd)/scripts/relay-push.mjs"):/relay-push.mjs:ro" node:20-alpine node /relay-push.mjs $DRY | tee "$WORK/out.txt"
+if [ "$DRY" != "dry" ]; then
+  git update-ref "refs/relay/$BRANCH" "$HEAD_SHA"                       # last local commit sent
+  GH_SHA="$(grep -o 'COMMIT [0-9a-f]\{40\}' "$WORK/out.txt" | cut -d' ' -f2 || true)"
+  if [ -n "$GH_SHA" ]; then mkdir -p "$(git rev-parse --git-common-dir)/relay-remote"; printf "%s" "$GH_SHA" > "$(git rev-parse --git-common-dir)/relay-remote/$BRANCH"; fi   # the GitHub commit it created (used by relay-pull.sh)
+fi
