@@ -17,7 +17,7 @@ SHA="$(git rev-parse "$REF")"
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/repo" "$WORK/sec" "$WORK/job"
 git ls-tree -r "$SHA" > "$WORK/job/local.txt"
-[ "$MODE" = "push" ] && git archive "$SHA" | tar -x -C "$WORK/repo"
+[ "$MODE" = "push" ] && git -c core.autocrlf=false -c core.eol=lf archive "$SHA" | tar -x -C "$WORK/repo"
 cp "$SECRET_FILE" "$WORK/sec/secret.txt"
 w() { cygpath -w "$1" 2>/dev/null || echo "$1"; }
 MSYS_NO_PATHCONV=1 docker run --rm -e BRANCH="$BRANCH" -e MODE="$MODE" -e MESSAGE="$MESSAGE" -e EXPECT="${EXPECT:-}" \
