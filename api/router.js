@@ -38,6 +38,7 @@ export const ROUTES = {
   'interest/rates': () => import('./_routes/interest.js'),
   'interest/run': () => import('./_routes/interest.js'),
   'interest/credits': () => import('./_routes/interest.js'),
+  'interest/accounts': () => import('./_routes/interest.js'),
   'obligations': () => import('./_routes/obligations.js'),
   'nightly': () => import('./_routes/nightly.js'),
   // TSD Claude Plan 4, Part A

@@ -1,12 +1,13 @@
 import { json, handle, invalidateUserCaches, cachedValue, sendCached } from '../_lib.js';
-import { runAccrual, submitRate, recordCredit, interestOverview } from '../_interest.js';
+import { runAccrual, submitRate, recordCredit, interestOverview, saveInterestAccount } from '../_interest.js';
 import { startJob, finishJob } from '../_jobs.js';
 
 // GET  /api/interest           interest view: sources, current rates, accrued and credited (TR3-3.7, owner)
 // POST /api/interest/rates     verified rate period (TR3-3.2, agent or owner; ?dryRun=1)
 // POST /api/interest/run       accrue through yesterday IST, idempotent (TR3-3.5, cron / agent / owner; ?dryRun=1)
 // POST /api/interest/credits   actual credit with bank evidence (TR3-3.6, owner or agent; unique reference)
-const AUTH = { 'interest': { user: true }, 'interest/rates': {}, 'interest/run': { cron: true }, 'interest/credits': {} };
+// POST /api/interest/accounts   set up an account: rate per year, how the interest is paid, period start, pause (any signed-in user, own accounts)
+const AUTH = { 'interest': { user: true }, 'interest/accounts': { user: true, ingest: false }, 'interest/rates': {}, 'interest/run': { cron: true }, 'interest/credits': {} };
 
 export default handle('wealth-interest', { methods: ['GET', 'POST'], auth: req => AUTH[req.route] || { ingest: false } }, async ({ req, res, who, body, dryRun }) => {
   const route = req.route || 'interest';
@@ -16,6 +17,7 @@ export default handle('wealth-interest', { methods: ['GET', 'POST'], auth: req =
     return sendCached(res, await cachedValue(req, who.uid, 'interest', () => interestOverview(who.uid), { variant: day }));
   }
   if (req.method !== 'POST') return json(res, 405, { error: 'Method not allowed' });
+  if (route === 'interest/accounts') { const r = await saveInterestAccount(who.uid, body, { actor: who.actor }); await invalidateUserCaches(who.uid); return json(res, 200, r); }
   if (route === 'interest/rates') { const r = await submitRate(body, { actor: who.actor, dryRun }); return json(res, r.status, r.body); }
   if (route === 'interest/credits') { const r = await recordCredit(who.uid, body, { actor: who.actor }); await invalidateUserCaches(who.uid); return json(res, 201, r); }
   const run = dryRun ? null : await startJob('interest-accrual');
