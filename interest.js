@@ -14,24 +14,27 @@ let inData = null, inSheet = null;
 
 // ---- the list on the Interest page ----------------------------------------------------------------------------------------
 function inSourceHtml(s) {
-  const fd = s.subtype_code === 'fixed_deposit', paid = IN_FREQ_WORD[s.credit_frequency] || (fd ? 'deposit terms' : 'not paid into the account');
+  const fd = s.subtype_code === 'fixed_deposit';
+  const paid = fd ? (s.link_frequency && IN_FD_WORD[s.fd_payout] ? IN_FD_WORD[s.fd_payout] + (s.fd_payout !== 'cumulative' && s.payout_account ? ' into ' + s.payout_account : '') : 'deposit terms') : IN_FREQ_WORD[s.credit_frequency] || 'not paid into the account';
   const lines = [];
+  if (fd && s.fd_principal) lines.push('Deposit <b>' + esc(inRs(s.fd_principal)) + '</b>' + (s.fd_booked_on ? ' · started ' + esc(inDay(s.fd_booked_on)) : '') + (s.fd_maturity_on ? ' · matures <b>' + esc(inDay(s.fd_maturity_on)) + '</b>' : ''));
   if (s.paused) lines.push('<span class="in-tag off">Paused</span> Nothing is worked out until you turn it back on.');
+  else if (fd && s.link_frequency && s.fd_payout === 'cumulative' && s.next_credit) lines.push('Earned so far <b>' + esc(inRs(s.period_accrued)) + '</b> · paid at maturity on <b>' + esc(inDay(s.next_credit)) + '</b>');
   else if (s.credit_frequency === 'daily') lines.push('This month so far <b>' + esc(inRs(s.accrued_month)) + '</b> · added to the balance every day · ' + (s.record_mode === 'day' ? 'a new entry every day' : 'one entry for the month'));
   else if (s.next_credit) lines.push('This period so far <b>' + esc(inRs(s.period_accrued)) + '</b> · paid on <b>' + esc(inDay(s.next_credit)) + '</b>' + (s.period ? ' <small>(' + esc(inDay(s.period.start)) + ' – ' + esc(inDay(s.period.end)) + ')</small>' : ''));
   else lines.push('This month so far <b>' + esc(inRs(s.accrued_month)) + '</b>');
   if (s.balance != null) lines.push('Balance ' + esc(inRs(s.balance)) + (s.balance_as_of ? ' <small>as of ' + esc(inDay(new Date(new Date(s.balance_as_of).getTime() + 5.5 * 3600e3).toISOString())) + '</small>' : ''));
   lines.push('<small>Last worked out ' + esc(s.last_accrual ? inDay(s.last_accrual) : 'not yet') + ' · paid so far ' + esc(inRs(s.credited_total)) + (fd ? '' : ' · uses a balance up to ' + esc(String(s.max_age_days)) + ' days old') + '</small>');
-  if (fd && !s.fd_principal) lines.push('<small class="in-warn">Deposit terms are missing: add them on the account to work the interest out.</small>');
-  const editable = !fd;
+  if (fd && !s.fd_principal) lines.push('<small class="in-warn">Deposit terms are missing: tap Edit to add the amount and dates.</small>');
+  const editable = true;
   return '<article class="in-card' + (s.paused ? ' off' : '') + '"><div class="in-card-top"><div><h4>' + esc(inAcct(s)) + '</h4><small>' + esc(inPct(s.rate)) + ' a year' + (s.own ? '' : ' · bank rate') + ' · ' + esc(paid) + (s.rate_from ? ' · rate since ' + esc(inDay(s.rate_from)) : '') + '</small></div>'
-    + '<b class="in-amt">' + esc(inRs(s.credit_frequency && IN_MONTHS[s.credit_frequency] ? s.period_accrued : s.accrued_month)) + '</b></div>'
+    + '<b class="in-amt">' + esc(inRs(fd ? (s.period_accrued != null ? s.period_accrued : s.accrued_month) : s.credit_frequency && IN_MONTHS[s.credit_frequency] ? s.period_accrued : s.accrued_month)) + '</b></div>'
     + '<div class="in-lines">' + lines.map(l => '<p>' + l + '</p>').join('') + '</div>'
     + (editable ? '<div class="in-actions"><button type="button" class="ghost" data-in-edit="' + esc(s.account_id) + '">Edit</button><button type="button" class="ghost" data-in-pause="' + esc(s.account_id) + '">' + (s.paused ? 'Turn on' : 'Pause') + '</button></div>' : '') + '</article>';
 }
 function inSourcesHtml(d) {
   inData = d;
-  const ready = d.unlinked.filter(u => ['savings', 'current'].includes(u.subtype_code));
+  const ready = d.unlinked.filter(u => ['savings', 'current', 'fixed_deposit'].includes(u.subtype_code));
   const head = '<section class="chart-card in-page"><div class="chart-head"><div><h4>Interest on your accounts</h4><p>Your rate per year and how the bank pays it. The app works the interest out every night from the latest balance, lists it, and adds it to the balance when it is paid.</p></div><button type="button" class="primary in-add" data-in-add>+ Add account</button></div>';
   const cards = d.sources.length ? '<div class="in-grid">' + d.sources.map(inSourceHtml).join('') + '</div>' : '<p class="muted">No account earns interest here yet. Add a savings account with its rate per year.</p>';
   const setup = ready.length ? '<div class="in-setup"><span>Not set up yet:</span>' + ready.map(u => '<button type="button" class="of-setup-chip" data-in-add data-in-account="' + esc(u.id) + '">+ ' + esc(inAcct(u)) + '</button>').join('') + '</div>' : '';
@@ -39,7 +42,14 @@ function inSourcesHtml(d) {
   return head + cards + setup + hist + '</section>';
 }
 
-// ---- the sheet ------------------------------------------------------------------------------------------------------------
+// Every account the sheet can set up: what is already set up (sources) and what is not yet (unlinked); savings, current and FDs.
+function inAccounts() {
+  const all = [...inData.sources.map(x => ({ id: x.account_id, label: inAcct(x), type: x.subtype_code })), ...inData.unlinked.filter(u => ['savings', 'current', 'fixed_deposit'].includes(u.subtype_code)).map(u => ({ id: u.id, label: inAcct(u), type: u.subtype_code }))];
+  return all.filter((a, i) => all.findIndex(b => b.id === a.id) === i);
+}
+const inIsFd = id => { const a = inData && id ? inAccounts().find(x => x.id === id) : null; return !!a && a.type === 'fixed_deposit'; };
+const IN_FD_PAY = [['cumulative', 'Added to the deposit', 'Grows and is paid at maturity'], ['monthly', 'Paid out every month', 'Into your savings account'], ['quarterly', 'Paid out every 3 months', 'Into your savings account'], ['yearly', 'Paid out every year', 'Into your savings account']];
+const IN_FD_WORD = { cumulative: 'added to the deposit, paid at maturity', monthly: 'paid out monthly', quarterly: 'paid out every 3 months', yearly: 'paid out yearly' };
 async function inOpen(accountId) {
   if (!inData) { try { inData = await api('/api/interest'); } catch (e) { alert(String((e && e.message) || e)); return; } }
   const opener = document.activeElement, src = inData.sources.find(s => s.account_id === accountId);
@@ -47,7 +57,10 @@ async function inOpen(accountId) {
   inSheet = { opener, editing: !!src, own: src ? !!src.own : true, today, f: {
     accountId: accountId || '', ratePercent: src && src.rate != null ? String(Math.round(src.rate * 1e8) / 1e6) : '', creditFrequency: src ? (src.credit_frequency && IN_FREQ_WORD[src.credit_frequency] && src.credit_frequency !== 'on_maturity' ? src.credit_frequency : 'monthly') : 'monthly',
     recordMode: src && src.record_mode === 'day' ? 'day' : 'month',
-    creditAnchor: src && src.credit_anchor ? src.credit_anchor : first(today), effectiveFrom: today, balanceMaxAgeDays: src ? String(src.max_age_days || '') : String(inData.ownMaxAgeDays || 60), paused: src ? !!src.paused : false },
+    creditAnchor: src && src.credit_anchor ? src.credit_anchor : first(today), effectiveFrom: today, balanceMaxAgeDays: src ? String(src.max_age_days || '') : String(inData.ownMaxAgeDays || 60), paused: src ? !!src.paused : false,
+    // fixed deposits
+    fdPrincipal: src && src.fd_principal ? String(src.fd_principal) : '', fdBookedOn: src && src.fd_booked_on ? src.fd_booked_on : '', fdMaturityOn: src && src.fd_maturity_on ? src.fd_maturity_on : '',
+    fdPayout: src && src.fd_payout && IN_FD_WORD[src.fd_payout] ? src.fd_payout : 'cumulative', fdSimple: !!(src && src.fd_compounding === 'simple'), payoutAccountId: src && src.payout_account_id ? src.payout_account_id : '' },
     origRate: src && src.rate != null ? Math.round(src.rate * 1e8) / 1e6 : null, err: '', busy: false };
   inRender();
   const f = document.querySelector('#interestOverlay select:not([disabled]), #interestOverlay input:not([disabled])'); if (f) f.focus();
@@ -61,57 +74,110 @@ function inNextPay(anchor, months, day) {
   const end = new Date(Date.parse(add(anchor, (i + 1) * months) + 'T00:00:00Z') - 864e5).toISOString().slice(0, 10);
   return end < day ? null : end;
 }
+// FD figures for the preview: interest per payment, and what the deposit is worth at maturity (cumulative, compounded quarterly or simple).
+function inFdFigures(f) {
+  const p = Number(f.fdPrincipal), r = Number(f.ratePercent) / 100;
+  if (!(p > 0) || !(r > 0)) return null;
+  const days = /^\d{4}-\d{2}-\d{2}$/.test(f.fdBookedOn) && /^\d{4}-\d{2}-\d{2}$/.test(f.fdMaturityOn) ? Math.round((Date.parse(f.fdMaturityOn) - Date.parse(f.fdBookedOn)) / 864e5) : 0;
+  const perPay = { monthly: p * r / 12, quarterly: p * r / 4, yearly: p * r }[f.fdPayout] || 0;
+  const maturity = days > 0 ? (f.fdSimple ? p * (1 + r * days / 365) : p * Math.pow(1 + r / 4, Math.floor(days / 91.3125)) * (1 + r * ((days % 91.3125) / 365))) : null;
+  return { perPay, maturity, interest: maturity != null ? maturity - p : null, days };
+}
 // One plain sentence about the whole setup, shown at the bottom of the sheet while choosing.
 function inExample() {
   const s = inSheet, f = s.f, pct = Number(f.ratePercent);
   if (!(pct > 0)) return 'Enter the rate per year to see what it earns.';
+  if (inIsFd(f.accountId)) {
+    const x = inFdFigures(f);
+    if (!x) return 'Enter the deposit amount to see what it earns.';
+    if (f.fdPayout === 'cumulative') return x.maturity != null ? 'At maturity on ' + inDay(f.fdMaturityOn) + ' the deposit is worth about ' + inRs(x.maturity) + ' (' + inRs(x.interest) + ' interest).' : 'Enter the start and maturity dates to see what it is worth at maturity.';
+    const to = inAccounts().find(a => a.id === f.payoutAccountId);
+    return 'About ' + inRs(x.perPay) + ' is paid ' + { monthly: 'every month', quarterly: 'every 3 months', yearly: 'every year' }[f.fdPayout] + (to ? ' into ' + to.label : '') + ', and that account\'s balance goes up by it.';
+  }
   const day = 100000 * pct / 100 / 365, months = IN_MONTHS[f.creditFrequency];
   if (f.creditFrequency === 'daily') return 'On ₹1,00,000: about ' + inRs(day) + ' a day, added to the balance every day, shown as ' + (f.recordMode === 'day' ? 'a new entry every day.' : 'one entry for the month that grows every night.');
   const next = inNextPay(f.creditAnchor, months, s.today);
   return 'On ₹1,00,000: about ' + inRs(day) + ' a day; about ' + inRs(day * 30.4 * months) + ' is paid into the balance every ' + (months === 1 ? 'month' : months + ' months') + (next ? ', next on ' + inDay(next) : '') + '.';
 }
 const IN_FREQ_HINT = { daily: 'Added every day · Slice, Atom', monthly: 'At each month end', bimonthly: 'Once in 2 months', quarterly: 'Most banks · 4 times a year', half_yearly: 'Twice a year', yearly: 'Once a year' };
+const inStep = (n, title, inner) => '<section class="in-step"><h4><span class="ofs-num">' + n + '</span>' + esc(title) + '</h4>' + inner + '</section>';
+// The FD steps: the deposit, how its interest is paid (with a preview of each way), and where a payout goes.
+function inFdStepsHtml(s) {
+  const f = s.f, x = inFdFigures(f) || { perPay: 0, maturity: null, interest: null };
+  const per = v => (Number(f.fdPrincipal) || 0) * (Number(f.ratePercent) || 0) / 100 / { monthly: 12, quarterly: 4, yearly: 1 }[v];
+  const deposit = '<div class="ofs-row in-row3"><label class="ofs-f"><span>Amount deposited</span><span class="ofs-addon in-rate"><em>₹</em><input data-in="fdPrincipal" type="number" min="1" step="1" inputmode="decimal" value="' + esc(f.fdPrincipal) + '" placeholder="e.g. 100000"></span></label>'
+    + '<label class="ofs-f"><span>Started on</span><input data-in="fdBookedOn" type="date" value="' + esc(f.fdBookedOn) + '"></label>'
+    + '<label class="ofs-f"><span>Matures on</span><input data-in="fdMaturityOn" type="date" value="' + esc(f.fdMaturityOn) + '"></label></div>';
+  const mock = v => v === 'cumulative'
+    ? '<span class="in-mock"><span><i>At maturity' + (f.fdMaturityOn ? ' · ' + esc(inDay(f.fdMaturityOn)) : '') + '</i><em>' + (x.maturity != null ? esc(inRs(x.maturity)) : '—') + '</em></span><span class="in-mock-note">' + (f.fdSimple ? 'simple interest' : '↻ grows every 3 months') + '</span></span>'
+    : '<span class="in-mock"><span><i>Interest · ' + { monthly: 'each month', quarterly: 'every 3 months', yearly: 'each year' }[v] + '</i><em>' + (per(v) > 0 ? esc(inRs(per(v))) : '—') + '</em></span></span>';
+  const pay = '<div class="in-opts in-opts-2" role="radiogroup" aria-label="How the FD interest is paid">' + IN_FD_PAY.map(([v, l, h]) => '<button type="button" role="radio" class="in-opt in-rec' + (f.fdPayout === v ? ' on' : '') + '" data-in-fdpay="' + v + '" aria-checked="' + (f.fdPayout === v) + '"><b>' + esc(l) + '</b><small>' + esc(h) + '</small>' + mock(v) + '</button>').join('') + '</div>';
+  const savings = inAccounts().filter(a => a.type === 'savings' || a.type === 'current');
+  const third = f.fdPayout === 'cumulative'
+    ? '<label class="ofs-switch"><input type="checkbox" class="rm-switch" data-in-fdsimple' + (f.fdSimple ? ' checked' : '') + '> <span>Simple interest, no compounding (usual for deposits under 6 months)</span></label>'
+      + '<p class="ofs-hint">The interest stays in the deposit. On the maturity date one entry for all of it is added to this FD.</p>'
+    : '<label class="ofs-f"><span>Paid into</span><select data-in="payoutAccountId"><option value="">Choose the savings account…</option>' + savings.map(a => '<option value="' + esc(a.id) + '"' + (a.id === f.payoutAccountId ? ' selected' : '') + '>' + esc(a.label) + '</option>').join('') + '</select>'
+      + '<small class="ofs-hint">Each payment becomes an Interest entry on that account and raises its balance. Payments are counted from the start date' + (f.fdBookedOn && IN_MONTHS[f.fdPayout] && inNextPay(f.fdBookedOn, IN_MONTHS[f.fdPayout], s.today) ? ' — next on <b>' + esc(inDay(inNextPay(f.fdBookedOn, IN_MONTHS[f.fdPayout], s.today))) + '</b>' : '') + '.</small></label>';
+  return inStep(2, 'The deposit', deposit) + inStep(3, 'How is the interest paid?', pay) + inStep(4, f.fdPayout === 'cumulative' ? 'Compounding' : 'Where does it go?', third);
+}
 function inRender() {
   const s = inSheet; if (!s) return;
   let o = $('interestOverlay');
   if (!o) { o = document.createElement('div'); o.id = 'interestOverlay'; o.className = 'split-overlay'; document.body.appendChild(o); document.body.classList.add('sheet-open'); }
   const body = o.querySelector('.split-body'), top = body ? body.scrollTop : 0;
-  const f = s.f, accts = [...inData.sources.filter(x => x.subtype_code !== 'fixed_deposit').map(x => ({ id: x.account_id, label: inAcct(x) })), ...inData.unlinked.filter(u => ['savings', 'current'].includes(u.subtype_code)).map(u => ({ id: u.id, label: inAcct(u) }))];
+  const f = s.f, accts = inAccounts(), fd = inIsFd(f.accountId);
   const rateChanged = s.editing && s.own && s.origRate != null && Number(f.ratePercent) !== s.origRate;
-  const step = (n, title, inner) => '<section class="in-step"><h4><span class="ofs-num">' + n + '</span>' + esc(title) + '</h4>' + inner + '</section>';
-  const freq = '<div class="in-opts" role="radiogroup" aria-label="When the bank pays the interest">' + IN_FREQ.map(([v, l]) => '<button type="button" role="radio" class="in-opt' + (f.creditFrequency === v ? ' on' : '') + '" data-in-freq="' + v + '" aria-checked="' + (f.creditFrequency === v) + '"><b>' + esc(l) + '</b><small>' + esc(IN_FREQ_HINT[v]) + '</small></button>').join('') + '</div>';
-  const pct = Number(f.ratePercent) > 0 ? Number(f.ratePercent) : 5.5, perDay = inRs(100000 * pct / 100 / 365), month = new Date((s.today || '2026-11-14') + 'T00:00:00').toLocaleDateString('en-IN', { month: 'short' });
-  const d = n => new Date(Date.parse((s.today || '2026-11-14') + 'T00:00:00Z') - n * 864e5).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-  const record = f.creditFrequency === 'daily'
-    ? '<div class="in-opts in-opts-2" role="radiogroup" aria-label="How the daily interest shows in Transactions">'
-      + '<button type="button" role="radio" class="in-opt in-rec' + (f.recordMode === 'month' ? ' on' : '') + '" data-in-rec="month" aria-checked="' + (f.recordMode === 'month') + '"><b>One entry for the month</b><small>Grows every night, like Slice does today</small>'
-      + '<span class="in-mock"><span><i>' + esc(month) + ' interest · to date</i><em>' + esc(inRs(100000 * pct / 100 / 365 * 13)) + '</em></span><span class="in-mock-note">↻ updated each night</span></span></button>'
-      + '<button type="button" role="radio" class="in-opt in-rec' + (f.recordMode === 'day' ? ' on' : '') + '" data-in-rec="day" aria-checked="' + (f.recordMode === 'day') + '"><b>A new entry every day</b><small>One small entry for each day</small>'
-      + '<span class="in-mock"><span><i>Interest · ' + esc(d(1)) + '</i><em>' + esc(perDay) + '</em></span><span><i>Interest · ' + esc(d(2)) + '</i><em>' + esc(perDay) + '</em></span><span><i>Interest · ' + esc(d(3)) + '</i><em>' + esc(perDay) + '</em></span></span></button></div>'
-    : '<label class="ofs-f"><span>A period starts on</span><input data-in="creditAnchor" type="date" value="' + esc(f.creditAnchor) + '"><small class="ofs-hint">The interest is paid at the end of each period and added to the balance' + (inNextPay(f.creditAnchor, IN_MONTHS[f.creditFrequency], s.today) ? ' — next on <b>' + esc(inDay(inNextPay(f.creditAnchor, IN_MONTHS[f.creditFrequency], s.today))) + '</b>' : '') + '. Quarters ending March, June, September and December start on 1 January.</small></label>'
-      + '<div class="in-mock in-mock-wide"><span><i>Interest paid · end of period</i><em>one entry each time</em></span></div>';
-  o.innerHTML = '<div class="split-sheet ofs in-sheet" role="dialog" aria-modal="true" aria-labelledby="inTitle"><div class="split-head"><div><span class="interest-kicker">INTEREST</span><h3 id="inTitle">' + (s.editing ? 'Interest on this account' : 'Add an account that earns interest') + '</h3></div><button type="button" class="split-close" data-in-cancel aria-label="Close">×</button></div>'
+  const opt = a => '<option value="' + esc(a.id) + '"' + (a.id === f.accountId ? ' selected' : '') + '>' + esc(a.label) + '</option>';
+  const cash = accts.filter(a => a.type !== 'fixed_deposit'), fds = accts.filter(a => a.type === 'fixed_deposit');
+  const select = '<select data-in="accountId"' + (s.editing ? ' disabled' : '') + '><option value="">Choose…</option>' + (cash.length ? '<optgroup label="Savings and current">' + cash.map(opt).join('') + '</optgroup>' : '') + (fds.length ? '<optgroup label="Fixed deposits">' + fds.map(opt).join('') + '</optgroup>' : '') + '</select>';
+  let steps;
+  if (fd) steps = inFdStepsHtml(s);
+  else {
+    const freq = '<div class="in-opts" role="radiogroup" aria-label="When the bank pays the interest">' + IN_FREQ.map(([v, l]) => '<button type="button" role="radio" class="in-opt' + (f.creditFrequency === v ? ' on' : '') + '" data-in-freq="' + v + '" aria-checked="' + (f.creditFrequency === v) + '"><b>' + esc(l) + '</b><small>' + esc(IN_FREQ_HINT[v]) + '</small></button>').join('') + '</div>';
+    const pct = Number(f.ratePercent) > 0 ? Number(f.ratePercent) : 5.5, perDay = inRs(100000 * pct / 100 / 365), month = new Date((s.today || '2026-11-14') + 'T00:00:00').toLocaleDateString('en-IN', { month: 'short' });
+    const d = n => new Date(Date.parse((s.today || '2026-11-14') + 'T00:00:00Z') - n * 864e5).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+    const record = f.creditFrequency === 'daily'
+      ? '<div class="in-opts in-opts-2" role="radiogroup" aria-label="How the daily interest shows in Transactions">'
+        + '<button type="button" role="radio" class="in-opt in-rec' + (f.recordMode === 'month' ? ' on' : '') + '" data-in-rec="month" aria-checked="' + (f.recordMode === 'month') + '"><b>One entry for the month</b><small>Grows every night, like Slice does today</small>'
+        + '<span class="in-mock"><span><i>' + esc(month) + ' interest · to date</i><em>' + esc(inRs(100000 * pct / 100 / 365 * 13)) + '</em></span><span class="in-mock-note">↻ updated each night</span></span></button>'
+        + '<button type="button" role="radio" class="in-opt in-rec' + (f.recordMode === 'day' ? ' on' : '') + '" data-in-rec="day" aria-checked="' + (f.recordMode === 'day') + '"><b>A new entry every day</b><small>One small entry for each day</small>'
+        + '<span class="in-mock"><span><i>Interest · ' + esc(d(1)) + '</i><em>' + esc(perDay) + '</em></span><span><i>Interest · ' + esc(d(2)) + '</i><em>' + esc(perDay) + '</em></span><span><i>Interest · ' + esc(d(3)) + '</i><em>' + esc(perDay) + '</em></span></span></button></div>'
+      : '<label class="ofs-f"><span>A period starts on</span><input data-in="creditAnchor" type="date" value="' + esc(f.creditAnchor) + '"><small class="ofs-hint">The interest is paid at the end of each period and added to the balance' + (inNextPay(f.creditAnchor, IN_MONTHS[f.creditFrequency], s.today) ? ' — next on <b>' + esc(inDay(inNextPay(f.creditAnchor, IN_MONTHS[f.creditFrequency], s.today))) + '</b>' : '') + '. Quarters ending March, June, September and December start on 1 January.</small></label>'
+        + '<div class="in-mock in-mock-wide"><span><i>Interest paid · end of period</i><em>one entry each time</em></span></div>';
+    steps = inStep(2, 'When does the bank pay it?', freq) + inStep(3, f.creditFrequency === 'daily' ? 'How should it show in Transactions?' : 'When does a period start?', record);
+  }
+  const more = fd
+    ? '<details class="in-adv"><summary>More settings</summary><label class="ofs-switch"><input type="checkbox" class="rm-switch" data-in-paused' + (f.paused ? ' checked' : '') + '> <span>Paused — nothing is worked out until turned back on</span></label></details>'
+    : '<details class="in-adv"><summary>More settings</summary><label class="ofs-f"><span>Use a balance up to … days old</span><span class="ofs-addon"><input data-in="balanceMaxAgeDays" type="number" min="1" max="120" step="1" inputmode="numeric" value="' + esc(f.balanceMaxAgeDays) + '"><em>days</em></span><small class="ofs-hint">Interest is worked out from the latest balance you recorded or that an accepted payment left. An older balance is not used.</small></label>'
+      + '<label class="ofs-switch"><input type="checkbox" class="rm-switch" data-in-paused' + (f.paused ? ' checked' : '') + '> <span>Paused — nothing is worked out until turned back on</span></label></details>';
+  o.innerHTML = '<div class="split-sheet ofs in-sheet" role="dialog" aria-modal="true" aria-labelledby="inTitle"><div class="split-head"><div><span class="interest-kicker">INTEREST' + (fd ? ' · FIXED DEPOSIT' : '') + '</span><h3 id="inTitle">' + (s.editing ? (fd ? 'Interest on this deposit' : 'Interest on this account') : 'Add an account that earns interest') + '</h3></div><button type="button" class="split-close" data-in-cancel aria-label="Close">×</button></div>'
     + '<div class="split-body">'
-    + step(1, 'Account and rate', '<div class="ofs-row"><label class="ofs-f"><span>Account</span><select data-in="accountId"' + (s.editing ? ' disabled' : '') + '><option value="">Choose…</option>' + accts.map(a => '<option value="' + esc(a.id) + '"' + (a.id === f.accountId ? ' selected' : '') + '>' + esc(a.label) + '</option>').join('') + '</select></label>'
-      + '<label class="ofs-f"><span>Interest rate per year</span><span class="ofs-addon in-rate"><input data-in="ratePercent" type="number" min="0" max="100" step="0.01" inputmode="decimal" value="' + esc(f.ratePercent) + '" placeholder="e.g. 6.5"' + (s.own ? '' : ' disabled') + '><em>% a year</em></span></label></div>'
+    + inStep(1, 'Account and rate', '<div class="ofs-row"><label class="ofs-f"><span>Account</span>' + select + '</label>'
+      + '<label class="ofs-f"><span>Interest rate per year</span><span class="ofs-addon in-rate"><input data-in="ratePercent" type="number" min="0" max="100" step="0.01" inputmode="decimal" value="' + esc(f.ratePercent) + '" placeholder="e.g. ' + (fd ? '7.1' : '6.5') + '"' + (s.own ? '' : ' disabled') + '><em>% a year</em></span></label></div>'
       + (s.own ? '' : '<p class="ofs-hint">This account follows the bank\'s published rate, kept up to date for you. You can still choose how the interest is paid and shown.</p>')
       + (rateChanged ? '<label class="ofs-f"><span>The new rate starts on</span><input data-in="effectiveFrom" type="date" value="' + esc(f.effectiveFrom) + '"><small class="ofs-hint">Days before this keep the old rate.</small></label>' : ''))
-    + step(2, 'When does the bank pay it?', freq)
-    + step(3, f.creditFrequency === 'daily' ? 'How should it show in Transactions?' : 'When does a period start?', record)
-    + '<details class="in-adv"><summary>More settings</summary><label class="ofs-f"><span>Use a balance up to … days old</span><span class="ofs-addon"><input data-in="balanceMaxAgeDays" type="number" min="1" max="120" step="1" inputmode="numeric" value="' + esc(f.balanceMaxAgeDays) + '"><em>days</em></span><small class="ofs-hint">Interest is worked out from the latest balance you recorded or that an accepted payment left. An older balance is not used.</small></label>'
-    + '<label class="ofs-switch"><input type="checkbox" class="rm-switch" data-in-paused' + (f.paused ? ' checked' : '') + '> <span>Paused — nothing is worked out until turned back on</span></label></details>'
+    + steps + more
     + '</div><div class="split-foot ofs-foot"><p class="ofs-sentence" data-in-example>' + esc(inExample()) + '</p>' + (s.err ? '<p class="split-err" role="alert">' + esc(s.err) + '</p>' : '')
     + '<div class="split-actions"><button type="button" class="ghost" data-in-cancel>Cancel</button><button type="button" class="primary" data-in-save' + (s.busy ? ' disabled' : '') + '>' + (s.busy ? 'Saving…' : s.editing ? 'Save' : 'Add and work it out') + '</button></div></div></div>';
   const nb = o.querySelector('.split-body'); if (nb) nb.scrollTop = top;
 }
 async function inSave() {
   const s = inSheet; if (!s || s.busy) return;
-  const f = s.f;
+  const f = s.f, fd = inIsFd(f.accountId);
   if (!f.accountId) { s.err = 'Choose the account.'; inRender(); return; }
   if (s.own && !(Number(f.ratePercent) > 0)) { s.err = 'Enter the interest rate per year.'; inRender(); return; }
+  if (fd) {
+    if (!(Number(f.fdPrincipal) > 0)) { s.err = 'Enter the amount deposited.'; inRender(); return; }
+    if (!f.fdBookedOn || !f.fdMaturityOn) { s.err = 'Enter the start and maturity dates.'; inRender(); return; }
+    if (f.fdMaturityOn <= f.fdBookedOn) { s.err = 'The maturity date must be after the start date.'; inRender(); return; }
+    if (f.fdPayout !== 'cumulative' && !f.payoutAccountId) { s.err = 'Choose the savings account the interest is paid into.'; inRender(); return; }
+  }
   s.busy = true; s.err = ''; inRender();
-  const body = { accountId: f.accountId, creditFrequency: f.creditFrequency, creditAnchor: f.creditFrequency === 'daily' ? undefined : f.creditAnchor, recordMode: f.creditFrequency === 'daily' ? f.recordMode : undefined,
-    balanceMaxAgeDays: f.balanceMaxAgeDays === '' ? undefined : Number(f.balanceMaxAgeDays), paused: f.paused };
+  const body = fd
+    ? { accountId: f.accountId, fdTerms: { principal: Number(f.fdPrincipal), bookedOn: f.fdBookedOn, maturityOn: f.fdMaturityOn, payout: f.fdPayout, compounding: f.fdPayout === 'cumulative' ? (f.fdSimple ? 'simple' : 'quarterly') : undefined },
+        payoutAccountId: f.fdPayout === 'cumulative' ? undefined : f.payoutAccountId, paused: f.paused }
+    : { accountId: f.accountId, creditFrequency: f.creditFrequency, creditAnchor: f.creditFrequency === 'daily' ? undefined : f.creditAnchor, recordMode: f.creditFrequency === 'daily' ? f.recordMode : undefined,
+        balanceMaxAgeDays: f.balanceMaxAgeDays === '' ? undefined : Number(f.balanceMaxAgeDays), paused: f.paused };
   if (s.own) { body.annualRatePercent = Number(f.ratePercent); if (s.editing && s.origRate != null && Number(f.ratePercent) !== s.origRate) body.effectiveFrom = f.effectiveFrom; }
   try {
     await api('/api/interest/accounts', { method: 'POST', body: JSON.stringify(body) });
@@ -128,7 +194,10 @@ document.addEventListener('click', async e => {
     const src = inData.sources.find(x => x.account_id === pz.dataset.inPause); if (!src) return;
     pz.disabled = true;
     try {
-      await api('/api/interest/accounts', { method: 'POST', body: JSON.stringify({ accountId: src.account_id, creditFrequency: src.credit_frequency && IN_FREQ_WORD[src.credit_frequency] && src.credit_frequency !== 'on_maturity' ? src.credit_frequency : 'monthly', creditAnchor: src.credit_anchor || undefined, paused: !src.paused }) });
+      const body = src.subtype_code === 'fixed_deposit'
+        ? { accountId: src.account_id, payoutAccountId: src.payout_account_id || undefined, paused: !src.paused }     // FD: its terms stay as saved
+        : { accountId: src.account_id, creditFrequency: src.credit_frequency && IN_FREQ_WORD[src.credit_frequency] && src.credit_frequency !== 'on_maturity' ? src.credit_frequency : 'monthly', creditAnchor: src.credit_anchor || undefined, paused: !src.paused };
+      await api('/api/interest/accounts', { method: 'POST', body: JSON.stringify(body) });
       if (typeof loadInterestSources === 'function') await loadInterestSources();
     } catch (err) { pz.disabled = false; alert(String(err.message || err)); }
     return;
@@ -138,6 +207,7 @@ document.addEventListener('click', async e => {
   if (e.target.closest('[data-in-cancel]')) { inClose(); return; }
   const fq = e.target.closest('[data-in-freq]'); if (fq) { inSheet.f.creditFrequency = fq.dataset.inFreq; inRender(); return; }
   const rc = e.target.closest('[data-in-rec]'); if (rc) { inSheet.f.recordMode = rc.dataset.inRec; inRender(); return; }
+  const fp = e.target.closest('[data-in-fdpay]'); if (fp) { inSheet.f.fdPayout = fp.dataset.inFdpay; inRender(); return; }
   if (e.target.closest('[data-in-save]')) { inSave(); return; }
 });
 document.addEventListener('input', e => {
@@ -148,7 +218,10 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => {
   if (!inSheet || !e.target.matches) return;
+  // Choosing another account (savings ↔ FD) or finishing an FD amount / date redraws the sheet, so its steps and previews follow.
+  if (e.target.matches('#interestOverlay [data-in]') && ['accountId', 'payoutAccountId', 'fdPrincipal', 'fdBookedOn', 'fdMaturityOn'].includes(e.target.dataset.in)) { inSheet.f[e.target.dataset.in] = e.target.value; inRender(); return; }
   if (e.target.matches('#interestOverlay select[data-in]')) { inSheet.f[e.target.dataset.in] = e.target.value; return; }
+  if (e.target.matches('#interestOverlay [data-in-fdsimple]')) { inSheet.f.fdSimple = e.target.checked; inRender(); return; }
   if (e.target.matches('#interestOverlay [data-in-paused]')) inSheet.f.paused = e.target.checked;
 });
 document.addEventListener('keydown', e => { if (inSheet && e.key === 'Escape') { e.preventDefault(); inClose(); } });
