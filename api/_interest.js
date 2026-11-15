@@ -102,7 +102,14 @@ export function planAccrual({ kind, balances = [], rates = [], terms = null, led
   const creditsThrough = upTo => {
     const m = new Map();
     if (!periodic) return m;
-    for (const p of creditPeriods(periodic.anchor, periodic.months, upTo)) {
+    // endsOn (an FD's last day before maturity): no period runs past it; the part after the last full period is paid on that day.
+    const stop = periodic.endsOn && periodic.endsOn < upTo ? periodic.endsOn : upTo;
+    const periods = creditPeriods(periodic.anchor, periodic.months, stop);
+    if (periodic.endsOn && periodic.endsOn <= upTo) {
+      const start = periods.length ? addDays(periods[periods.length - 1].end, 1) : periodic.anchor;
+      if (start <= periodic.endsOn) periods.push({ start, end: periodic.endsOn });
+    }
+    for (const p of periods) {
       const amt = round2([...dayTotals.entries()].filter(([day]) => day >= p.start && day <= p.end).reduce((s, [, a]) => s + a, 0));
       if (amt > 0) m.set(p.end, amt);
     }
@@ -266,6 +273,39 @@ export async function postPeriodCredits(db, uid, l, creditTotals, through, actor
   return out;
 }
 
+// A fixed deposit's interest when it is paid (set up on the Interest page, 0035): paid out every month / quarter / year into the owner's
+// chosen savings or current account, or, for a cumulative deposit, once at maturity on the FD itself. ONE income transaction per payment
+// (external_ref interest-credit:<product>:<fd account>:<day>). Only payments in the last 30 days are written, so setting up an old FD
+// never back-fills years of entries. A payment into another account also raises that account's balance (like an accepted payment),
+// unless a balance newer than the payment is already recorded there (it already holds the money).
+export async function postFdCredits(db, uid, l, totals, through, actor = 'cron') {
+  const out = [], toId = l.fd_payout !== 'cumulative' && l.payout_account_id ? l.payout_account_id : l.account_id;
+  const label = { monthly: 'monthly', quarterly: 'quarterly', yearly: 'yearly', cumulative: 'at maturity' }[l.fd_payout] || 'period';
+  for (const [day, amount] of totals) {
+    if (day > addDays(through, 1) || day < addDays(through, -CORRECTION_WINDOW_DAYS) || !(amount > 0)) continue;
+    const ref = `interest-credit:${l.product_key}:${l.account_key}:${day}`, at = new Date(endOfIstDay(day > through ? through : day)).toISOString();
+    const descr = (`${l.account_name} FD interest paid · ${label}` + (l.fd_payout === 'cumulative' ? ` · matured ${day}` : ` · period to ${day}`) + (toId !== l.account_id ? ` · from ${l.bank_name} FD` : '') + ' (app: nightly accrual)').slice(0, 180);
+    const moves = toId !== l.account_id;
+    const [ins, bal] = await withActor(db, actor, [
+      [`INSERT INTO wealth_transactions (user_id, kind, category, description, amount, account, account_id, occurred_on, external_ref, review_status, reviewed_at, applied_balance_as_of)
+        SELECT $1, 'income', 'Interest', $2, $3, '', $4, $5::date, $6, ${moves ? `'accepted', $7::timestamptz, $7::timestamptz` : 'NULL, NULL, NULL'}
+        WHERE EXISTS (SELECT 1 FROM wealth_accounts WHERE id = $4 AND user_id = $1)
+        ON CONFLICT (user_id, external_ref) WHERE external_ref IS NOT NULL DO NOTHING RETURNING id`, [uid, descr, amount, toId, day, ref, ...(moves ? [at] : [])]],
+      moves ? [`WITH cur AS (SELECT balance, as_of FROM wealth_v_latest_balances WHERE account_id = $1)
+        INSERT INTO wealth_account_balances (account_id, as_of, balance, status, note, entered_by)
+        SELECT $1, $4::timestamptz, round(cur.balance + $5::numeric, 2), 'reported', $6, 'accept' FROM cur
+        WHERE cur.as_of < $4::timestamptz AND EXISTS (SELECT 1 FROM wealth_transactions WHERE user_id = $2 AND external_ref = $3 AND applied_balance_as_of = $4::timestamptz)
+        ON CONFLICT (account_id, as_of) DO NOTHING RETURNING balance::float8 AS balance`, [toId, uid, ref, at, amount, (`FD interest from ${l.bank_name} ${l.account_name} (+${amount})`).slice(0, 300)]] : ['SELECT 1 WHERE false', []],
+      moves ? [`UPDATE wealth_accounts SET current_balance = (SELECT balance FROM wealth_v_latest_balances WHERE account_id = $1),
+          balance_as_of = (SELECT as_of FROM wealth_v_latest_balances WHERE account_id = $1), balance_status = 'stale', updated_at = now()
+        WHERE id = $1 AND user_id = $2 AND subtype_code IN ('savings', 'current')
+          AND EXISTS (SELECT 1 FROM wealth_account_balances WHERE account_id = $1 AND as_of = $3::timestamptz AND entered_by = 'accept') RETURNING id`, [toId, uid, at]] : ['SELECT 1 WHERE false', []],
+    ]);
+    out.push({ day, amount, accountId: toId, written: ins.length > 0, balance: bal && bal[0] ? bal[0].balance : null });
+  }
+  return out;
+}
+
 // Run every linked source for one user, through yesterday (IST). Idempotent: unique keys make re-runs no-ops.
 // accountId: run only that account (used right after the owner sets an account up, so the list fills at once).
 export async function runAccrual(uid, { db = sql, now = Date.now(), dryRun = false, actor = 'cron', accountId = null } = {}) {
@@ -279,7 +319,9 @@ export async function runAccrual(uid, { db = sql, now = Date.now(), dryRun = fal
     JOIN wealth_interest_products p ON p.id = l.product_id
     WHERE ($2::uuid IS NULL OR l.account_id = $2::uuid)
     ORDER BY a.bank_name, a.account_name`, [uid, accountId]);
-  const links = await linkQuery(`coalesce(l.credit_frequency, p.credit_frequency) AS credit_frequency, l.credit_anchor::text AS credit_anchor, l.balance_max_age_days, coalesce(l.paused, false) AS paused, l.record_mode`)
+  const v34 = `coalesce(l.credit_frequency, p.credit_frequency) AS credit_frequency, l.credit_anchor::text AS credit_anchor, l.balance_max_age_days, coalesce(l.paused, false) AS paused, l.record_mode, l.credit_frequency AS link_frequency`;
+  const links = await linkQuery(v34 + ', l.payout_account_id')
+    .catch(e => { if (e?.code !== '42703') throw e; return linkQuery(v34 + ', NULL::uuid AS payout_account_id'); })     // before 0035
     .catch(e => { if (e?.code !== '42703') throw e; return linkQuery('p.credit_frequency AS credit_frequency, NULL::text AS credit_anchor, NULL::int AS balance_max_age_days, false AS paused, NULL::text AS record_mode')
       .catch(e2 => { if (e2?.code === '42703') return linkQuery('NULL::text AS credit_frequency, NULL::text AS credit_anchor, NULL::int AS balance_max_age_days, false AS paused, NULL::text AS record_mode'); throw e2; }); });   // before 0034 / 0009
   const unlinked = await db.query(`SELECT a.account_key, a.bank_name, a.account_name FROM wealth_accounts a
@@ -302,8 +344,13 @@ export async function runAccrual(uid, { db = sql, now = Date.now(), dryRun = fal
     // Paid every N months: accrued daily, paid at the end of each period (periods counted from the account's anchor; default whole calendar months).
     const months = kind === 'savings' ? FREQ_MONTHS[l.credit_frequency] : undefined;
     const credit = months ? { mode: 'periodic', months, anchor: l.credit_anchor || DEFAULT_ANCHOR } : null;
+    // An FD set up on the Interest page (its link says how it is paid): paid out every N months from the booking date until maturity,
+    // or (cumulative) once at maturity. FDs linked before that keep only their daily figures, as before.
+    const fdPaid = kind === 'fd' && !!l.link_frequency && terms.bookedOn;
+    const fdCredit = fdPaid && terms.payout !== 'cumulative' && FREQ_MONTHS[terms.payout]
+      ? { mode: 'periodic', months: FREQ_MONTHS[terms.payout], anchor: terms.bookedOn, endsOn: terms.maturityOn ? addDays(terms.maturityOn, -1) : null } : null;
     const maxAgeDays = Number(l.balance_max_age_days) > 0 ? Number(l.balance_max_age_days) : STALE_PRINCIPAL_DAYS;
-    const plan = planAccrual({ kind, balances, rates, terms, ledger, through, dailyCredit, credit, maxAgeDays });
+    const plan = planAccrual({ kind, balances, rates, terms, ledger, through, dailyCredit, credit: credit || fdCredit, maxAgeDays });
     let written = 0;
     if (plan.rows.length && !dryRun) {
       const payload = plan.rows.map(r => ({ ...r, provider: l.provider, product_key: l.product_key, account_key: l.account_key, partition_key: l.partition_key, account_id: l.account_id, product_id: l.product_id }));
@@ -351,7 +398,14 @@ export async function runAccrual(uid, { db = sql, now = Date.now(), dryRun = fal
     const dayRows = recordDays && !dryRun ? await upsertDayInterestRows(db, uid, l, plan.dayTotals, through, actor).catch(e => ({ error: String(e?.message || e) })) : null;
     if (dailyCredit && !dryRun) await settleInterestRecordMode(db, uid, l, through, recordDays ? 'day' : 'month', actor).catch(e => console.warn('[wealth-interest:record-mode]', e?.message || e));
     // Paid every N months: one income transaction per period, on the day it is paid.
-    const periodCredits = credit && !dryRun ? await postPeriodCredits(db, uid, l, plan.creditTotals, through, actor).catch(e => ({ error: String(e?.message || e) })) : null;
+    let periodCredits = credit && !dryRun ? await postPeriodCredits(db, uid, l, plan.creditTotals, through, actor).catch(e => ({ error: String(e?.message || e) })) : null;
+    if (fdPaid && !dryRun && plan.dayTotals) {
+      // A cumulative FD pays everything it earned on the day it matures (interest runs to the day before).
+      const matured = terms.payout === 'cumulative' && terms.maturityOn && addDays(terms.maturityOn, -1) <= through
+        ? new Map([[terms.maturityOn, round2([...plan.dayTotals.values()].reduce((s, a) => s + a, 0))]]) : null;
+      const totals = fdCredit ? plan.creditTotals : matured;
+      if (totals) periodCredits = await postFdCredits(db, uid, { ...l, fd_payout: terms.payout }, totals, through, actor).catch(e => ({ error: String(e?.message || e) }));
+    }
     accounts.push({ accountKey: l.account_key, account: `${l.bank_name} · ${l.account_name}`, product: l.product_key, status: plan.status,
       monthInterest: monthRow, dayInterest: dayRows, periodCredits, creditFrequency: l.credit_frequency || null, estimatedBalance: estimate, lastAccrual: plan.last, rowsWritten: dryRun ? 0 : written, rowsPlanned: plan.rows.length, corrections: plan.corrections || 0,
       interestTotal: round8(plan.rows.reduce((s, r) => s + r.interest_amount, 0)), skipped: plan.skipped.slice(-5) });
@@ -424,7 +478,8 @@ export async function saveInterestAccount(uid, b, { db = sql, actor = 'user', no
   if (!isUuid(b?.accountId)) throw httpError(400, 'Choose the account.');
   const [a] = await db.query(`SELECT id, account_key, bank_name, account_name, subtype_code FROM wealth_accounts WHERE id=$1 AND user_id=$2 AND status='active'`, [b.accountId, uid]);
   if (!a) throw httpError(404, 'Account not found');
-  if (!['savings', 'current'].includes(a.subtype_code)) throw httpError(400, 'Interest by a yearly rate is for savings and current accounts. A fixed deposit uses its deposit terms.');
+  if (a.subtype_code === 'fixed_deposit') return saveFdInterest(uid, a, b, { db, actor, now });
+  if (!['savings', 'current'].includes(a.subtype_code)) throw httpError(400, 'Interest by a yearly rate is for savings, current and fixed-deposit accounts.');
   const freq = String(b.creditFrequency || '');
   if (!PAYABLE.includes(freq)) throw httpError(400, 'How often is the interest paid? Choose daily, monthly, every 2 months, quarterly, half-yearly or yearly.');
   const today = istDay(now);
@@ -492,6 +547,83 @@ export async function saveInterestAccount(uid, b, { db = sql, actor = 'user', no
   return { accountId: a.id, productKey, created, rateChange, run: run && run.accounts ? run.accounts[0] || null : run };
 }
 
+// A fixed deposit on the Interest page (0035): its rate per year, its deposit terms (amount, booked on, matures on), how the interest is paid
+// (cumulative = added to the deposit and paid at maturity, compounded every quarter by default; or paid out monthly / quarterly / yearly)
+// and, when paid out, the savings or current account it is paid into. The rate covers the deposit from the day it was booked.
+export const FD_PAYOUTS = ['cumulative', 'monthly', 'quarterly', 'yearly'];
+const FD_COMPOUNDING = ['quarterly', 'monthly', 'half_yearly', 'yearly', 'simple'];
+async function saveFdInterest(uid, a, b, { db, actor, now }) {
+  const [cur] = await db.query(`SELECT fd_principal::float8 AS principal, fd_booked_on::text AS booked_on, fd_maturity_on::text AS maturity_on, fd_payout AS payout, fd_compounding AS compounding
+    FROM wealth_accounts WHERE id = $1`, [a.id]);
+  const t = b.fdTerms && typeof b.fdTerms === 'object' ? b.fdTerms : {};
+  const principal = t.principal !== undefined && t.principal !== '' ? Number(t.principal) : cur.principal;
+  const bookedOn = t.bookedOn ? String(t.bookedOn) : cur.booked_on, maturityOn = t.maturityOn ? String(t.maturityOn) : cur.maturity_on;
+  const payout = t.payout ? String(t.payout) : cur.payout;
+  if (!(principal > 0 && principal <= 1e10)) throw httpError(400, 'Give the deposit amount.');
+  if (!isDay(bookedOn || '')) throw httpError(400, 'Give the date the deposit started (YYYY-MM-DD).');
+  if (!isDay(maturityOn || '')) throw httpError(400, 'Give the maturity date (YYYY-MM-DD).');
+  if (maturityOn <= bookedOn) throw httpError(400, 'The maturity date must be after the start date.');
+  if (bookedOn > addDays(istDay(now), 366)) throw httpError(400, 'The start date is too far ahead.');
+  if (!FD_PAYOUTS.includes(payout)) throw httpError(400, 'How is the interest paid? Choose added to the deposit (cumulative), monthly, quarterly or yearly.');
+  const compounding = payout === 'cumulative' ? (t.compounding ? String(t.compounding) : cur.compounding && FD_COMPOUNDING.includes(cur.compounding) ? cur.compounding : 'quarterly') : 'simple';
+  if (!FD_COMPOUNDING.includes(compounding)) throw httpError(400, 'Compounding must be quarterly, monthly, half-yearly, yearly or simple.');
+  let payoutAccountId = null;
+  if (payout !== 'cumulative') {
+    if (!isUuid(b.payoutAccountId)) throw httpError(400, 'Choose the savings or current account the interest is paid into.');
+    const [to] = await db.query(`SELECT id FROM wealth_accounts WHERE id = $1 AND user_id = $2 AND status = 'active' AND subtype_code IN ('savings', 'current')`, [b.payoutAccountId, uid]);
+    if (!to) throw httpError(400, 'The interest can be paid into one of your own savings or current accounts only.');
+    payoutAccountId = to.id;
+  }
+  const hasRate = b.annualRatePercent !== undefined && b.annualRatePercent !== null && b.annualRatePercent !== '';
+  const pct = hasRate ? Number(b.annualRatePercent) : null;
+  if (hasRate && !(pct > 0 && pct <= 100)) throw httpError(400, 'The rate is a percent per year, above 0 and at most 100.');
+  const annual = hasRate ? Math.round(pct * 1e6) / 1e8 : null;
+  const paused = b.paused === true, freq = payout === 'cumulative' ? 'on_maturity' : payout;
+
+  const [link] = await db.query(`SELECT l.product_id, p.product_key, p.user_id AS product_owner FROM wealth_interest_links l
+    JOIN wealth_interest_products p ON p.id = l.product_id WHERE l.account_id = $1 ORDER BY (p.user_id IS NULL) LIMIT 1`, [a.id]);
+  const stmts = [[`UPDATE wealth_accounts SET fd_principal = $3, fd_booked_on = $4, fd_maturity_on = $5, fd_payout = $6, fd_compounding = $7, updated_at = now()
+    WHERE id = $1 AND user_id = $2 RETURNING id`, [a.id, uid, principal, bookedOn, maturityOn, payout, compounding]]];
+  let productKey, created = false, rateChange = null;
+  if (!link) {
+    if (!hasRate) throw httpError(400, 'Give the interest rate per year.');
+    productKey = ownKey(a.id); created = true;
+    stmts.push([`INSERT INTO wealth_interest_products (product_key, provider, user_id, credit_frequency) VALUES ($1, $2, $3, $4)
+      ON CONFLICT (product_key) DO UPDATE SET credit_frequency = EXCLUDED.credit_frequency WHERE wealth_interest_products.user_id = $3 RETURNING id`, [productKey, a.bank_name, uid, freq]]);
+    stmts.push([`INSERT INTO wealth_interest_rates (provider, product_key, product_id, annual_rate, effective_from, source_url, recorded_by, notes, evidence)
+      SELECT $1, $2, p.id, $3, $4, 'owner-entered', $5, 'FD rate entered by the account owner on the Interest page', 'Entered by the account owner'
+      FROM wealth_interest_products p WHERE p.product_key = $2 AND p.user_id = $6
+        AND NOT EXISTS (SELECT 1 FROM wealth_interest_rates r WHERE r.product_key = $2) RETURNING id`, [a.bank_name, productKey, annual, bookedOn, actor, uid]]);
+    stmts.push([`INSERT INTO wealth_interest_links (account_id, product_id, credit_frequency, credit_anchor, paused, payout_account_id)
+      SELECT $1, p.id, $3, $4, $5, $7 FROM wealth_interest_products p WHERE p.product_key = $2 AND p.user_id = $6
+      ON CONFLICT (account_id, product_id, partition_key) DO UPDATE SET credit_frequency = EXCLUDED.credit_frequency, credit_anchor = EXCLUDED.credit_anchor,
+        paused = EXCLUDED.paused, payout_account_id = EXCLUDED.payout_account_id RETURNING account_id`, [a.id, productKey, freq, bookedOn, paused, uid, payoutAccountId]]);
+  } else {
+    productKey = link.product_key;
+    const own = link.product_owner === uid;
+    stmts.push([`UPDATE wealth_interest_links SET credit_frequency = $3, credit_anchor = $4, paused = $5, payout_account_id = $6
+      WHERE account_id = $1 AND product_id = $2 RETURNING account_id`, [a.id, link.product_id, freq, bookedOn, paused, payoutAccountId]]);
+    if (own) stmts.push([`UPDATE wealth_interest_products SET credit_frequency = $2 WHERE id = $1 AND user_id = $3 RETURNING id`, [link.product_id, freq, uid]]);
+    if (hasRate) {
+      const [open] = await db.query(`SELECT id, annual_rate::float8 AS annual_rate, effective_from::text AS effective_from FROM wealth_interest_rates
+        WHERE product_key = $1 AND effective_to IS NULL ORDER BY effective_from DESC LIMIT 1`, [productKey]);
+      if (!open || Math.abs(open.annual_rate - annual) > 1e-9) {
+        if (!own) throw httpError(409, `This deposit follows the "${link.product_key}" rate, which is kept from the bank's published rate. You can change its terms and how the interest is paid, not the rate.`);
+        const from = b.effectiveFrom ? String(b.effectiveFrom) : istDay(now);
+        if (!isDay(from)) throw httpError(400, 'The new rate start must be a date (YYYY-MM-DD).');
+        if (open && from <= open.effective_from) throw httpError(409, `The new rate must start after ${open.effective_from}, when the current rate started.`);
+        stmts.push([`INSERT INTO wealth_interest_rates (provider, product_key, product_id, annual_rate, effective_from, source_url, recorded_by, notes, evidence)
+          VALUES ($1, $2, $3, $4, $5, 'owner-entered', $6, 'FD rate entered by the account owner on the Interest page', 'Entered by the account owner') RETURNING id`, [a.bank_name, productKey, link.product_id, annual, from, actor]]);
+        if (open) stmts.push([`UPDATE wealth_interest_rates SET effective_to = $2::date - 1, notes = notes || $3 WHERE id = $1 RETURNING id`, [open.id, from, ` [closed: the owner set ${pct}% from ${from}]`]]);
+        rateChange = { from, ratePercent: pct, previousPercent: open ? Math.round(open.annual_rate * 1e8) / 1e6 : null };
+      }
+    }
+  }
+  await withActor(db, actor, stmts);
+  const run = paused ? null : await runAccrual(uid, { db, now, actor, accountId: a.id }).catch(e => ({ error: String(e?.message || e) }));
+  return { accountId: a.id, productKey, created, rateChange, run: run && run.accounts ? run.accounts[0] || null : run };
+}
+
 // TR3-3.7 Interest view: per linked source, the current rate, how it is paid, accrued totals and credits; the recent interest
 // rows (the "list"); and the accounts that can be set up.
 export async function interestOverview(uid, { db = sql, now = Date.now() } = {}) {
@@ -504,16 +636,33 @@ export async function interestOverview(uid, { db = sql, now = Date.now() } = {})
       (SELECT coalesce(sum(interest_amount), 0)::float8 FROM wealth_interest_ledger g WHERE g.user_id = a.user_id AND g.account_key = a.account_key AND g.product_key = p.product_key
          AND to_char(accrual_date, 'YYYY-MM') = $2) AS accrued_month,
       (SELECT coalesce(sum(interest_amount), 0)::float8 FROM wealth_interest_ledger g WHERE g.user_id = a.user_id AND g.account_key = a.account_key AND g.product_key = p.product_key) AS accrued_total,
-      (SELECT coalesce(sum(amount), 0)::float8 FROM wealth_transactions t WHERE t.user_id = a.user_id AND t.account_id = a.id AND t.kind = 'income' AND t.category = 'Interest' AND t.duplicate_of IS NULL) AS credited_total,
+      (SELECT coalesce(sum(amount), 0)::float8 FROM wealth_transactions t WHERE t.user_id = a.user_id AND t.kind = 'income' AND t.category = 'Interest' AND t.duplicate_of IS NULL
+         AND (t.account_id = a.id OR t.external_ref LIKE 'interest-credit:' || p.product_key || ':' || a.account_key || ':%')) AS credited_total,
       (SELECT b.balance::float8 FROM wealth_v_latest_balances b WHERE b.account_id = a.id) AS balance,
       (SELECT b.as_of FROM wealth_v_latest_balances b WHERE b.account_id = a.id) AS balance_as_of,
-      a.fd_principal::float8 AS fd_principal, a.fd_maturity_on::text AS fd_maturity_on
+      a.fd_principal::float8 AS fd_principal, a.fd_maturity_on::text AS fd_maturity_on, a.fd_booked_on::text AS fd_booked_on, a.fd_payout, a.fd_compounding
     FROM wealth_interest_links l JOIN wealth_accounts a ON a.id = l.account_id AND a.user_id = $1 AND a.status = 'active'
     JOIN wealth_interest_products p ON p.id = l.product_id ORDER BY a.bank_name, a.account_name`, [uid, month]);
-  const sources = await query(linkCols).catch(e => { if (e?.code === '42703') return query(`p.credit_frequency, NULL::text AS credit_anchor, NULL::int AS balance_max_age_days, false AS paused, false AS own, 'month' AS record_mode`); throw e; });
+  const payoutCols = `, l.payout_account_id, (SELECT trim(t.bank_name || ' · ' || t.account_name) FROM wealth_accounts t WHERE t.id = l.payout_account_id AND t.user_id = $1) AS payout_account, l.credit_frequency AS link_frequency`;
+  const sources = await query(linkCols + payoutCols)
+    .catch(e => { if (e?.code === '42703') return query(linkCols + ', NULL::uuid AS payout_account_id, NULL::text AS payout_account, l.credit_frequency AS link_frequency'); throw e; })    // before 0035
+    .catch(e => { if (e?.code === '42703') return query(`p.credit_frequency, NULL::text AS credit_anchor, NULL::int AS balance_max_age_days, false AS paused, false AS own, 'month' AS record_mode, NULL::uuid AS payout_account_id, NULL::text AS payout_account, NULL::text AS link_frequency`); throw e; });
   // Periodic accounts: the open period, what it has earned so far and when it is paid.
   for (const s of sources) {
-    const months = s.subtype_code !== 'fixed_deposit' ? FREQ_MONTHS[s.credit_frequency] : undefined;
+    if (s.subtype_code === 'fixed_deposit') {
+      // FD: paid out every N months from the booking date (the last period ends the day before maturity), or all at maturity.
+      s.max_age_days = null;
+      const n = s.link_frequency && s.fd_payout !== 'cumulative' ? FREQ_MONTHS[s.fd_payout] : undefined;
+      const matured = s.fd_maturity_on && s.fd_maturity_on <= today;
+      let p = n && s.fd_booked_on && !matured ? periodHolding(s.fd_booked_on, n, today) : null;
+      if (p && s.fd_maturity_on && p.end >= s.fd_maturity_on) p = { start: p.start, end: addDays(s.fd_maturity_on, -1) };
+      s.period = p; s.next_credit = p ? p.end : s.link_frequency && s.fd_payout === 'cumulative' && !matured ? s.fd_maturity_on : null;
+      const [r] = p || s.next_credit ? await db.query(`SELECT coalesce(sum(interest_amount), 0)::float8 AS amount FROM wealth_interest_ledger g JOIN wealth_accounts a ON a.account_key = g.account_key AND a.user_id = g.user_id
+        WHERE g.user_id = $1 AND a.id = $2 AND g.product_key = $3 AND g.accrual_date >= $4::date AND g.accrual_date <= $5::date`, [uid, s.account_id, s.product_key, p ? p.start : s.fd_booked_on || '2000-01-01', p ? p.end : today]) : [null];
+      s.period_accrued = r ? round2(r.amount) : null;
+      continue;
+    }
+    const months = FREQ_MONTHS[s.credit_frequency];
     s.max_age_days = Number(s.balance_max_age_days) > 0 ? Number(s.balance_max_age_days) : STALE_PRINCIPAL_DAYS;
     if (!months) { s.next_credit = s.credit_frequency === 'daily' ? today : null; s.period_accrued = null; continue; }
     const p = periodHolding(s.credit_anchor || DEFAULT_ANCHOR, months, today);
