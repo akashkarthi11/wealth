@@ -238,3 +238,89 @@ test('the add sheet: choice cards for how it is paid; daily shows the two ways i
   assert.match(box.innerHTML, /shown as a new entry every day/);
   assert.match(read('interest.js'), /recordMode: f\.creditFrequency === 'daily' \? f\.recordMode : undefined/, 'sent only for daily');
 });
+
+// ---- fixed deposits on the Interest page (0035) ----
+async function fdSetup() {
+  const s = await setup();
+  const fd = (await createAccount(s.uid, { subtype: 'fixed_deposit', institution: 'SBI', name: 'SBI FD' }, { db: s.a })).account.id;
+  return { ...s, fd };
+}
+test('FD paid out monthly: the interest goes into the chosen savings account as an Interest entry and raises its balance, once', async () => {
+  const { a, uid, acc, fd, latest } = await fdSetup();
+  const r = await saveInterestAccount(uid, { accountId: fd, annualRatePercent: 7.2, fdTerms: { principal: 100000, bookedOn: '2026-08-01', maturityOn: '2027-08-01', payout: 'monthly' }, payoutAccountId: acc }, { db: a, now: NOW });
+  assert.equal(r.created, true);
+  const rows = () => a.query(`SELECT account_id, amount::float8 AS amount, occurred_on::text AS day, review_status, external_ref FROM wealth_transactions WHERE user_id=$1 AND category='Interest' ORDER BY occurred_on`, [uid]);
+  let paid = await rows();
+  assert.deepEqual(paid.map(x => [x.account_id, x.day, x.review_status]), [[acc, '2026-10-31', 'accepted']], 'only the last 30 days are written: 31 Oct, into the savings account');
+  const oct = r2(100000 * 0.072 / 365 * 31);
+  assert.ok(Math.abs(paid[0].amount - oct) <= 0.01);
+  assert.match(paid[0].external_ref, /^interest-credit:my-.*:2026-10-31$/);
+  assert.equal((await latest()).b, r2(100000 + paid[0].amount), 'the savings balance went up by it');
+  const led = await a.query(`SELECT min(accrual_date)::text AS first FROM wealth_interest_ledger WHERE user_id=$1 AND product_key=$2`, [uid, 'my-' + fd]);
+  assert.equal(led[0].first, '2026-08-01', 'interest from the day it was booked');
+  await runAccrual(uid, { db: a, now: NOW });
+  paid = await rows();
+  assert.equal(paid.length, 1, 'running again adds nothing');
+  assert.equal((await latest()).b, r2(100000 + paid[0].amount), 'and does not raise the balance twice');
+  const ov = await interestOverview(uid, { db: a, now: NOW });
+  const s = ov.sources.find(x => x.account_id === fd);
+  assert.deepEqual([s.fd_payout, s.payout_account, s.next_credit, s.fd_principal], ['monthly', 'HDFC Bank · HDFC Savings', '2026-11-30', 100000]);
+  assert.ok(s.period_accrued > 0);
+  assert.equal(s.credited_total, paid[0].amount, 'the FD card counts what it paid into the savings account');
+});
+test('FD added to the deposit (cumulative): compounded every quarter, ONE entry for all of it on the maturity date, on the FD', async () => {
+  const { a, uid, fd } = await fdSetup();
+  await saveInterestAccount(uid, { accountId: fd, annualRatePercent: 7, fdTerms: { principal: 100000, bookedOn: '2025-11-01', maturityOn: '2026-11-10', payout: 'cumulative' } }, { db: a, now: NOW });
+  const paid = await a.query(`SELECT account_id, amount::float8 AS amount, occurred_on::text AS day FROM wealth_transactions WHERE user_id=$1 AND category='Interest'`, [uid]);
+  assert.deepEqual(paid.map(x => [x.account_id, x.day]), [[fd, '2026-11-10']]);
+  const [sum] = await a.query(`SELECT sum(interest_amount)::float8 AS s, max(accrual_date)::text AS last FROM wealth_interest_ledger WHERE user_id=$1 AND product_key=$2`, [uid, 'my-' + fd]);
+  assert.equal(paid[0].amount, r2(sum.s));
+  assert.equal(sum.last, '2026-11-09', 'interest runs to the day before maturity');
+  assert.ok(paid[0].amount > r2(100000 * 0.07 * 374 / 365), 'more than simple interest: it compounds');
+  const [acct] = await a.query(`SELECT fd_payout, fd_compounding FROM wealth_accounts WHERE id=$1`, [fd]);
+  assert.deepEqual([acct.fd_payout, acct.fd_compounding], ['cumulative', 'quarterly']);
+});
+test('FD rules: amount, dates and an own savings or current account to pay into are needed', async () => {
+  const { a, uid, acc, other, fd } = await fdSetup();
+  const base = { accountId: fd, annualRatePercent: 7, fdTerms: { principal: 50000, bookedOn: '2026-10-01', maturityOn: '2027-10-01', payout: 'quarterly' } };
+  await assert.rejects(saveInterestAccount(uid, base, { db: a, now: NOW }), /savings or current account the interest is paid into/);
+  await assert.rejects(saveInterestAccount(uid, { ...base, payoutAccountId: fd }, { db: a, now: NOW }), /own savings or current accounts only/);
+  const theirs = (await createAccount(other, { subtype: 'savings', institution: 'X', name: 'X Savings' }, { db: a })).account.id;
+  await assert.rejects(saveInterestAccount(uid, { ...base, payoutAccountId: theirs }, { db: a, now: NOW }), /own savings or current accounts only/);
+  await assert.rejects(saveInterestAccount(uid, { ...base, payoutAccountId: acc, fdTerms: { ...base.fdTerms, maturityOn: '2026-09-01' } }, { db: a, now: NOW }), /maturity date must be after/);
+  await assert.rejects(saveInterestAccount(uid, { ...base, payoutAccountId: acc, fdTerms: { ...base.fdTerms, payout: 'weekly' } }, { db: a, now: NOW }), /How is the interest paid/);
+  await assert.rejects(saveInterestAccount(uid, { ...base, payoutAccountId: acc, annualRatePercent: undefined }, { db: a, now: NOW }), /rate per year/);
+  const ok = await saveInterestAccount(uid, { ...base, payoutAccountId: acc }, { db: a, now: NOW });
+  assert.equal(ok.created, true);
+  // pause keeps the terms
+  await saveInterestAccount(uid, { accountId: fd, payoutAccountId: acc, paused: true }, { db: a, now: NOW });
+  const s = (await interestOverview(uid, { db: a, now: NOW })).sources.find(x => x.account_id === fd);
+  assert.deepEqual([s.paused, s.fd_principal, s.fd_payout], [true, 50000, 'quarterly']);
+  const m = read('scripts/migrations/0035_fd_interest_payout.sql');
+  assert.match(m, /ADD COLUMN IF NOT EXISTS payout_account_id uuid/);
+  assert.doesNotMatch(m, /\bDROP TABLE\b|\bTRUNCATE\b|DELETE FROM|DROP COLUMN/i);
+});
+test('the sheet: choosing an FD shows the deposit, four ways it is paid with previews, and where a payout goes', () => {
+  const c = loadUi(), box = { innerHTML: '', querySelector: () => null };
+  c.$ = () => box;
+  vm.runInContext(`inData = { today: '2026-11-14', ownMaxAgeDays: 60, sources: [], history: [], unlinked: [{ id: 'h', bank_name: 'HDFC Bank', account_name: 'HDFC Savings', subtype_code: 'savings' }, { id: 'f', bank_name: 'SBI', account_name: 'SBI FD', subtype_code: 'fixed_deposit' }] };`, c);
+  vm.runInContext(`inOpen('f')`, c);
+  assert.match(box.innerHTML, /<optgroup label="Fixed deposits">/);
+  assert.match(box.innerHTML, /INTEREST · FIXED DEPOSIT/);
+  assert.match(box.innerHTML, /The deposit/);
+  assert.equal((box.innerHTML.match(/data-in-fdpay="/g) || []).length, 4);
+  assert.match(box.innerHTML, /data-in-fdpay="cumulative" aria-checked="true"/);
+  assert.doesNotMatch(box.innerHTML, /data-in-freq=/, 'no savings steps for an FD');
+  vm.runInContext(`Object.assign(inSheet.f, { ratePercent: '7.2', fdPrincipal: '100000', fdBookedOn: '2026-08-01', fdMaturityOn: '2027-08-01' }); inRender();`, c);
+  assert.match(box.innerHTML, /At maturity · 1 Aug 2027/);
+  assert.match(box.innerHTML, /Interest · each month<\/i><em>₹600\.00/);
+  vm.runInContext(`inSheet.f.fdPayout = 'monthly'; inRender();`, c);
+  assert.match(box.innerHTML, /Paid into<\/span><select data-in="payoutAccountId">/);
+  const payInto = box.innerHTML.split('data-in="payoutAccountId"')[1].split('</select>')[0];
+  assert.match(payInto, /<option value="h">HDFC Bank · HDFC Savings<\/option>/);
+  assert.doesNotMatch(payInto, /value="f"/, 'an FD is not offered as the account to pay into');
+  vm.runInContext(`inSheet.f.payoutAccountId = 'h'; inRender();`, c);
+  assert.match(box.innerHTML, /About ₹600\.00 is paid every month into HDFC Bank · HDFC Savings/);
+  vm.runInContext(`inOpen('h')`, c);
+  assert.match(box.innerHTML, /data-in-freq="monthly"/, 'a savings account still gets the savings steps');
+});

@@ -1291,3 +1291,6 @@ b.pj-medium{color:#f5c26b}
 .in-mock .in-mock-note{color:var(--muted);font-size:11px}
 .in-mock-wide{margin-top:10px}
 @media (max-width:520px){.in-opts{grid-template-columns:1fr 1fr}.in-opts-2{grid-template-columns:1fr}}
+/* interest sheet: fixed deposit (2026-11-14) */
+.in-row3{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:620px){.in-row3{grid-template-columns:1fr 1fr}.in-row3>.ofs-f:first-child{grid-column:1/-1}}
