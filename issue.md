@@ -188,3 +188,32 @@ The production database was updated and verified on 11 Nov 2026. The earlier dev
 ### For ChatGPT
 14. Keep inserting transactions only (rules.md §1). A card spend counts in the amount owed at once; a savings payment changes the balance when
     the owner presses Accept. Do not write balances to "fix" either.
+
+
+---
+
+## Issue: Slice banking balances changed between screenshots; reconcile balance movements and interest display (found 16 Nov 2026)
+
+### Latest source (Slice Banking screenshots, 16 Nov 2026 at 00:06 IST)
+| Account / metric | Previous saved value | Latest displayed value | Difference |
+|---|---:|---:|---:|
+| Atom Savings | ₹55,355.00 | ₹55,363.00 | +₹8.00 |
+| Slice Savings ••3731 | ₹42,426.00 | ₹42,402.00 | -₹24.00 |
+| Slice FD | ₹3,006.00 | ₹3,007.00 | +₹1.00 |
+| Slice Monies | 147,056 | 147,056 | 0 |
+
+- Atom screen also shows ₹8.34 interest earned yesterday and ₹113.40 interest earned this month.
+- Slice Savings displays interest at 100% of the RBI repo rate; no daily interest amount is shown in this screenshot.
+- Slice FD displays 7.75% p.a.; Monies displays a 1% reward rate.
+- A separate successful ₹30 Paytm UPI payment to SJ Bunk Shop on 15 Nov 2026 at 10:33 pm was recorded from Slice Savings ••3731 (transaction reference `PTM5ca3a86c13dc40dca4a0d518b0953878`). The later displayed Slice Savings balance is ₹42,402. The net movement from the previous saved ₹42,426 is -₹24; reconcile the intervening movements rather than assuming the ₹30 payment is the only change.
+
+### Production updates applied
+- Updated Atom Savings to ₹55,363, Slice Savings ••3731 to ₹42,402, and Slice FD to ₹3,007 using the latest screenshot as the reported balance source.
+- Saved a verified Slice Monies snapshot of 147,056 units. Monies are reward units, not cash.
+- No interest transaction was created from the screenshot.
+
+### Follow-up / reconciliation
+- Verify the Atom interest ledger for 15 Nov against the displayed actual ₹8.34; do not substitute a calculated estimate.
+- Reconcile the Slice Savings net movement of -₹24 against the ₹30 SJ Bunk Shop debit and any other intervening credits/debits.
+- Confirm the FD ₹1 increase against the FD account history / interest posting.
+- Preserve the rule in this file: interest shown on screenshots is observational only; the nightly interest task owns interest ledger entries. Never add a second interest entry from a screenshot.
