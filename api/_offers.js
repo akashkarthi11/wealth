@@ -142,7 +142,7 @@ export function matchOffers(offers, tx, uses = [], programs = new Map()) {
       id: o.id, title: o.title, kind: e.kind, unit: e.unit, rewardUnit: o.reward_unit, amount: e.amount, units: e.units, inr: e.inr, percent: e.percent,
       benefitType: o.benefit_type, benefitValue: Number(o.benefit_value), maxBenefit: o.max_benefit == null ? null : Number(o.max_benefit),
       expected: e.amount, couponCode: o.coupon_code || null, verifyStatus: o.verify_status, notes: o.notes || null, apply: o.apply_mode || 'auto',
-      programId: o.program_id || null, receiveAccountId: o.receive_account_id || null, programName: program ? program.name : null, programUnit: program ? program.unit : null, group: o.exclusive_group || null, oneTime: o.frequency === 'one_time',
+      programId: o.program_id || null, receiveAccountId: o.receive_account_id || null, creditTiming: o.credit_timing || 'now', programName: program ? program.name : null, programUnit: program ? program.unit : null, group: o.exclusive_group || null, oneTime: o.frequency === 'one_time',
       usesLeftTotal: st.usesLeftTotal, usesLeftPeriod: st.usesLeftPeriod, benefitLeftPeriod: st.benefitLeftPeriod, shadowed: null,
     });
   }
@@ -172,7 +172,7 @@ const COLS = `o.id, o.account_id, o.title, o.merchants, o.payment_mode, o.weekda
   o.block_amount::float8 AS block_amount, o.max_benefit::float8 AS max_benefit, o.min_spend::float8 AS min_spend, o.max_spend::float8 AS max_spend, o.reward_unit,
   o.frequency, o.max_uses, o.period, o.cycle_day, o.period_max_uses, o.period_max_benefit::float8 AS period_max_benefit, o.valid_from::text AS valid_from,
   o.valid_to::text AS valid_to, o.active, o.verify_status, o.source_url, o.notes, o.last_checked_on::text AS last_checked_on, o.program_id, o.apply_mode,
-  o.exclusive_group, o.preset, o.receive_account_id`;
+  o.exclusive_group, o.preset, o.receive_account_id, o.credit_timing`;
 
 export async function programsFor(uid, { db = sql } = {}) {
   const rows = await db.query(`SELECT id, name, provider, unit, account_id, inr_per_unit::float8 AS inr_per_unit FROM wealth_reward_programs WHERE user_id=$1 AND status='active' ORDER BY provider, name`, [uid]);
@@ -257,23 +257,26 @@ export async function saveOffer(uid, b, { db = sql } = {}) {
   const verify = b.verifyStatus === 'verified' ? 'verified' : 'to_verify';
   // The account that receives the cashback (empty = the account the payment is made from).
   const receiveId = b.receiveAccountId || null;
+  // When the bank credits the cashback: right away (default) or only after the statement is settled.
+  if (b.creditTiming && !['now', 'settle'].includes(b.creditTiming)) throw httpError(400, 'Cashback is credited right away (now) or after settlement (settle).');
+  const timing = b.creditTiming === 'settle' ? 'settle' : 'now';
   if (receiveId) { if (!isUuid(receiveId)) throw httpError(400, 'Invalid receiving account.'); const [r] = await db.query('SELECT id FROM wealth_accounts WHERE id=$1 AND user_id=$2', [receiveId, uid]); if (!r) throw httpError(404, 'Receiving account not found'); }
   const vals = [uid, b.accountId, title, normMerchants(b.merchants), type, value, max, min, unit, from, to, b.active === false ? false : true, verify, url, text(b.notes, 300), checked,
     mode, weekdays, text(b.couponCode, 40), frequency, maxUses, period, cycleDay, periodUses, periodBenefit,
-    maxSpend, block, programId, apply, text(b.exclusiveGroup, 40), text(b.preset, 30), receiveId];
+    maxSpend, block, programId, apply, text(b.exclusiveGroup, 40), text(b.preset, 30), receiveId, timing];
   const set = `account_id=$2, title=$3, merchants=$4, benefit_type=$5, benefit_value=$6, max_benefit=$7, min_spend=$8, reward_unit=$9, valid_from=$10, valid_to=$11, active=$12,
     verify_status=$13, source_url=$14, notes=$15, last_checked_on=$16, payment_mode=$17, weekdays=$18, coupon_code=$19, frequency=$20, max_uses=$21, period=$22, cycle_day=$23,
-    period_max_uses=$24, period_max_benefit=$25, max_spend=$26, block_amount=$27, program_id=$28, apply_mode=$29, exclusive_group=$30, preset=$31, receive_account_id=$32, updated_at=now()`;
+    period_max_uses=$24, period_max_benefit=$25, max_spend=$26, block_amount=$27, program_id=$28, apply_mode=$29, exclusive_group=$30, preset=$31, receive_account_id=$32, credit_timing=$33, updated_at=now()`;
   if (b.id) {
     if (!isUuid(b.id)) throw httpError(400, 'Invalid offer');
-    const rows = await db.query(`UPDATE wealth_account_offers SET ${set} WHERE id=$33 AND user_id=$1 RETURNING id`, [...vals, b.id]);
+    const rows = await db.query(`UPDATE wealth_account_offers SET ${set} WHERE id=$34 AND user_id=$1 RETURNING id`, [...vals, b.id]);
     if (!rows.length) throw httpError(404, 'Offer not found');
     return { id: rows[0].id, saved: true };
   }
   const rows = await db.query(`INSERT INTO wealth_account_offers (user_id, account_id, title, merchants, benefit_type, benefit_value, max_benefit, min_spend, reward_unit, valid_from, valid_to,
     active, verify_status, source_url, notes, last_checked_on, payment_mode, weekdays, coupon_code, frequency, max_uses, period, cycle_day, period_max_uses, period_max_benefit,
-    max_spend, block_amount, program_id, apply_mode, exclusive_group, preset, receive_account_id)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32) RETURNING id`, vals);
+    max_spend, block_amount, program_id, apply_mode, exclusive_group, preset, receive_account_id, credit_timing)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33) RETURNING id`, vals);
   return { id: rows[0].id, saved: true };
 }
 
@@ -308,14 +311,14 @@ export async function applyOffers(uid, tx, offerIds, { db = sql, actor = 'user',
     ON CONFLICT (offer_id, transaction_id) WHERE transaction_id IS NOT NULL DO UPDATE SET status='expected', benefit=EXCLUDED.benefit, units=EXCLUDED.units, percent=EXCLUDED.percent, receive_account_id=EXCLUDED.receive_account_id, updated_at=now()
       WHERE wealth_offer_uses.status = 'cancelled' RETURNING id`,
     [uid, m.id, tx.id, day, m.inr ?? 0, m.title, m.kind, m.units, m.programId, m.percent, recvOf(m)]]));
-  const applied = pick.map((m, i) => (results[i].length ? { id: results[i][0].id, offerId: m.id, title: m.title, kind: m.kind, unit: m.unit, amount: m.amount, units: m.units, inr: m.inr, percent: m.percent, programName: m.programName, receiveAccountId: recvOf(m) } : null)).filter(Boolean);
+  const applied = pick.map((m, i) => (results[i].length ? { id: results[i][0].id, offerId: m.id, title: m.title, kind: m.kind, unit: m.unit, amount: m.amount, units: m.units, inr: m.inr, percent: m.percent, programName: m.programName, receiveAccountId: recvOf(m), creditTiming: m.creditTiming } : null)).filter(Boolean);
   return { applied, matched, state };
 }
 
 // For accepted payments: the rewards still available to map (not applied yet), and whether the owner has to map them by hand
 // (two or more available and nothing mapped yet): the Transactions page shows those in yellow.
 const slim = m => ({ id: m.id, title: m.title, kind: m.kind, unit: m.unit, rewardUnit: m.rewardUnit, amount: m.amount, units: m.units, inr: m.inr, percent: m.percent,
-  programName: m.programName, programUnit: m.programUnit, receiveAccountId: m.receiveAccountId, apply: m.apply, shadowed: m.shadowed, oneTime: m.oneTime, couponCode: m.couponCode });
+  programName: m.programName, programUnit: m.programUnit, receiveAccountId: m.receiveAccountId, creditTiming: m.creditTiming, apply: m.apply, shadowed: m.shadowed, oneTime: m.oneTime, couponCode: m.couponCode });
 export async function choicesForTransactions(uid, txIds, { db = sql } = {}) {
   const out = new Map();
   if (!txIds.length) return out;

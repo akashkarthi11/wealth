@@ -1,0 +1,242 @@
+<title>Rewards Review Mock-up</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap">
+<style>
+/* Layout: one column of notes, each followed by a phone-sized sample screen (the app's own dark look) that you can tap.
+   Page colours follow the viewer's theme; the sample screens always use the app's navy theme because they show the app. */
+:root{
+  --bg:#f4f6fa; --panel:#ffffff; --fg:#16202c; --muted:#566476; --line:#d8dfe8; --accent:#0e7a6f; --accent-soft:#dcf3ef; --warn:#8c5a00; --warn-soft:#fcefd2; --bad:#a82434; --bad-soft:#fbe3e7;
+  --f-body:'Inter',system-ui,sans-serif; --f-head:'Space Grotesk','Inter',system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0d141b; --panel:#151f29; --fg:#e6edf4; --muted:#9aabbc; --line:#26343f; --accent:#4cc9bb; --accent-soft:#12302f; --warn:#f0b955; --warn-soft:#33270f; --bad:#ff8a9a; --bad-soft:#3a1820; color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0d141b; --panel:#151f29; --fg:#e6edf4; --muted:#9aabbc; --line:#26343f; --accent:#4cc9bb; --accent-soft:#12302f; --warn:#f0b955; --warn-soft:#33270f; --bad:#ff8a9a; --bad-soft:#3a1820; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.6;
+  padding-block:32px 72px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:44px}
+h1,h2,h3{font-family:var(--f-head);line-height:1.2;text-wrap:balance;margin:0}
+h1{font-size:clamp(28px,5vw,40px);letter-spacing:-.5px} h2{font-size:23px} h3{font-size:16px}
+p{margin:0}
+.lede{font-size:17px;color:var(--muted);max-width:64ch}
+.eyebrow{font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent)}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+ul.plain{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+.scene{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);gap:28px;align-items:start}
+@media (max-width:820px){.scene{grid-template-columns:minmax(0,1fr)}}
+.notes{display:flex;flex-direction:column;gap:12px}
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;margin-right:6px}
+.t-now{background:var(--bad-soft);color:var(--bad)} .t-new{background:var(--accent-soft);color:var(--accent)} .t-ask{background:var(--warn-soft);color:var(--warn)}
+.ask{border-left:3px solid var(--warn);padding:2px 0 2px 14px}
+/* ---- the sample app screens ---- */
+.app{--a-bg:#0e1829;--a-panel:#142238;--a-line:#26364e;--a-text:#eef4ff;--a-muted:#8fa2bd;--a-green:#6ce0b0;--a-blue:#83aaff;--a-yel:#f5c26b;
+  background:var(--a-bg);color:var(--a-text);border:1px solid var(--a-line);border-radius:22px;padding:16px;display:flex;flex-direction:column;gap:12px;font-size:14px;box-shadow:0 14px 40px #0004}
+.app *{box-sizing:border-box}
+.app small{color:var(--a-muted);font-size:12px}
+.app-title{font-family:var(--f-head);font-size:15px;color:var(--a-text);display:flex;justify-content:space-between;align-items:center}
+.pay{background:var(--a-panel);border:1px solid var(--a-line);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.pay.yellow{border-color:#8a6d1f}
+.pay-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pay-top b{font-size:15px} .pay-top .amt{font-weight:700;font-size:16px;white-space:nowrap}
+.bal{color:var(--a-muted);font-size:12.5px} .bal b{color:var(--a-text)}
+.rw{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#10261f;border:1px solid #2d5a4c;border-radius:12px;padding:10px 12px}
+.rw b{color:var(--a-green)} .rw .to{color:var(--a-muted);font-size:12.5px}
+.link{background:none;border:0;color:var(--a-blue);font:inherit;font-size:12.5px;padding:6px 0;cursor:pointer;min-height:32px}
+.choose{background:#2a2412;border:1px solid #8a6d1f;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.choose .head{color:var(--a-yel);font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.chips{display:flex;flex-direction:column;gap:8px}
+.chip{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;background:#1d1a0f;border:1.5px solid #5a4a1c;border-radius:12px;padding:11px 12px;color:var(--a-text);font:inherit;cursor:pointer;min-height:52px}
+.chip .check{flex:none;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;border:1.5px solid #8a6d1f;color:transparent;font-size:13px;font-weight:700}
+.chip[aria-pressed="true"]{background:#10261f;border-color:var(--a-green)}
+.chip[aria-pressed="true"] .check{background:var(--a-green);border-color:var(--a-green);color:#06231a}
+.chip .what{display:flex;flex-direction:column;gap:1px;min-width:0} .chip .what b{font-size:14px} .chip .val{font-weight:700;color:var(--a-green);white-space:nowrap}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+.btn{min-height:46px;padding:0 16px;border-radius:12px;border:1px solid var(--a-line);background:transparent;color:var(--a-text);font:inherit;font-weight:600;cursor:pointer;flex:1}
+.btn.primary{background:linear-gradient(180deg,#3fb98f,#2a9a74);border-color:#2a9a74;color:#04251a}
+.btn.quiet{flex:0 0 auto;color:var(--a-muted);font-weight:500}
+.acct{background:#0f1c30;border:1px solid var(--a-line);color:var(--a-text);border-radius:10px;padding:8px 10px;font:inherit;font-size:13px;min-height:40px}
+.row{background:var(--a-panel);border:1px solid var(--a-line);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.row-top{display:flex;justify-content:space-between;gap:10px} .row-top b{font-size:14px}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600;border:1px solid}
+.p-got{color:var(--a-green);border-color:#2d5a4c;background:#10241f}
+.p-pts{color:#b9cdff;border-color:#34507c;background:#152238}
+.p-yel{color:var(--a-yel);border-color:#8a6d1f;background:#3a2e0e;cursor:pointer}
+.p-none{color:var(--a-muted);border-color:var(--a-line)}
+.toast{position:relative;display:flex;align-items:center;justify-content:space-between;gap:10px;background:#16314a;border:1px solid #2c4a78;border-radius:12px;padding:10px 12px}
+.steps{display:flex;gap:6px} .steps i{flex:1;height:5px;border-radius:3px;background:#26364e;font-style:normal} .steps i.on{background:var(--a-green)}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tile{background:#10203a;border:1px solid var(--a-line);border-radius:12px;padding:12px;text-align:left;color:var(--a-text);font:inherit;cursor:pointer;display:flex;flex-direction:column;gap:3px;min-height:76px}
+.tile[aria-pressed="true"]{border-color:var(--a-green);background:#10261f}
+.tile b{font-size:13.5px} .tile small{font-size:12px}
+.field{display:flex;flex-direction:column;gap:5px} .field label{font-size:12.5px;color:var(--a-muted)}
+.inp{background:#0f1c30;border:1px solid var(--a-line);color:var(--a-text);border-radius:10px;padding:0 12px;font:inherit;min-height:44px;width:100%}
+.sentence{background:#10261f;border:1px dashed #2d5a4c;border-radius:12px;padding:10px 12px;color:var(--a-green);font-size:13.5px}
+.cap{font-size:12px;color:var(--muted)}
+</style>
+
+<div class="wrap">
+<header style="display:flex;flex-direction:column;gap:12px">
+  <span class="eyebrow">Wealth app · mock-up for your approval</span>
+  <h1>Rewards, with fewer taps</h1>
+  <p class="lede">You said it still isn't user friendly and weren't sure which part. These screens are my proposal, based on how the flow works today. Tap the sample screens: they respond. Nothing in the app has changed. Tell me what you like and what you don't, and I'll build only that.</p>
+</header>
+
+<section class="box"><h3>What I think gets in the way today</h3>
+  <ul class="plain" style="margin-top:8px">
+    <li><b>A pop-up before every Accept.</b> It asks "Accept this payment?" each time, then shows a message afterwards. That is two interruptions for the thing you do most.</li>
+    <li><b>Switches and drop-downs everywhere.</b> Each reward has a switch and a "Received in" drop-down. With two rewards that is four controls before you can decide.</li>
+    <li><b>Too much explaining.</b> Long sentences inside the yellow block, where one short line would do.</li>
+    <li><b>The result is hard to find.</b> After mapping, you have to open a row to see where the cashback went.</li>
+    <li><b>The offer form asks for everything.</b> Account, what you get, where, limits, more: five sections for a "5% at Swiggy" rule.</li>
+  </ul>
+</section>
+
+<!-- ============ A ============ -->
+<section class="scene">
+  <div class="notes">
+    <span class="eyebrow">Screen A · Waiting for review</span>
+    <h2>One reward: nothing to decide</h2>
+    <p><span class="tag t-now">Today</span>Switch, drop-down, pop-up confirm, then a message.</p>
+    <p><span class="tag t-new">Proposed</span>The reward is one line: what you get and where it goes. Tap <b>Accept</b> and it is done. A short <b>Undo</b> bar replaces the pop-up, so a mistake is one tap to take back.</p>
+    <ul class="plain">
+      <li>"→ Demo Credit Card" is the receiving account. Tap <b>Change</b> only when you want another.</li>
+      <li>The balance line shows what Accept will do, in plain words.</li>
+    </ul>
+    <p class="ask"><b>Needs a new build:</b> Undo has to reverse the balance and the cashback entry. I have the pieces from "change receiving account", but it is new work.</p>
+  </div>
+  <div class="app" id="sceneA" aria-label="Sample screen A">
+    <div class="app-title"><span>Waiting for review · 2</span><small>Today</small></div>
+    <div class="pay" id="payA">
+      <div class="pay-top"><div><b>Swiggy dinner</b><br><small>Demo Credit Card · 14 Nov</small></div><span class="amt">−₹800</span></div>
+      <div class="bal">Card owed <b>₹17,370</b> → <b>₹18,170</b></div>
+      <div class="rw"><div><b>+₹40 cashback</b><br><span class="to">→ Salary Account</span></div><button class="link" type="button" id="changeA">Change</button></div>
+      <div class="btns"><button class="btn primary" type="button" id="acceptA">Accept</button><button class="btn quiet" type="button">Dismiss</button></div>
+    </div>
+    <div class="toast" id="toastA" hidden><span><b>Accepted.</b> ₹40 cashback added to Salary Account.</span><button class="link" type="button" id="undoA">Undo</button></div>
+    <div class="pay"><div class="pay-top"><div><b>Cafe lunch</b><br><small>Demo Credit Card · 14 Nov</small></div><span class="amt">−₹250</span></div>
+      <div class="bal">Card owed <b>₹17,370</b> → <b>₹17,620</b> · no reward matches</div>
+      <div class="btns"><button class="btn primary" type="button">Accept</button><button class="btn quiet" type="button">Dismiss</button></div></div>
+  </div>
+</section>
+
+<!-- ============ B ============ -->
+<section class="scene">
+  <div class="notes">
+    <span class="eyebrow">Screen B · two or more match</span>
+    <h2>Yellow, with big tap targets</h2>
+    <p><span class="tag t-now">Today</span>A list of switches with a long hint, and a drop-down under each.</p>
+    <p><span class="tag t-new">Proposed</span>Each reward is one big card. Tap to pick, tap again to drop. The main button tells you what will happen: <b>Accept, skip rewards</b> until you pick, then <b>Accept + map 2 rewards</b>. Try it.</p>
+    <ul class="plain">
+      <li>"Pick all" for the common case where you want everything.</li>
+      <li>The receiving account is a single line under the cards, one choice for all picked rewards. A per-reward choice sits behind "Change".</li>
+      <li>No pop-up. Undo, as in screen A.</li>
+    </ul>
+    <p class="cap">Total shown as you pick: it adds the picked rewards in ₹, points shown separately.</p>
+  </div>
+  <div class="app" id="sceneB" aria-label="Sample screen B">
+    <div class="app-title"><span>Waiting for review · 1</span><small>Today</small></div>
+    <div class="pay yellow">
+      <div class="pay-top"><div><b>Zepto groceries</b><br><small>Demo Credit Card · 14 Nov</small></div><span class="amt">−₹600</span></div>
+      <div class="bal">Card owed <b>₹17,370</b> → <b>₹17,970</b></div>
+      <div class="choose">
+        <div class="head"><span>★ 2 rewards match</span><button class="link" type="button" id="pickAll">Pick all</button></div>
+        <div class="chips">
+          <button class="chip" type="button" aria-pressed="false" data-v="50"><span class="what"><b>Zepto flat ₹50</b><small>min ₹349</small></span><span class="val">+₹50</span><span class="check">✓</span></button>
+          <button class="chip" type="button" aria-pressed="false" data-v="30"><span class="what"><b>Zepto 5% cashback</b><small>up to ₹150</small></span><span class="val">+₹30</span><span class="check">✓</span></button>
+        </div>
+        <div class="field"><label for="recvB">Cashback goes to</label>
+          <select class="acct" id="recvB"><option>Demo Credit Card (paying account)</option><option>Salary Account</option><option>Demo Savings</option></select></div>
+      </div>
+      <div class="btns"><button class="btn primary" type="button" id="ctaB">Accept, skip rewards</button><button class="btn quiet" type="button">Dismiss</button></div>
+      <small id="noteB">Nothing picked: the payment is accepted without rewards. You can map them later from the payment.</small>
+    </div>
+  </div>
+</section>
+
+<!-- ============ C ============ -->
+<section class="scene">
+  <div class="notes">
+    <span class="eyebrow">Screen C · Transactions list</span>
+    <h2>The answer is on the row</h2>
+    <p><span class="tag t-now">Today</span>Small tags, and a detail panel you open to see the receiving account and to map.</p>
+    <p><span class="tag t-new">Proposed</span>One pill per payment says what happened, in the same words everywhere. <b>Yellow appears only in the review step (screens A and B), never in this list.</b></p>
+    <ul class="plain">
+      <li><b>Green</b> cashback received, with the account it went to.</li>
+      <li><b>Blue</b> points, with the program.</li>
+      <li>No pill when nothing was mapped, to keep the list calm. If you accepted without picking, you can still open the payment and map rewards from its details.</li>
+    </ul>
+  </div>
+  <div class="app" aria-label="Sample screen C">
+    <div class="app-title"><span>Transactions</span><small>14 Nov</small></div>
+    <div class="row"><div class="row-top"><b>Swiggy dinner</b><b>−₹800</b></div><small>Demo Credit Card</small><div><span class="pill p-got">★ +₹40 cashback → Salary Account ✓</span></div></div>
+    <div class="row"><div class="row-top"><b>BigBasket weekly</b><b>−₹1,200</b></div><small>Demo Credit Card</small><div><span class="pill p-pts">★ +48 points · Demo Reward Points</span></div></div>
+    <div class="row"><div class="row-top"><b>Zepto late order</b><b>−₹700</b></div><small>Demo Credit Card</small></div>
+    <div class="row"><div class="row-top"><b>Cafe lunch</b><b>−₹250</b></div><small>Demo Credit Card</small></div>
+  </div>
+</section>
+
+<!-- ============ D ============ -->
+<section class="scene">
+  <div class="notes">
+    <span class="eyebrow">Screen D · Add an offer</span>
+    <h2>Three questions, not five sections</h2>
+    <p><span class="tag t-now">Today</span>One long sheet: account, what you get, where it applies, limits, more.</p>
+    <p><span class="tag t-new">Proposed</span>Start from what you know: <b>pick a kind</b>, answer <b>two or three plain fields</b>, and read the sentence that will be saved. Limits, dates and "ask me" sit under <b>More options</b>, closed.</p>
+    <ul class="plain">
+      <li>A sentence at the bottom repeats the rule in words, so you can check it before saving.</li>
+      <li>"Received in" is a normal field with a clear default.</li>
+    </ul>
+    <p class="ask"><b>Your call:</b> keep every option available, only hidden? Or drop rarely used ones (cycle day, exclusive group)? I would keep them, hidden.</p>
+  </div>
+  <div class="app" aria-label="Sample screen D">
+    <div class="app-title"><span>Add offer</span><small>Step 2 of 3</small></div>
+    <div class="steps"><i class="on"></i><i class="on"></i><i></i></div>
+    <div class="tiles" id="tilesD">
+      <button class="tile" type="button" aria-pressed="true"><b>% cashback</b><small>at a store</small></button>
+      <button class="tile" type="button" aria-pressed="false"><b>Points</b><small>per ₹ spent</small></button>
+      <button class="tile" type="button" aria-pressed="false"><b>Flat ₹ off</b><small>with a minimum</small></button>
+      <button class="tile" type="button" aria-pressed="false"><b>Something else</b><small>all options</small></button>
+    </div>
+    <div class="field"><label for="storeD">Store or word in the payment</label><input class="inp" id="storeD" value="swiggy"></div>
+    <div class="field"><label for="pctD">Percent back</label><input class="inp" id="pctD" type="number" value="5" min="0"></div>
+    <div class="field"><label for="recvD">Received in</label><select class="inp" id="recvD"><option>Same account as the payment</option><option>Salary Account</option><option>Demo Savings</option></select></div>
+    <div class="sentence" id="sentD">5% cashback on payments with “swiggy”, received in the same account.</div>
+    <details><summary class="link">More options (limits, dates, ask me)</summary><small>Closed by default. Everything you can set today stays here.</small></details>
+    <div class="btns"><button class="btn quiet" type="button">Back</button><button class="btn primary" type="button">Save offer</button></div>
+  </div>
+</section>
+
+<section class="box">
+  <h3>What I would build, in order</h3>
+  <ul class="plain" style="margin-top:8px">
+    <li><b>1. Screen A and B</b> (the Accept moments): remove the pop-up, add Undo, big pick cards, one receiving account line.</li>
+    <li><b>2. Screen C</b>: the pills on the Transactions rows.</li>
+    <li><b>3. Screen D</b>: the three-question offer form.</li>
+    <li>Same rules underneath: one reward is mapped by itself, two or more are yellow, cashback goes to the history, points to the program.</li>
+  </ul>
+  <p class="ask" style="margin-top:12px"><b>Tell me:</b> which screens to build, whether you accept Undo instead of the pop-up, and anything that still feels wrong. A screenshot of the screen that annoys you most helps more than anything.</p>
+</section>
+</div>
+
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id)};
+  // Screen A: accept shows an Undo bar instead of a pop-up
+  var accA=$('acceptA'),toast=$('toastA'),payA=$('payA');
+  if(accA){accA.addEventListener('click',function(){payA.style.opacity='.45';toast.hidden=false;accA.disabled=true});
+    $('undoA').addEventListener('click',function(){payA.style.opacity='1';toast.hidden=true;accA.disabled=false});
+    $('changeA').addEventListener('click',function(){var r=payA.querySelector('.rw .to');r.textContent=r.textContent.indexOf('Salary')>-1?'→ Demo Credit Card':'→ Salary Account'})}
+  // Screen B: pick rewards, the button says what will happen
+  var chips=[].slice.call(document.querySelectorAll('#sceneB .chip')),cta=$('ctaB'),note=$('noteB');
+  function refreshB(){var on=chips.filter(function(c){return c.getAttribute('aria-pressed')==='true'}),sum=on.reduce(function(s,c){return s+Number(c.dataset.v)},0);
+    cta.textContent=on.length?'Accept + map '+on.length+' reward'+(on.length===1?'':'s')+' (+₹'+sum+')':'Accept, skip rewards';
+    note.textContent=on.length?'₹'+sum+' cashback goes to '+$('recvB').value.replace(' (paying account)','')+'.':'Nothing picked: the payment is accepted without rewards. You can map them later from the payment.'}
+  chips.forEach(function(c){c.addEventListener('click',function(){c.setAttribute('aria-pressed',c.getAttribute('aria-pressed')==='true'?'false':'true');refreshB()})});
+  if($('pickAll')){$('pickAll').addEventListener('click',function(){var all=chips.every(function(c){return c.getAttribute('aria-pressed')==='true'});chips.forEach(function(c){c.setAttribute('aria-pressed',all?'false':'true')});refreshB()});
+    $('recvB').addEventListener('change',refreshB)}
+  // Screen D: the sentence follows the fields
+  function sentence(){var kind=document.querySelector('#tilesD .tile[aria-pressed="true"] b').textContent,store=$('storeD').value.trim(),pct=$('pctD').value||'0',recv=$('recvD').value;
+    $('sentD').textContent=(kind==='% cashback'?pct+'% cashback':kind)+' on payments'+(store?' with “'+store+'”':'')+', received in '+(recv.indexOf('Same')===0?'the same account':recv)+'.'}
+  [].slice.call(document.querySelectorAll('#tilesD .tile')).forEach(function(t){t.addEventListener('click',function(){[].slice.call(document.querySelectorAll('#tilesD .tile')).forEach(function(x){x.setAttribute('aria-pressed','false')});t.setAttribute('aria-pressed','true');sentence()})});
+  ['storeD','pctD','recvD'].forEach(function(id){if($(id))$(id).addEventListener('input',sentence)});
+})();
+</script>

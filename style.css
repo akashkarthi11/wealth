@@ -1237,13 +1237,13 @@ b.pj-medium{color:#f5c26b}
 .pd-rewards.choose .pd-rewards-head{color:#f5c26b}
 .pd-choose-hint{margin:2px 0 8px;color:#e8d29a;font-size:13px;line-height:1.5}
 .pd-yellow{color:#f5c26b;font-weight:600}
-.act-tag.reward.need{background:#3a2e0e;color:#f5c26b;border:1px solid #8a6d1f}
 .of-map{margin-top:10px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#0f1a2c;display:flex;flex-direction:column;gap:8px}
-.of-map.need{border-color:#8a6d1f;background:#2a2412}
 .of-map-head{font-weight:700;font-size:13px}
-.of-map.need .of-map-head{color:#f5c26b}
 .of-map-actions{display:flex;justify-content:flex-end}
 
+.act-row.inactive{opacity:.55}
+.act-row.inactive .act-amt{text-decoration:line-through}
+.act-tag.inactive{color:#c8d3e6;border-color:#4a5a73;background:#1b2638}
 /* Cashback: the account that receives it */
 .pd-recv,.of-recv{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:4px 0 8px 44px;color:var(--muted);font-size:12px}
 .pd-recv select,.of-recv select{min-height:36px;max-width:100%;font-size:13px}

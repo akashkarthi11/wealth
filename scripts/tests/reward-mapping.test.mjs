@@ -102,10 +102,12 @@ test('a payment with no match, a repayment and a pending one carry no flag', asy
 
 test('screens: yellow block when several match, nothing pre-ticked, tag and tick-box panel on the Transactions row', () => {
   const ui = read('offers.js');
-  for (const s of ["t.rewardState === 'choose'", "(choose ? ' choose' : '')", 'rewards match — you choose', 'rewards to map', 'data-tx-map-id', 'data-tx-map="', 'Map another reward', "action: 'apply_offers'", 'applyOfferIds: ids']) assert.ok(ui.includes(s), s);
+  for (const s of ["t.rewardState === 'choose'", "(choose ? ' choose' : '')", 'rewards match — you choose', 'data-tx-map-id', 'data-tx-map="', 'Map another reward', "action: 'apply_offers'", 'applyOfferIds: ids']) assert.ok(ui.includes(s), s);
   assert.match(ui, /const on = !choose && m\.apply === 'auto' && !m\.shadowed/);
   const css = read('style.css');
-  for (const s of ['.pd-rewards.choose', '.act-tag.reward.need', '.of-map.need']) assert.ok(css.includes(s), s);
+  for (const s of ['.pd-rewards.choose']) assert.ok(css.includes(s), s);
+  assert.ok(!css.includes('.act-tag.reward.need') && !css.includes('.of-map.need'), 'yellow is for the review step only, not the Transactions list');
+  assert.ok(!ui.includes('rewards to map'), 'no yellow tag on Transactions rows');
   assert.match(css, /\.pd-rewards\.choose\{[^}]*#2a2412/);
 });
 

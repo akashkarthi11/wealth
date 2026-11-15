@@ -1,5 +1,6 @@
-import { sql, withActor, isUuid, httpError } from './_lib.js';
-import { activeOffersFor, matchOffers, applyOffers, rewardState } from './_offers.js';
+import { sql, withActor, isUuid, isDay, httpError } from './_lib.js';
+import { activeOffersFor, matchOffers, applyOffers, rewardState, setEarningStatus } from './_offers.js';
+import { cardMovesSinceBalance } from './_queries.js';
 
 // Accept a transaction (0029, owner 2026-11-14). New transactions wait as 'pending'. Accept writes a new balance on the source
 // account (last balance plus or minus the amount, status 'reported', entered_by 'accept') and shows the account's offers that
@@ -34,8 +35,12 @@ export async function pendingTransactions(uid, { db = sql } = {}) {
   const rows = await db.query(`${SELECT} WHERE t.user_id = $1 AND t.review_status = 'pending' AND t.duplicate_of IS NULL
     ORDER BY t.occurred_on DESC, t.created_at DESC LIMIT 100`, [uid]);
   const { offers, uses, programs } = await activeOffersFor(uid, [...new Set(rows.map(r => r.account_id))], { db });
+  // A credit card shows the recorded balance + card activity since (pending spends included). The preview starts from that same
+  // amount owed, without this payment, so "before → after" matches what the Banks / Overview pages show.
+  const cardMoves = rows.some(r => r.subtype_code === 'credit_card') ? new Map((await cardMovesSinceBalance(uid, db).catch(() => [])).map(m => [m.account_id, Number(m.delta) || 0])) : new Map();
   return rows.map(r => {
     const d = signedDelta({ acctCategory: r.acct_category, valuation: r.valuation, kind: r.kind, category: r.category, amount: r.amount });
+    if (r.subtype_code === 'credit_card' && r.balance != null && d.delta != null && cardMoves.has(r.account_id)) r = { ...r, balance: r2(r.balance + cardMoves.get(r.account_id) - d.delta) };
     const can = d.delta != null && r.balance != null;
     const pendOffers = matchOffers(offers, r, uses, programs);
     return {
@@ -61,7 +66,7 @@ async function postCashback(uid, t, earning, { db, actor, now }) {
     [dest] = await db.query(`SELECT s.category AS acct_category, s.valuation FROM wealth_accounts a JOIN wealth_account_subtypes s ON s.code = a.subtype_code WHERE a.id = $1 AND a.user_id = $2`, [toId, uid]);
     if (!dest) return null;
   }
-  const at = new Date(now).toISOString(), ref = 'reward:' + earning.id, day = String(t.occurred_on).slice(0, 10);
+  const at = new Date(now).toISOString(), ref = 'reward:' + earning.id, day = earning.onDay || String(t.occurred_on).slice(0, 10);
   const d = signedDelta({ acctCategory: dest.acct_category, valuation: dest.valuation, kind: 'income', category: 'Cashback', amount });
   const paidOn = toId !== t.account_id ? ' · paid on ' + [t.bank_name, t.account_name].filter(Boolean).join(' ') : '';
   const desc = ('Cashback · ' + (earning.title || 'offer') + ' · ' + (t.description || t.category) + paidOn).slice(0, 180);
@@ -84,7 +89,7 @@ async function postCashback(uid, t, earning, { db, actor, now }) {
   await db.query(`UPDATE wealth_offer_uses SET status='received', credited_transaction_id=$3, credited_on=$4::date, receive_account_id=$5, updated_at=now() WHERE id=$1 AND user_id=$2`, [earning.id, uid, ins[0].id, day, toId]);
   return { earningId: earning.id, transactionId: ins[0].id, accountId: toId, amount, balance: bal && bal[0] ? bal[0].balance : null };
 }
-const postCashbacks = async (uid, t, applied, o) => { const out = []; for (const e of applied) if (e.kind === 'cashback' && e.inr > 0) { const r = await postCashback(uid, t, { id: e.id, title: e.title, inr: e.inr, receiveAccountId: e.receiveAccountId }, o); if (r) out.push(r); } return out; };
+const postCashbacks = async (uid, t, applied, o) => { const out = []; for (const e of applied) if (e.kind === 'cashback' && e.inr > 0 && e.creditTiming !== 'settle') { const r = await postCashback(uid, t, { id: e.id, title: e.title, inr: e.inr, receiveAccountId: e.receiveAccountId }, o); if (r) out.push(r); } return out; };
 
 export async function acceptTransaction(uid, { transactionId, applyOfferIds, usedOfferIds, receive } = {}, { db = sql, actor = 'user', now = Date.now() } = {}) {
   if (!isUuid(transactionId)) throw httpError(400, 'transactionId must be a transaction id');
@@ -179,4 +184,51 @@ export async function changeReceiveAccount(uid, { earningId, accountId } = {}, {
   ]);
   if (!moved.length) throw httpError(409, 'This cashback was just changed. Reload and try again.');
   return { changed: true, moved: true, transactionId: h.id };
+}
+
+// The bank has credited a cashback that waits for settlement (or one marked expected): the "Cashback" entry is added to the history on the day it
+// was credited (default today) and the receiving account's balance moves. If the real credit is already in the history, pass it and only link it.
+export async function markCashbackReceived(uid, { earningId, creditedTransactionId = null, creditedOn = null } = {}, { db = sql, actor = 'user', now = Date.now() } = {}) {
+  if (creditedTransactionId) return setEarningStatus(uid, { earningId, status: 'received', creditedTransactionId, creditedOn }, { db, actor });
+  if (!isUuid(earningId)) throw httpError(400, 'earningId must be an id');
+  if (creditedOn && !isDay(creditedOn)) throw httpError(400, 'creditedOn must be YYYY-MM-DD');
+  const [e] = await db.query(`SELECT id, kind, status, title, benefit::float8 AS inr, receive_account_id, transaction_id FROM wealth_offer_uses WHERE id=$1 AND user_id=$2`, [earningId, uid]);
+  if (!e) throw httpError(404, 'Earning not found');
+  if (e.status !== 'expected' || e.kind !== 'cashback' || !e.transaction_id) return setEarningStatus(uid, { earningId, status: 'received', creditedOn }, { db, actor });
+  const [t] = await db.query(`${SELECT} WHERE t.user_id = $1 AND t.id = $2`, [uid, e.transaction_id]);
+  if (!t) return setEarningStatus(uid, { earningId, status: 'received', creditedOn }, { db, actor });
+  const day = creditedOn || new Date(now + 5.5 * 3600e3).toISOString().slice(0, 10);
+  const r = await postCashback(uid, t, { id: e.id, title: e.title, inr: e.inr, receiveAccountId: e.receive_account_id, onDay: day }, { db, actor, now });
+  if (!r) return setEarningStatus(uid, { earningId, status: 'received', creditedOn }, { db, actor });
+  return { id: e.id, status: 'received', posted: true, transactionId: r.transactionId, accountId: r.accountId };
+}
+
+// Remove a reward from a payment. If its cashback is already in the history, that entry becomes INACTIVE (it is kept, marked dismissed and as
+// void against its payment, which is the flag every total already leaves out) and the account balance is put back. The reward is cancelled, so it
+// no longer counts toward the offer's limits. Points have no history entry: they are just cancelled.
+export async function removeEarning(uid, { earningId } = {}, { db = sql, actor = 'user', now = Date.now() } = {}) {
+  if (!isUuid(earningId)) throw httpError(400, 'earningId must be an id');
+  const [e] = await db.query(`SELECT id, status, transaction_id FROM wealth_offer_uses WHERE id=$1 AND user_id=$2`, [earningId, uid]);
+  if (!e) throw httpError(404, 'Earning not found');
+  if (e.status === 'cancelled') return { id: e.id, status: 'cancelled', inactive: false };
+  const ref = 'reward:' + earningId;
+  const [h] = await db.query(`SELECT t.id, t.account_id, t.amount::float8 AS amount, t.duplicate_of, s.category AS acct_category, s.valuation FROM wealth_transactions t JOIN wealth_accounts a ON a.id = t.account_id JOIN wealth_account_subtypes s ON s.code = a.subtype_code WHERE t.user_id = $1 AND t.external_ref = $2`, [uid, ref]);
+  const cancel = [`UPDATE wealth_offer_uses SET status='cancelled', credited_transaction_id=NULL, credited_on=NULL, updated_at=now() WHERE id=$1 AND user_id=$2 RETURNING id`, [earningId, uid]];
+  if (!h || h.duplicate_of || !e.transaction_id) { await withActor(db, actor, [cancel]); return { id: e.id, status: 'cancelled', inactive: !!(h && h.duplicate_of) }; }
+  const back = signedDelta({ acctCategory: h.acct_category, valuation: h.valuation, kind: 'income', category: 'Cashback', amount: h.amount });
+  const at = new Date(now).toISOString(), note = 'Cashback removed: ' + ref;
+  await withActor(db, actor, [
+    [`UPDATE wealth_transactions SET review_status='dismissed', reviewed_at=$3::timestamptz, applied_balance_as_of=$3::timestamptz, duplicate_of=$4 WHERE id=$1 AND user_id=$2 AND duplicate_of IS NULL RETURNING id`, [h.id, uid, at, e.transaction_id]],
+    back.delta == null ? ['SELECT 1 WHERE false', []] : [`WITH cur AS (SELECT balance, as_of FROM wealth_v_latest_balances WHERE account_id=$1)
+      INSERT INTO wealth_account_balances (account_id, as_of, balance, status, note, entered_by)
+      SELECT $1, greatest($4::timestamptz, cur.as_of + interval '1 second'), round(cur.balance + $5::numeric, 2), 'reported', $6, 'accept' FROM cur
+      WHERE EXISTS (SELECT 1 FROM wealth_transactions WHERE id=$2 AND user_id=$3 AND applied_balance_as_of=$4::timestamptz AND duplicate_of IS NOT NULL)
+      RETURNING balance::float8 AS balance`, [h.account_id, h.id, uid, at, -back.delta, note]],
+    [`UPDATE wealth_accounts SET current_balance=(SELECT balance FROM wealth_v_latest_balances WHERE account_id=$1),
+        balance_as_of=(SELECT as_of FROM wealth_v_latest_balances WHERE account_id=$1), balance_status='stale', updated_at=now()
+      WHERE id=$1 AND user_id=$2 AND subtype_code IN ('savings','current')
+        AND EXISTS (SELECT 1 FROM wealth_transactions WHERE id=$3 AND user_id=$2 AND applied_balance_as_of=$4::timestamptz AND duplicate_of IS NOT NULL) RETURNING id`, [h.account_id, uid, h.id, at]],
+    cancel,
+  ]);
+  return { id: e.id, status: 'cancelled', inactive: true, transactionId: h.id };
 }
