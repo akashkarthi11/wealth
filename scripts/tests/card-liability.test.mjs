@@ -44,3 +44,31 @@ test('a spend alone raises the owed amount; no movements leaves the recorded bal
   assert.equal(applyCardMoves(b, [{ account_id: 'c', delta: 21, spends: 1 }])[0].balance, 30557.95);
   assert.equal(applyCardMoves(b, [])[0], b[0]);
 });
+
+// 2026-11-15: a transaction added the way ChatGPT adds it (plain INSERT, saved as pending) and then accepted. Accepting one card spend
+// must never hide the other spends from the amount owed (it dropped ₹11,480 → ₹7,680 before the fix).
+test('card: spends added like ChatGPT (pending) raise the owed amount; accepting or dismissing one never hides the others', async () => {
+  const { acceptTransaction, dismissTransaction, pendingTransactions } = await import('../../api/_accept.js');
+  const { a, uid, card, tx } = await setup();
+  await tx('expense', 'Amazon', 2300, '2026-11-13', card, '2026-11-13T05:00:00Z');
+  await tx('expense', 'Flipkart', 1500, '2026-11-14', card, '2026-11-14T05:00:00Z');
+  await tx('expense', 'Swiggy', 1200, '2026-11-15', card, '2026-11-15T05:00:00Z');
+  const owed = async () => (await accountHierarchyRows(uid, a)).balances.find(b => b.account_id === card).balance;
+  const id = async c => (await a.query(`SELECT id FROM wealth_transactions WHERE category=$1`, [c]))[0].id;
+  const [st] = await a.query(`SELECT count(*) FILTER (WHERE review_status = 'pending')::int AS n FROM wealth_transactions`);
+  assert.equal(st.n, 3, 'a plain insert waits as pending');
+  assert.equal(await owed(), 35557.95, '30,557.95 + 2,300 + 1,500 + 1,200: counted at once, before Accept');
+  const pend = await pendingTransactions(uid, { db: a });
+  const sw = pend.find(p => p.description === 'Swiggy');
+  assert.deepEqual([sw.balance, sw.after], [34357.95, 35557.95], 'the preview starts from the amount owed shown, without this payment');
+  const now = Date.parse('2026-11-15T10:00:00Z');
+  await acceptTransaction(uid, { transactionId: await id('Swiggy') }, { db: a, now });
+  assert.equal(await owed(), 35557.95, 'accepting one spend changes nothing shown (it was already counted) and hides no other spend');
+  await acceptTransaction(uid, { transactionId: await id('Amazon') }, { db: a, now: now + 60e3 });
+  assert.equal(await owed(), 35557.95);
+  await dismissTransaction(uid, { transactionId: await id('Flipkart') }, { db: a, now: now + 120e3 });
+  assert.equal(await owed(), 34057.95, 'a dismissed spend leaves the amount owed');
+  // A new statement / screenshot balance starts the count again: older spends are inside it.
+  await a.query(`INSERT INTO wealth_account_balances(account_id,as_of,balance,status,entered_by) VALUES($1,'2026-11-16T06:00:00Z',36000,'reported','agent')`, [card]);
+  assert.equal(await owed(), 36000);
+});

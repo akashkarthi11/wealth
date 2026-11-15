@@ -130,8 +130,12 @@ export async function accountHierarchyRows(uid, db = sql) {
 // subtract. Nothing is written (rules.md §1: a transaction never changes a stored balance); the figure is marked
 // "estimated" until the next recorded balance. A movement counts when its day is after the balance day, or the same day
 // but entered after the balance was recorded, so nothing is counted twice.
+// 2026-11-15: "after the balance" means after the last balance that was RECORDED (statement, screenshot, owner) — not a balance that
+// Accept wrote. Accept writes last balance ± one payment; measuring from that row hid every other un-accepted spend (accepting a
+// ₹1,200 spend dropped the owed amount from ₹11,480 to ₹7,680). Movements already applied into a balance (accepted payments, posted
+// cashback: applied_balance_as_of set) are left out, because the latest balance already holds them.
 export async function cardMovesSinceBalance(uid, db = sql) {
-  return db.query(`SELECT t.account_id,
+  const q = (base, applied) => db.query(`SELECT t.account_id,
       sum(CASE WHEN t.kind IN ('expense','investment') THEN t.amount
                WHEN t.kind = 'income' THEN -t.amount
                WHEN t.kind = 'transfer' AND coalesce(t.category,'') ~* 'payment' THEN -t.amount ELSE 0 END)::float8 AS delta,
@@ -139,11 +143,14 @@ export async function cardMovesSinceBalance(uid, db = sql) {
       coalesce(sum(t.amount) FILTER (WHERE t.kind IN ('expense','investment')), 0)::float8 AS spent
     FROM wealth_transactions t
     JOIN wealth_accounts a ON a.id = t.account_id AND a.user_id = $1 AND a.subtype_code = 'credit_card'
-    JOIN wealth_v_latest_balances b ON b.account_id = t.account_id
-    WHERE t.user_id = $1 AND t.duplicate_of IS NULL AND coalesce(t.review_status, '') <> 'dismissed'
+    JOIN LATERAL (${base}) b ON b.as_of IS NOT NULL
+    WHERE t.user_id = $1 AND t.duplicate_of IS NULL AND coalesce(t.review_status, '') <> 'dismissed'${applied}
       AND (t.occurred_on > (b.as_of AT TIME ZONE 'Asia/Kolkata')::date
            OR (t.occurred_on = (b.as_of AT TIME ZONE 'Asia/Kolkata')::date AND t.created_at > b.as_of))
     GROUP BY t.account_id`, [uid]);
+  return q(`SELECT max(x.as_of) AS as_of FROM wealth_account_balances x WHERE x.account_id = t.account_id AND x.rejected_at IS NULL AND x.entered_by IS DISTINCT FROM 'accept'`,
+    ' AND t.applied_balance_as_of IS NULL')
+    .catch(e => { if (e?.code !== '42703') throw e; return q('SELECT v.as_of FROM wealth_v_latest_balances v WHERE v.account_id = t.account_id', ''); });   // before 0028 / 0029
 }
 
 export function applyCardMoves(balances, moves) {

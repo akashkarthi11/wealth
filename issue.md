@@ -114,3 +114,77 @@ The production database was updated and verified on 11 Nov 2026. The earlier dev
 - Review the transaction-entry / spending-ledger workflow and make the balance impact explicit to the user.
 - Preserve the strict database boundary in `rules.md`: transaction insertion itself must write only `wealth_transactions`. Any balance reconciliation must be a separate, explicitly authorized workflow, must retain `stale` status for estimates, and must not imply bank verification.
 - Ensure the UI refreshes the displayed account balance after an authorized balance reconciliation.
+
+---
+
+## Issue: November rent counted twice — ₹16,342 instead of ₹8,142 (found by Claude, fixed 15 Nov 2026)
+
+### What happened
+- Overview → "This month: category spending" showed **Rent ₹16,342.00**, exactly 2 × ₹8,171.
+- Production had two November `Rent` expenses (read-only check, owner user):
+
+| Date | Amount | Source | Account | Reference |
+|---|---|---|---|---|
+| 3 Nov | ₹8,200 | Workbook import ("Unspecified — source workbook does not identify funding account") | none | none |
+| 14 Nov | ₹8,142 | "Rent paid to Janesh (UPI)", accepted by the owner | Slice Savings | `PTMb3c4811bc…` |
+
+- A third row, 14 Nov ₹8,142 "Self transfer: Atom Rent to Slice Savings" (pending, from Gmail), is a transfer and is not counted as spending.
+- The 3 Nov workbook row was the planned rent for November; the 14 Nov row is the actual payment. Both were counted.
+- These are the only `Rent` expenses in the whole history, so the "historical monthly average" also looked wrong (see the second issue below).
+
+### Correction applied (Production, owner instruction "remove old", 15 Nov 2026)
+- The 3 Nov ₹8,200 workbook row is marked `duplicate_of` the 14 Nov ₹8,142 payment (`duplicate_marked_at` set, `wealth.actor = 'owner'`).
+  Nothing deleted; it drops out of every total. Guarded update: exactly one row matched (date, amount, no account, no reference).
+- Result: November Rent **₹8,142** (1 entry). Overview November spending ₹32,258.20 afterwards.
+- The app's own "mark duplicate" (`markDuplicate`, `/api/transaction-review`) refuses this pair because the amounts differ (₹8,200 vs ₹8,142),
+  and there is no button for it in the app; the update was made directly with the same columns it writes.
+
+### Rules for future imports (ChatGPT and Claude)
+12. **A planned or budgeted amount from the workbook is not a payment.** When the real payment for the same month arrives (bank / UPI / screenshot),
+    the planned row must not stay counted. Check the month for an existing row of the same category before inserting, and mark the planned one
+    `duplicate_of` the real one.
+13. Rent is paid from the **Atom "Rent" split** → self transfer to Slice Savings → UPI to Janesh. Only the UPI payment is the expense; the transfer is not spending.
+
+### Follow-up
+- Add an in-app way to mark a duplicate when the amounts differ slightly (planned vs actual), or a "planned" status that is replaced by the actual payment.
+- The Overview still showed "Monthly rent + current bill (estimated ₹8,000–₹8,500)" as due within 5 days after the 14 Nov payment: payment alerts do not look
+  at transactions already paid this month. To check.
+
+---
+
+## Issue: "Historical monthly average" per category was this month ÷ all months (found and fixed 15 Nov 2026)
+
+### What happened
+- "This month: category spending" showed, under each category, "historical monthly average ₹X". The code computed **this month's category amount ÷
+  every month with spending** (`value/allMonths`), not the average of earlier months. Rent: ₹8,142 ÷ 37 = ₹220.05.
+
+### Fix (code, deployed to Production 15 Nov 2026, `main` f827bbf)
+- Each category row now shows **"Daily avg this month"** and **"earlier months ₹X a month (₹Y a day)"**, from the months before the current one
+  (`pastCategoryAverages()` in `app.js`), or **"not in earlier months"** when the category is new.
+
+---
+
+## Issue: accepting a credit-card spend made the amount owed go DOWN (found by simulating a ChatGPT insert, fixed 15 Nov 2026)
+
+### How it was found
+- Simulated (local copy) exactly what ChatGPT does: a plain `INSERT INTO wealth_transactions` with `wealth.actor = 'agent'`, no review status
+  → the row is `pending` (0029 default). One ₹450 savings expense (HDFC Savings) and one ₹1,200 spend on the Slice Credit Card.
+
+### What happened
+- **Savings:** balance unchanged until Accept (by design, rules.md §1/§2). Accept: ₹1,28,400.10 → ₹1,27,950.10. Correct.
+- **Credit card:** the owed amount shown = last balance + card spends after it, pending ones included, so it rose at once (₹11,480). Then
+  **Accept** wrote "last balance + this one spend" (₹6,480 + ₹1,200 = ₹7,680) stamped *now*, and the card estimate counted only spends after
+  that newest balance — every other un-accepted spend vanished. Owed dropped ₹11,480 → ₹7,680 after accepting a spend.
+- The Accept preview also started from the recorded balance (₹6,480 → ₹7,680), not from the owed amount shown (₹11,480).
+
+### Fix (code)
+- `cardMovesSinceBalance()` (`api/_queries.js`): card activity is counted after the last **recorded** balance (statement / screenshot / owner —
+  not one written by Accept), and leaves out movements already applied into a balance (`applied_balance_as_of` set: accepted payments,
+  posted cashback). Accepting or dismissing one spend never hides another; a new recorded balance starts the count again.
+- `pendingTransactions()` (`api/_accept.js`): a card's preview starts from the owed amount shown, without this payment
+  (e.g. ₹10,280 → ₹11,480).
+- Test: `scripts/tests/card-liability.test.mjs` "card: spends added like ChatGPT (pending) …" (fails on the old code: ₹31,757.95 instead of ₹35,557.95).
+
+### For ChatGPT
+14. Keep inserting transactions only (rules.md §1). A card spend counts in the amount owed at once; a savings payment changes the balance when
+    the owner presses Accept. Do not write balances to "fix" either.

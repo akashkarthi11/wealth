@@ -1,5 +1,6 @@
 import { sql, withActor, isUuid, httpError } from './_lib.js';
 import { activeOffersFor, matchOffers, applyOffers, rewardState } from './_offers.js';
+import { cardMovesSinceBalance } from './_queries.js';
 
 // Accept a transaction (0029, owner 2026-11-14). New transactions wait as 'pending'. Accept writes a new balance on the source
 // account (last balance plus or minus the amount, status 'reported', entered_by 'accept') and shows the account's offers that
@@ -34,8 +35,12 @@ export async function pendingTransactions(uid, { db = sql } = {}) {
   const rows = await db.query(`${SELECT} WHERE t.user_id = $1 AND t.review_status = 'pending' AND t.duplicate_of IS NULL
     ORDER BY t.occurred_on DESC, t.created_at DESC LIMIT 100`, [uid]);
   const { offers, uses, programs } = await activeOffersFor(uid, [...new Set(rows.map(r => r.account_id))], { db });
+  // A credit card shows the recorded balance + card activity since (pending spends included). The preview starts from that same
+  // amount owed, without this payment, so "before → after" matches what the Banks / Overview pages show.
+  const cardMoves = rows.some(r => r.subtype_code === 'credit_card') ? new Map((await cardMovesSinceBalance(uid, db).catch(() => [])).map(m => [m.account_id, Number(m.delta) || 0])) : new Map();
   return rows.map(r => {
     const d = signedDelta({ acctCategory: r.acct_category, valuation: r.valuation, kind: r.kind, category: r.category, amount: r.amount });
+    if (r.subtype_code === 'credit_card' && r.balance != null && d.delta != null && cardMoves.has(r.account_id)) r = { ...r, balance: r2(r.balance + cardMoves.get(r.account_id) - d.delta) };
     const can = d.delta != null && r.balance != null;
     const pendOffers = matchOffers(offers, r, uses, programs);
     return {
