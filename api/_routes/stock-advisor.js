@@ -125,7 +125,7 @@ export default async function handler(req,res){
   const uid=await sessionUser(req);if(!uid)return json(res,401,{error:'Sign in required'});
   const requestedRun=String(new URL(req.url,'https://wealth.local').searchParams.get('run_id')||'').trim();
   const [runs,holdings]=await Promise.all([
-   sql.query('SELECT id,run_key,run_at,status,agent_count,created_at FROM wealth_stock_advisor_runs WHERE user_id=$1 ORDER BY run_at DESC,created_at DESC LIMIT 50',[uid]),
+   sql.query('SELECT id,run_key,run_at,status,agent_count,created_at FROM wealth_stock_advisor_runs WHERE user_id=$1 ORDER BY run_at DESC,created_at DESC',[uid]),
    sql.query("SELECT name,ticker,quantity,current_value,balance_as_of FROM wealth_positions WHERE user_id=$1 AND category='INVESTMENT' AND record_type='EQUITY' AND currency='INR' ORDER BY name",[uid])
   ]);
   const run=(requestedRun?runs.find(r=>r.id===requestedRun):runs[0])||null;
@@ -137,8 +137,6 @@ export default async function handler(req,res){
     sql.query('SELECT id,ticker,stock_name,exchange,side,agent_key,agent_name,thesis,key_points,fundamental_evidence,technical_evidence,valuation,catalysts,risks,sources,confidence,target_price,time_horizon,verdict,created_at FROM wealth_stock_advisor_bull_bear_cases WHERE run_id=$1 ORDER BY ticker,side,agent_key',[run.id])
    ]);
    report=result[0][0]||null;messages=result[1];bullBearCases=result[2];
-  }else if(!requestedRun){
-   report=await latestSavedReport(uid);
   }
   if(requestedRun&&!run)return json(res,404,{error:'Advisor run not found.'});
   return json(res,200,{report,run,runs,messages,bull_bear_cases:bullBearCases,holdings});
