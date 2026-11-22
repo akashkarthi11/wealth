@@ -10,7 +10,7 @@ export default async function handler(req,res){
  const job=await startJob('stock-advisor-data-collection');
  try{
   const result=await runStockAdvisorDataCollection(sql);
-  await finishJob(job,result.status,{run_id:result.run_id,instruments:result.instruments,nav_updated:result.nav_updated,announcements:result.announcements,failed:result.failed});
+  await finishJob(job,result.status,{run_id:result.run_id,instruments:result.instruments,nav_updated:result.nav_updated,market_data_updated:result.market_data_updated,financials_unverified:result.financials_unverified,announcements:result.announcements,failed:result.failed,skipped:result.skipped,feeds:result.feeds});
   return json(res,200,{ok:result.status==='succeeded',schedule:'daily 18:30 Asia/Kolkata',...result,
    limitations:['NSE RSS entries are stored as unverified listings until linked filing contents are fetched and validated.','Optional Fincrux financial snapshots are limited to five requests per IST day and remain unverified until corroborated against official filings.','General business-news feeds and automatic filing-document extraction are not included.','Only active instruments with saved price-source symbols are processed.']});
  }catch(error){
