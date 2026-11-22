@@ -1485,3 +1485,18 @@ b.pj-medium{color:#f5c26b}
  .advisor-dashboard .advisor-kpi small{font-size:7px}
  .advisor-next-meta{display:grid;gap:4px}
 }
+
+/* Four-round debate: summary-first conversation cards */
+.advisor-debate-rounds{display:grid;gap:9px;min-width:0}
+.advisor-round-card{min-width:0;border:1px solid var(--line);border-radius:13px;background:#0e1a2a;overflow:hidden}
+.advisor-round-card>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px;min-height:48px;cursor:pointer;list-style:none;font-size:12px}
+.advisor-round-card>summary::-webkit-details-marker{display:none}
+.advisor-round-card>summary:after{content:'＋';color:var(--green);font-size:16px}
+.advisor-round-card[open]>summary:after{content:'−'}
+.advisor-round-card>summary span{color:var(--muted);font-size:10px;white-space:nowrap}
+.advisor-round-messages{display:grid;gap:8px;padding:0 9px 10px;min-width:0}
+.advisor-message-summary{margin:7px 0;color:#dce7f4;font-size:13px;line-height:1.55;white-space:pre-line;overflow-wrap:anywhere}
+.advisor-message-details{margin-top:8px;border-top:1px solid #2b3c55;padding-top:7px;font-size:11px;color:#b9c9dc}
+.advisor-message-details summary{cursor:pointer;color:#8de0c0;font-weight:700}
+.advisor-message-details p{margin:6px 0;overflow-wrap:anywhere}
+@media(max-width:520px){.advisor-round-card>summary{padding:11px}.advisor-round-messages{padding:0 7px 8px}.advisor-message-summary{font-size:12px}}
