@@ -1762,3 +1762,35 @@ b.pj-medium{color:#f5c26b}
  .research-schedule-card .muted{font-size:10px;line-height:1.4}
  .research-schedule-card [data-research-manual-stocks] .advisor-auto-stock-list{max-height:190px;overflow:auto}
 }
+
+/* Stock Advisor research-provider health */
+.advisor-research-health{display:grid;gap:12px}
+.advisor-provider-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.advisor-provider-card{display:flex;flex-direction:column;justify-content:space-between;gap:9px;min-width:0;padding:10px;border:1px solid #2b3c55;border-radius:11px;background:#0d1929}
+.advisor-provider-card>div{display:grid;gap:4px;min-width:0}
+.advisor-provider-card b{font-size:12px;overflow-wrap:anywhere}
+.advisor-provider-card small{font-size:10px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}
+.advisor-provider-status{align-self:flex-start;padding:4px 7px;border:1px solid #40516a;border-radius:999px;font-size:9px;font-weight:750;letter-spacing:.45px;color:#c7d4e4;background:#152338}
+.advisor-provider-status.status-available{border-color:#286c56;color:#83e2bb;background:#14392f}
+.advisor-provider-status.status-configured{border-color:#365f8d;color:#a8ceff;background:#182e49}
+.advisor-provider-status.status-needs_key{border-color:#675b37;color:#e7d49a;background:#302b1e}
+.advisor-provider-status.status-blocked{border-color:#804c50;color:#ffabb0;background:#3a2228}
+.advisor-coverage-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.advisor-coverage-card{display:grid;gap:5px;min-width:0;padding:10px;border:1px solid #2b3c55;border-radius:11px;background:#111f32}
+.advisor-coverage-card small{font-size:10px;line-height:1.35;color:var(--muted)}
+.advisor-coverage-card b{font-size:20px;font-variant-numeric:tabular-nums}
+.advisor-collection-status{display:grid;gap:5px;padding:11px;border:1px solid #2b3c55;border-radius:11px;background:#0d1929}
+.advisor-collection-status>span,.advisor-collection-status>small{color:var(--muted);font-size:10px;line-height:1.45}
+.advisor-collection-status>b{font-size:12px;overflow-wrap:anywhere}
+.advisor-health-error{color:#ffabb0!important}
+.advisor-evidence-source-list{border-top:1px solid #2b3c55;padding-top:9px}
+.advisor-evidence-source-list>summary{font-size:11px;font-weight:700;color:#a9c8ee;cursor:pointer;min-height:30px}
+.advisor-evidence-source-list>div{display:grid;gap:7px}
+.advisor-evidence-source-list>div>div{display:grid;gap:3px;padding:8px 0;border-bottom:1px solid #24364d}
+.advisor-evidence-source-list b{font-size:11px}
+.advisor-evidence-source-list span,.advisor-evidence-source-list small{font-size:10px;color:var(--muted);overflow-wrap:anywhere}
+@media(min-width:620px){
+ .advisor-provider-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+ .advisor-coverage-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+ .advisor-provider-card{min-height:105px}
+}
