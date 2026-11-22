@@ -70,6 +70,47 @@ async function collectEquityNews({instrument,runId,feeds,db}){
  }
  return results;
 }
+
+const TEJHQ_BASE='https://api.tejhq.dev/v1';
+function technicalSnapshot(rows){
+ const closes=rows.map(x=>Number(x.close)).filter(x=>Number.isFinite(x)&&x>0);
+ if(closes.length<35)return null;
+ const avg=n=>closes.slice(-n).reduce((a,b)=>a+b,0)/n;
+ const changes=closes.slice(1).map((v,i)=>v-closes[i]);
+ const last14=changes.slice(-14),gains=last14.filter(x=>x>0).reduce((a,b)=>a+b,0)/14,losses=-last14.filter(x=>x<0).reduce((a,b)=>a+b,0)/14;
+ const rsi=losses===0?100:100-(100/(1+gains/losses));
+ const ema=(values,period)=>values.reduce((acc,v,i)=>i===0?v:v*(2/(period+1))+acc*(1-2/(period+1)),values[0]);
+ const macd=ema(closes.slice(-80),12)-ema(closes.slice(-80),26);
+ const volume=rows.slice(-20).map(x=>Number(x.volume)||0),avgVolume=volume.reduce((a,b)=>a+b,0)/volume.length;
+ return {rsi_14:Number(rsi.toFixed(2)),sma_20:Number(avg(20).toFixed(2)),sma_50:closes.length>=50?Number(avg(50).toFixed(2)):null,sma_200:closes.length>=200?Number(avg(200).toFixed(2)):null,macd_approx:Number(macd.toFixed(4)),latest_volume:Number(rows.at(-1)?.volume||0),average_volume_20d:Number(avgVolume.toFixed(0)),observations:closes.length};
+}
+async function collectTejHQEquity({instrument,db}){
+ const symbol=String(instrument.symbol||'').toUpperCase();
+ if(!/^[A-Z0-9][A-Z0-9-&]{0,29}$/.test(symbol))return {ticker:symbol,status:'skipped',reason:'Invalid NSE symbol'};
+ const to=new Date(),from=new Date(to.getTime()-420*86400000),iso=d=>d.toISOString().slice(0,10);
+ const url=TEJHQ_BASE+'/ohlcv/nse/'+encodeURIComponent(symbol)+'?from='+iso(from)+'&to='+iso(to);
+ const response=await fetch(url,{headers:{Accept:'application/json'},signal:timeout(12000)});
+ if(!response.ok)throw new Error('TejHQ OHLCV HTTP '+response.status);
+ const payload=await response.json(),rows=(Array.isArray(payload?.data)?payload.data:[])
+  .filter(x=>/^\\d{4}-\\d{2}-\\d{2}$/.test(String(x.date||''))&&Number(x.close)>0)
+  .sort((a,b)=>a.date.localeCompare(b.date)).slice(-260);
+ if(rows.length<35)throw new Error('TejHQ returned insufficient OHLCV history ('+rows.length+' rows)');
+ for(const row of rows){
+  const asOf=new Date(row.date+'T15:30:00+05:30');
+  await db.query(`INSERT INTO wealth_instrument_prices(instrument_id,as_of,source,price,fx_to_inr,fetched_at)
+   VALUES($1,$2::timestamptz,'TejHQ',$3,NULL,now())
+   ON CONFLICT(instrument_id,as_of,source) DO UPDATE SET price=EXCLUDED.price,fetched_at=now()`,
+   [instrument.id,asOf.toISOString(),Number(row.close)]);
+ }
+ const tech=technicalSnapshot(rows),latest=rows.at(-1),retrieved=new Date().toISOString();
+ const evidence={provider:'TejHQ',endpoint:url,exchange:'NSE',symbol,price_basis:'end-of-day OHLCV close; not an intraday quote',latest_bar:latest,technical_indicators:tech,history_start:rows[0].date,history_end:latest.date,history_rows:rows.length,retrieved_at:retrieved,methodology:'RSI(14), SMA(20/50/200), approximate MACD(12/26), 20-session average volume calculated from TejHQ daily OHLCV.'};
+ await db.query(`INSERT INTO wealth_stock_advisor_research_sources(run_id,ticker,source_type,title,url,publisher,published_at,retrieved_at,excerpt,evidence,verification_status)
+  VALUES(NULL,$1,'technical_indicator',$2,$3,'TejHQ',$4::timestamptz,now(),$5,$6::jsonb,'verified')
+  ON CONFLICT(ticker,url) WHERE run_id IS NULL DO UPDATE SET title=EXCLUDED.title,published_at=EXCLUDED.published_at,retrieved_at=now(),excerpt=EXCLUDED.excerpt,evidence=EXCLUDED.evidence,verification_status='verified'`,
+  [symbol,'Technical indicators — '+symbol,url,latest.date,JSON.stringify(tech),JSON.stringify(evidence)]);
+ return {ticker:symbol,status:'updated',provider:'TejHQ',price_rows:rows.length,technical_indicators:tech,as_of:latest.date};
+}
+
 export async function runStockAdvisorDataCollection(db){
  const [run]=await db.query('INSERT INTO wealth_stock_advisor_data_collection_runs(status) VALUES(\'running\') RETURNING id');
  const summary={instruments:0,nav_updated:0,announcements:0,failed:0,skipped:0,feeds:0,results:[]};
@@ -88,6 +129,11 @@ export async function runStockAdvisorDataCollection(db){
    catch(e){summary.failed++;summary.results.push({ticker:instrument.symbol,status:'failed',error:String(e?.message||e).slice(0,180)})}
   }
   for(const instrument of equities){
+   try{
+    const market=await collectTejHQEquity({instrument,db});
+    summary.results.push(market);
+    if(market.status==='updated')summary.market_data_updated=(summary.market_data_updated||0)+1;
+   }catch(e){summary.failed++;summary.results.push({ticker:instrument.symbol,status:'market_data_failed',provider:'TejHQ',error:String(e?.message||e).slice(0,180)})}
    const rows=await collectEquityNews({instrument,runId:run.id,feeds,db});
    summary.results.push(...rows);summary.announcements+=rows.filter(x=>x.status==='stored_unverified').length;
    if(rows.some(x=>x.status==='feed_error'))summary.failed++;
