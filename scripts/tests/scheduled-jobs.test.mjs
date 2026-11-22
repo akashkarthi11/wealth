@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { nextJobRun } from '../../api/_lib/scheduled-jobs.js';
+import { nextJobRun } from '../../api/_lib/scheduled-job-time.js';
 
 test('daily schedule is calculated in Asia/Kolkata, not UTC',()=>{
   const next=nextJobRun(new Date('2026-11-22T11:00:00.000Z'),'18:30','daily');
