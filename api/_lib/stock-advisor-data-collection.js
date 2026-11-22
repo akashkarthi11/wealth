@@ -44,7 +44,7 @@ async function collectMf({instrument,runId,db}){
  }
  await db.query(`INSERT INTO wealth_stock_advisor_research_sources(run_id,ticker,source_type,title,url,publisher,published_at,retrieved_at,excerpt,evidence,verification_status)
   VALUES(NULL,$1,'fund_nav',$2,$3,'MFAPI.in',$4::timestamptz,now(),$5,$6::jsonb,'verified')
-  ON CONFLICT(ticker,url) DO UPDATE SET title=EXCLUDED.title,published_at=EXCLUDED.published_at,retrieved_at=now(),excerpt=EXCLUDED.excerpt,evidence=EXCLUDED.evidence,verification_status='verified'`,
+  ON CONFLICT(ticker,url) WHERE run_id IS NULL DO UPDATE SET title=EXCLUDED.title,published_at=EXCLUDED.published_at,retrieved_at=now(),excerpt=EXCLUDED.excerpt,evidence=EXCLUDED.evidence,verification_status='verified'`,
   [instrument.symbol,title,url,rows[0].date,'Latest NAV ₹'+rows[0].nav+' as of '+rows[0].date+'; '+rows.length+' dated NAV observations stored in wealth_instrument_prices.',JSON.stringify(evidence)]);
  return {ticker:instrument.symbol,status:'updated',source_type:'fund_nav',observations:rows.length,price_table:'wealth_instrument_prices'};
 }
@@ -62,7 +62,7 @@ async function collectEquityNews({instrument,runId,feeds,db}){
     const evidence={feed_url:feed.url,feed_label:feed.label,official_exchange_feed:true,content_kind:'rss_listing_only',retrieved_at:new Date().toISOString()};
     await db.query(`INSERT INTO wealth_stock_advisor_research_sources(run_id,ticker,source_type,title,url,publisher,published_at,retrieved_at,excerpt,evidence,verification_status)
     VALUES(NULL,$1,'corporate_announcement',$2,$3,'NSE',$4::timestamptz,now(),$5,$6::jsonb,'unverified')
-    ON CONFLICT(ticker,url) DO UPDATE SET title=EXCLUDED.title,published_at=EXCLUDED.published_at,retrieved_at=now(),excerpt=EXCLUDED.excerpt,evidence=EXCLUDED.evidence,verification_status='unverified'`,
+    ON CONFLICT(ticker,url) WHERE run_id IS NULL DO UPDATE SET title=EXCLUDED.title,published_at=EXCLUDED.published_at,retrieved_at=now(),excerpt=EXCLUDED.excerpt,evidence=EXCLUDED.evidence,verification_status='unverified'`,
     [instrument.symbol,title.slice(0,500),url,published,clean(description).slice(0,1800),JSON.stringify(evidence)]);
     results.push({ticker:instrument.symbol,status:'stored_unverified',title:title.slice(0,160)});
    }
