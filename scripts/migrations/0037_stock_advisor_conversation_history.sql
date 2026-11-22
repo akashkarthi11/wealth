@@ -44,5 +44,17 @@ CREATE TABLE IF NOT EXISTS wealth_stock_advisor_reports (
 
 ALTER TABLE wealth_stock_advisor_reports
   ADD COLUMN IF NOT EXISTS run_id uuid REFERENCES wealth_stock_advisor_runs(id) ON DELETE SET NULL;
+
+-- Preserve every historical report in the run selector. Older reports have no message rows,
+-- because the original ingestion stored only report_text/report_json.
+INSERT INTO wealth_stock_advisor_runs (user_id,run_key,run_at,status,agent_count)
+SELECT user_id,'legacy:' || id::text,run_at,'completed',3
+FROM wealth_stock_advisor_reports
+ON CONFLICT (user_id,run_key) DO NOTHING;
+UPDATE wealth_stock_advisor_reports r
+SET run_id = a.id
+FROM wealth_stock_advisor_runs a
+WHERE a.user_id=r.user_id AND a.run_key='legacy:' || r.id::text AND r.run_id IS NULL;
+
 CREATE UNIQUE INDEX IF NOT EXISTS wealth_stock_advisor_reports_run_id_uidx
   ON wealth_stock_advisor_reports(run_id) WHERE run_id IS NOT NULL;
