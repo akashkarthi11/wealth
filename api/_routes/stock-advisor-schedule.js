@@ -19,7 +19,7 @@ async function loadSchedule(uid) {
     last_success_at_ist:settings.last_success_at?formatScheduleTime(new Date(settings.last_success_at),SCHEDULE_TIMEZONE):null,
     scheduler_registered:String(process.env.VERCEL_ENV||'').toLowerCase()==='production',
     scheduler_status:!settings.enabled?'disabled':String(process.env.VERCEL_ENV||'').toLowerCase()==='production'?'active':'preview_only',
-    execution_window:'18:45 IST central daily dispatcher',
+    execution_window:'18:45 Asia/Kolkata (IST) central daily dispatcher',
     precision_note:'The central Vercel dispatcher runs once daily at 18:45 IST on Hobby; the selected time (up to 09:48 IST) is a due-time cutoff, not an exact-minute promise.'
   };
 }
