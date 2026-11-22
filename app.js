@@ -706,13 +706,32 @@ function advisorMessageHtml(m){
  const isSystem=/system|tool|source|data/.test(kind),time=m.created_at?new Date(m.created_at).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'}):'Time not recorded';
  return '<article class="advisor-message '+(isSystem?'advisor-message-system':'')+'"><div class="advisor-message-head"><b>'+esc(speaker)+'</b><span>Round '+Number(m.round_no||1)+'</span></div><p>'+esc(m.content||'')+'</p><small>'+esc(time)+'</small></article>';
 }
+function advisorLegacyMessages(report){
+ const raw=report?.report_json?.committee_debate??report?.report_json?.debate_transcript??null;
+ if(raw==null)return [];
+ const list=Array.isArray(raw)?raw:(Array.isArray(raw.messages)?raw.messages:Array.isArray(raw.turns)?raw.turns:Array.isArray(raw.dialogue)?raw.dialogue:null);
+ const normalize=(m,i)=>typeof m==='string'?{speaker:'Saved committee transcript',round_no:1,content:m,created_at:report?.run_at,message_type:'legacy'}:{
+  speaker:m.speaker||m.agent_name||m.agent||m.role||m.author||('Agent '+(i+1)),
+  round_no:m.round_no||m.round||1,
+  content:m.content||m.message||m.text||m.argument||m.response||JSON.stringify(m),
+  created_at:m.created_at||m.timestamp||report?.run_at,
+  message_type:m.message_type||m.type||'legacy'
+ };
+ if(list)return list.map(normalize);
+ if(typeof raw==='string')return [normalize(raw,0)];
+ if(raw&&typeof raw==='object'){
+  const entries=Object.entries(raw);
+  if(entries.length)return entries.map(([speaker,value],i)=>normalize({speaker,content:typeof value==='string'?value:JSON.stringify(value)},i));
+ }
+ return [normalize(JSON.stringify(raw),0)];
+}
 async function loadStockAdvisor(runId=null){
  const box=document.getElementById('stockAdvisorContent'),stamp=document.getElementById('stockAdvisorUpdated');
  if(!box)return;
  box.innerHTML='<p class="muted">Loading saved advisor run…</p>';
  try{
   const d=await api('/api/stock-advisor'+(runId?'?run_id='+encodeURIComponent(runId):''));
-  const report=d.report||null,run=d.run||null,runs=Array.isArray(d.runs)?d.runs:[],messages=Array.isArray(d.messages)?d.messages:[];
+  const report=d.report||null,run=d.run||null,runs=Array.isArray(d.runs)?d.runs:[];let messages=Array.isArray(d.messages)?d.messages:[];if(!messages.length)messages=advisorLegacyMessages(report);
   const holdings=Array.isArray(d.holdings)?d.holdings:[];
   const recommendations=Array.isArray(report?.report_json?.recommendations)?report.report_json.recommendations:[];
   const decisions=report?.report_json?.portfolio_review||{};
