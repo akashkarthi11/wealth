@@ -71,6 +71,6 @@ test('Stock Advisor is role-selectable; Angel One and Records remain admin-only'
   assert.ok(!ADMIN_ONLY_VIEWS.includes('stock-advisor'));
   assert.ok(adminOnlyRoute('angel') && !adminOnlyRoute('stock-advisor') && !adminOnlyRoute('loans'));
   assert.match(read('api/router.js'), /adminOnlyRoute\(route\) \|\| !routeAllowed/);
-  assert.match(read('app.js'), /OWNER_VIEWS=\\["data-quality","settings","angel-one","other"\\]/);
+  assert.ok(read('app.js').includes('OWNER_VIEWS=["data-quality","settings","angel-one","other"]'));
   assert.ok(read('api/_roles.js').includes("'stock-advisor': ['stock-advisor']"));
 });
