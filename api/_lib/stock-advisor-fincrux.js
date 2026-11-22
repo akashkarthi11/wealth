@@ -91,7 +91,7 @@ export async function collectFincruxFinancials({ instrument, db } = {}) {
     return result;
   }
   const [cached] = await db.query(
-    "SELECT retrieved_at FROM wealth_stock_advisor_research_sources WHERE run_id IS NULL AND upper(ticker)=upper($1) AND publisher='Fincrux' AND source_type='financial_statement' ORDER BY retrieved_at DESC LIMIT 1",
+    "SELECT retrieved_at FROM wealth_stock_advisor_research_sources WHERE run_id IS NULL AND upper(ticker)=upper($1) AND publisher='Fincrux' AND source_type='financial_statement' AND verification_status IN ('unverified','verified') ORDER BY retrieved_at DESC LIMIT 1",
     [ticker]
   );
   if (cached?.retrieved_at && Date.now() - Date.parse(cached.retrieved_at) < 30 * 86400000) {
