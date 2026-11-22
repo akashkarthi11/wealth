@@ -2,7 +2,7 @@ const NSE_RSS_INDEX='https://www.nseindia.com/static/rss-feed';
 const NSE_HOSTS=new Set(['www.nseindia.com','nsearchives.nseindia.com','nseindia.com']);
 const timeout=ms=>AbortSignal.timeout(ms);
 const clean=s=>String(s||'').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g,'$1').replace(/<[^>]+>/g,' ').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/\s+/g,' ').trim();
-const tag=(block,name)=>{const m=block.match(new RegExp('<'+name+'[^>]*>([\s\S]*?)<\/'+name+'>','i'));return m?clean(m[1]):''};
+const tag=(block,name)=>{const m=[...String(block||'').matchAll(/<([a-z]+)[^>]*>([\s\S]*?)<\/\1>/gi)].find(x=>x[1].toLowerCase()===String(name).toLowerCase());return m?clean(m[2]):''};
 const allowed=url=>{try{return NSE_HOSTS.has(new URL(url).hostname)}catch{return false}};
 async function getText(url,accept='application/rss+xml, application/xml, text/xml, text/html;q=0.9'){
  const r=await fetch(url,{headers:{'User-Agent':'MyWealthPersonalResearch/1.0','Accept':accept},signal:timeout(10000)});
