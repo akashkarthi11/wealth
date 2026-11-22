@@ -1,4 +1,4 @@
-const APP_BUILD_ID='20261122-simple-scheduled-jobs';
+const APP_BUILD_ID='20261122-dashboard-refresh';
 (function promptForUpdatedApp(){
   try {
     const key='wealth-ledger:app-build';
