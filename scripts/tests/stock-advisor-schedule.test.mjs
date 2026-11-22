@@ -57,7 +57,7 @@ test('timezone conversion uses IANA rules for future DST-aware zones',()=>{
   assert.equal(local.time,'09:00');
 });
 test('invalid schedule settings fail closed',()=>{
-  assert.throws(()=>nextScheduledAt(new Date(),'10:00','daily'),/no later than 09:48/);
+  assert.throws(()=>nextScheduledAt(new Date(),'10:00','daily'),/between 00:00 and 09:48/);
   assert.throws(()=>nextScheduledAt(new Date(),'09:48','weekly'),/Frequency must be daily or weekdays/);
 });
 const route=readFileSync(new URL('../../api/_routes/stock-advisor-schedule.js',import.meta.url),'utf8');
