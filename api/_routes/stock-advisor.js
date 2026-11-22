@@ -75,6 +75,24 @@ function cleanMessages(input){
 
 
 
+
+async function getAutoResearchSettings(uid){
+ const rows=await sql.query('SELECT enabled,mode,selected_tickers,schedule_timezone,schedule_time,last_run_at,next_run_at,last_status,last_error FROM wealth_stock_advisor_settings WHERE user_id=$1',[uid]);
+ return rows[0]||{enabled:false,mode:'all',selected_tickers:[],schedule_timezone:'Asia/Kolkata',schedule_time:'09:48',last_run_at:null,next_run_at:null,last_status:'not_configured',last_error:null};
+}
+async function saveAutoResearchSettings(req,res){
+ const uid=await sessionUser(req);if(!uid)return json(res,401,{error:'Sign in required'});
+ const input=await body(req),enabled=input.enabled===true,mode=String(input.mode||'all');
+ if(!['all','manual'].includes(mode))return json(res,400,{error:'Choose all investments or manual selection.'});
+ const selected=Array.isArray(input.selected_tickers)?[...new Set(input.selected_tickers.map(x=>String(x||'').trim().toUpperCase()).filter(x=>/^[A-Z0-9&.-]{1,20}$/.test(x)))]:[];
+ if(selected.length>100)return json(res,400,{error:'Select no more than 100 stocks.'});
+ if(mode==='manual'&&!selected.length)return json(res,400,{error:'Select at least one stock for manual mode.'});
+ if(selected.length){const valid=await sql.query("SELECT DISTINCT upper(ticker) AS ticker FROM wealth_positions WHERE user_id=$1 AND category='INVESTMENT' AND record_type='EQUITY' AND currency='INR' AND upper(ticker)=ANY($2::text[])",[uid,selected]);if(valid.length!==selected.length)return json(res,400,{error:'Manual selection may include only saved Indian equity holdings.'})}
+ await sql.query("INSERT INTO wealth_stock_advisor_settings (user_id,enabled,mode,selected_tickers,schedule_timezone,schedule_time,updated_at) VALUES ($1,$2,$3,$4::jsonb,'Asia/Kolkata','09:48',now()) ON CONFLICT (user_id) DO UPDATE SET enabled=EXCLUDED.enabled,mode=EXCLUDED.mode,selected_tickers=EXCLUDED.selected_tickers,updated_at=now()",[uid,enabled,mode,JSON.stringify(selected)]);
+ const settings=await getAutoResearchSettings(uid);
+ return json(res,200,{saved:true,settings,message:enabled?'Settings saved. Auto Research is enabled for this account.':'Auto Research is off for this account.'});
+}
+
 // Free-model pilot: separate Gateway calls; only public company/ticker identifiers leave this application.
 async function gatewayChat(model,messages){
  const key=String(process.env.AI_GATEWAY_API_KEY||'').trim();
@@ -134,7 +152,9 @@ async function runFreeModelPilot(req,res){
 export default async function handler(req,res){
  try{
   await schema();
-  if(req.method==='POST'&&req.route==='stock-advisor/free-run')return await runFreeModelPilot(req,res);
+  if(req.route==='stock-advisor/settings'&&req.method==='POST')return await saveAutoResearchSettings(req,res);
+  if(req.route==='stock-advisor/free-run'&&req.method==='POST')return await runFreeModelPilot(req,res);
+  if(req.route==='stock-advisor/settings'&&req.method==='GET'){const uid=await sessionUser(req);if(!uid)return json(res,401,{error:'Sign in required'});return json(res,200,await getAutoResearchSettings(uid))}
   if(req.method==='POST'){
    if(!validIngestSecret(req))return json(res,401,{error:'Valid advisor ingest token required.'});
    const input=await body(req);
@@ -183,6 +203,7 @@ export default async function handler(req,res){
   if(req.method!=='GET')return json(res,405,{error:'Method not allowed'});
   const uid=await sessionUser(req);if(!uid)return json(res,401,{error:'Sign in required'});
   const requestedRun=String(new URL(req.url,'https://wealth.local').searchParams.get('run_id')||'').trim();
+  const settings=await getAutoResearchSettings(uid);
   const [runs,holdings]=await Promise.all([
    sql.query('SELECT id,run_key,run_at,status,agent_count,created_at FROM wealth_stock_advisor_runs WHERE user_id=$1 ORDER BY run_at DESC,created_at DESC',[uid]),
    sql.query("SELECT name,ticker,quantity,current_value,balance_as_of FROM wealth_positions WHERE user_id=$1 AND category='INVESTMENT' AND record_type='EQUITY' AND currency='INR' ORDER BY name",[uid])
@@ -198,7 +219,7 @@ export default async function handler(req,res){
    report=result[0][0]||null;messages=result[1];bullBearCases=result[2];
   }
   if(requestedRun&&!run)return json(res,404,{error:'Advisor run not found.'});
-  return json(res,200,{report,run,runs,messages,bull_bear_cases:bullBearCases,holdings});
+  return json(res,200,{report,run,runs,messages,bull_bear_cases:bullBearCases,holdings,settings});
  }catch(e){
   if(e?.status===400)return json(res,400,{error:e.message});
   console.error('[wealth-stock-advisor]',e?.message||e);
