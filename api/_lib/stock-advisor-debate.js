@@ -328,12 +328,28 @@ async function processStep(req, runId) {
   if(!evidence){
     if(step!==0) throw new Error('The shared evidence snapshot is missing; resume from the first research step.');
     const refreshes={};
-    if(run.asset_type==='mutual_fund') refreshes.mutual_fund=await collectMutualFundEvidence({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
-    if(run.asset_type==='indian_equity') {
-       refreshes.tejhq=await collectTejHqEquityEvidence({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
-       refreshes.nse_news=await collectNseNews({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
-     }
+    // First trust reusable, fresh verified DB evidence. Only call free providers
+    // when the required evidence is absent or stale in the existing tables.
     evidence=await loadEvidence(run.user_id,holdingRows[0],run.asset_type,run.id);
+    if(run.asset_type==='mutual_fund' && evidence.missing_evidence_types.includes('market_price')) {
+      refreshes.mutual_fund=await collectMutualFundEvidence({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
+      evidence=await loadEvidence(run.user_id,holdingRows[0],run.asset_type,run.id);
+    }
+    if(run.asset_type==='indian_equity') {
+      const needsMarket=evidence.missing_evidence_types.includes('market_price');
+      const needsTechnical=evidence.missing_evidence_types.includes('technical_indicator');
+      if(needsMarket || needsTechnical) {
+        refreshes.tejhq=await collectTejHqEquityEvidence({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
+        // Re-read after persistence so the debate consumes the stored, verified rows,
+        // not an in-memory provider response.
+        evidence=await loadEvidence(run.user_id,holdingRows[0],run.asset_type,run.id);
+      } else {
+        refreshes.tejhq={status:'skipped',reason:'Fresh verified market price and technical evidence already exist in the database.'};
+      }
+      // NSE announcement discovery remains an independent, low-cost refresh.
+      refreshes.nse_news=await collectNseNews({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
+      evidence=await loadEvidence(run.user_id,holdingRows[0],run.asset_type,run.id);
+    }
     evidence.provider_refreshes=refreshes;
     evidence.captured_at=new Date().toISOString();
     evidence.package_hash=createHash('sha256').update(JSON.stringify(evidence)).digest('hex');
