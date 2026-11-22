@@ -30,8 +30,7 @@ CREATE TABLE IF NOT EXISTS wealth_stock_advisor_messages (
   CONSTRAINT wealth_stock_advisor_messages_content_check CHECK (length(content) BETWEEN 1 AND 30000),
   CONSTRAINT wealth_stock_advisor_messages_run_sequence_key UNIQUE (run_id, sequence_no)
 );
-CREATE INDEX IF NOT EXISTS wealth_stock_advisor_messages_run_order_idx
-  ON wealth_stock_advisor_messages(run_id, sequence_no);
+-- The UNIQUE(run_id, sequence_no) constraint already provides this lookup/order index.
 
 CREATE TABLE IF NOT EXISTS wealth_stock_advisor_reports (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
