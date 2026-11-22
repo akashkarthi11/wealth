@@ -1,3 +1,4 @@
+const TZ='Asia/Kolkata';
 
 function localParts(date,timezone=TZ) {
   const p=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23',weekday:'short'}).formatToParts(date);
