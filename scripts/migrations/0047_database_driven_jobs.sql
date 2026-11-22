@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS wealth_scheduled_jobs (
   job_key text NOT NULL UNIQUE,
   name text NOT NULL,
   description text NOT NULL DEFAULT '',
-  handler_key text NOT NULL UNIQUE CHECK (handler_key IN ('market-price-refresh','nightly-operations','stock-advisor-auto-research','stock-advisor-data-collection')),
+  handler_key text NOT NULL UNIQUE CHECK (handler_key IN ('market-price-refresh','nightly-operations','interest-accrual','backup','stock-advisor-auto-research','stock-advisor-data-collection')),
   enabled boolean NOT NULL DEFAULT true,
   schedule_time time NOT NULL,
   schedule_frequency text NOT NULL DEFAULT 'daily' CHECK (schedule_frequency IN ('daily','weekdays')),
@@ -34,6 +34,15 @@ CREATE TABLE IF NOT EXISTS wealth_scheduled_job_runs (
 );
 CREATE INDEX IF NOT EXISTS wealth_scheduled_job_runs_recent_idx
   ON wealth_scheduled_job_runs(job_id,created_at DESC);
+-- Keep compatibility with the former combined nightly handler, but schedule its two jobs separately.
+ALTER TABLE wealth_scheduled_jobs DROP CONSTRAINT IF EXISTS wealth_scheduled_jobs_handler_key_check;
+ALTER TABLE wealth_scheduled_jobs ADD CONSTRAINT wealth_scheduled_jobs_handler_key_check
+  CHECK (handler_key IN ('market-price-refresh','nightly-operations','interest-accrual','backup','stock-advisor-auto-research','stock-advisor-data-collection'));
+UPDATE wealth_scheduled_jobs SET job_key='interest-accrual',name='Interest accrual',
+  description='Calculate and save interest accruals for all users with linked interest accounts.',
+  handler_key='interest-accrual',updated_at=now()
+  WHERE job_key='nightly-operations';
+
 INSERT INTO wealth_scheduled_jobs
   (job_key,name,description,handler_key,schedule_time,schedule_frequency,timezone,next_run_at)
 VALUES
@@ -41,10 +50,14 @@ VALUES
   CASE WHEN ((date_trunc('day',now() AT TIME ZONE 'Asia/Kolkata') + time '04:30') AT TIME ZONE 'Asia/Kolkata') > now()
        THEN (date_trunc('day',now() AT TIME ZONE 'Asia/Kolkata') + time '04:30') AT TIME ZONE 'Asia/Kolkata'
        ELSE (date_trunc('day',now() AT TIME ZONE 'Asia/Kolkata') + interval '1 day' + time '04:30') AT TIME ZONE 'Asia/Kolkata' END),
- ('nightly-operations','Nightly interest and backup','Accrue interest and run the configured encrypted backup.','nightly-operations','01:30','daily','Asia/Kolkata',
+ ('interest-accrual','Interest accrual','Calculate and save interest accruals for all users with linked interest accounts.','interest-accrual','01:30','daily','Asia/Kolkata',
   CASE WHEN ((date_trunc('day',now() AT TIME ZONE 'Asia/Kolkata') + time '01:30') AT TIME ZONE 'Asia/Kolkata') > now()
        THEN (date_trunc('day',now() AT TIME ZONE 'Asia/Kolkata') + time '01:30') AT TIME ZONE 'Asia/Kolkata'
        ELSE (date_trunc('day',now() AT TIME ZONE 'Asia/Kolkata') + interval '1 day' + time '01:30') AT TIME ZONE 'Asia/Kolkata' END),
+ ('backup','Encrypted backup','Run the configured encrypted off-site backup.','backup','01:45','daily','Asia/Kolkata',
+  CASE WHEN ((date_trunc('day',now() AT TIME ZONE 'Asia/Kolkata') + time '01:45') AT TIME ZONE 'Asia/Kolkata') > now()
+       THEN (date_trunc('day',now() AT TIME ZONE 'Asia/Kolkata') + time '01:45') AT TIME ZONE 'Asia/Kolkata'
+       ELSE (date_trunc('day',now() AT TIME ZONE 'Asia/Kolkata') + interval '1 day' + time '01:45') AT TIME ZONE 'Asia/Kolkata' END),
  ('stock-advisor-auto-research','Stock Advisor auto-research','Check enabled per-user Auto Research schedules and queue due research.','stock-advisor-auto-research','09:45','daily','Asia/Kolkata',
   CASE WHEN ((date_trunc('day',now() AT TIME ZONE 'Asia/Kolkata') + time '09:45') AT TIME ZONE 'Asia/Kolkata') > now()
        THEN (date_trunc('day',now() AT TIME ZONE 'Asia/Kolkata') + time '09:45') AT TIME ZONE 'Asia/Kolkata'
