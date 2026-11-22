@@ -122,20 +122,8 @@
   ],
   "crons": [
     {
-      "path": "/api/refresh-market-prices",
-      "schedule": "0 23 * * *"
-    },
-    {
-      "path": "/api/nightly",
-      "schedule": "0 20 * * *"
-    },
-    {
-      "path": "/api/stock-advisor/scheduled-run",
-      "schedule": "18 4 * * *"
-    },
-    {
-      "path": "/api/stock-advisor/data-collection",
-      "schedule": "0 13 * * *"
+      "path": "/api/jobs/dispatch",
+      "schedule": "*/15 * * * *"
     }
   ]
 }
