@@ -438,7 +438,7 @@ async function processStep(req, runId) {
     const [found]=await sql.query('SELECT id FROM wealth_stock_advisor_messages WHERE run_id=$1 AND sequence_no=$2',[runId,step]);
     if(!found) throw new Error('Message persistence conflict; no saved message found.');
   }
-  await sql.query("INSERT INTO wealth_stock_advisor_agent_outputs (run_id,ticker,agent_key,stage,round_no,provider,model,status,output,input_hash,prompt_tokens,completion_tokens,started_at,completed_at) VALUES ($1,$2,$3,$4,$5,$6,$7,'completed',$7::jsonb,$8,$9,$10,now(),now())",[runId,run.ticker,plan.side+'-nemotron-free',messageType,plan.round,FREE_AI_MODEL,JSON.stringify({summary:summaryForStorage,metadata:meta}),String(step)+':'+run.ticker,Number(model.usage?.prompt_tokens||0),Number(model.usage?.completion_tokens||0)]);
+  await sql.query("INSERT INTO wealth_stock_advisor_agent_outputs (run_id,ticker,agent_key,stage,round_no,provider,model,status,output,input_hash,prompt_tokens,completion_tokens,started_at,completed_at) VALUES ($1,$2,$3,$4,$5,$6,$7,'completed',$8::jsonb,$9,$10,$11,now(),now())",[runId,run.ticker,plan.side+'-'+model.provider_key,messageType,plan.round,model.provider,model.model,JSON.stringify({summary:summaryForStorage,metadata:meta}),String(step)+':'+run.ticker,Number(model.usage?.prompt_tokens||0),Number(model.usage?.completion_tokens||0)]);
   const [message]=await sql.query('SELECT id,sequence_no,round_no,speaker,agent_key,message_type,summary,metadata,evidence_refs,created_at FROM wealth_stock_advisor_messages WHERE run_id=$1 AND sequence_no=$2',[runId,step]);
   await advanceStep(job.id,runId,step,plan,message,step===8?{decision,summary:summaryForStorage,parsed,evidenceGate:evidence.action_gate}:null);
   return {advanced:true,step,decision};
@@ -452,7 +452,7 @@ async function advanceStep(jobId,runId,step,plan,message,cio=null) {
     const [run]=await sql.query('SELECT ticker,stock_name FROM wealth_stock_advisor_runs WHERE id=$1',[runId]);
     const meta=message.metadata&&typeof message.metadata==='object'?message.metadata:{};
     await sql.query("INSERT INTO wealth_stock_advisor_bull_bear_cases (run_id,ticker,stock_name,exchange,side,agent_key,agent_name,thesis,key_points,fundamental_evidence,technical_evidence,valuation,catalysts,risks,sources,confidence,verdict) VALUES ($1,$2,$3,'NSE',$4,$5,$6,$7,$8::jsonb,'{}'::jsonb,'{}'::jsonb,'{}'::jsonb,'[]'::jsonb,'[]'::jsonb,'[]'::jsonb,$9,$10) ON CONFLICT (run_id,ticker,side,agent_key) DO UPDATE SET thesis=EXCLUDED.thesis,key_points=EXCLUDED.key_points,confidence=EXCLUDED.confidence,verdict=EXCLUDED.verdict,updated_at=now()",
-      [runId,run.ticker,run.stock_name,side,side+'-nemotron-free',plan.speaker+' · Nemotron Free',message.summary,JSON.stringify(Array.isArray(meta.key_evidence)?meta.key_evidence:[]),Number.isFinite(Number(meta.confidence))?Number(meta.confidence):null,String(meta.current_position||'DATA REQUIRED')]);
+      [runId,run.ticker,run.stock_name,side,message.agent_key||side+'-nemotron-free',message.speaker||plan.speaker+' · Nemotron Free',message.summary,JSON.stringify(Array.isArray(meta.key_evidence)?meta.key_evidence:[]),Number.isFinite(Number(meta.confidence))?Number(meta.confidence):null,String(meta.current_position||'DATA REQUIRED')]);
   }
   if(next===9 && cio) {
     const runRows=await sql.query('SELECT user_id,ticker,stock_name,asset_type,run_at FROM wealth_stock_advisor_runs WHERE id=$1',[runId]),run=runRows[0];
