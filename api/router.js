@@ -31,6 +31,8 @@ export const ROUTES = {
   'stock-advisor/debate/worker': () => import('./_lib/stock-advisor-debate.js'),
   'stock-advisor/debate/resume': () => import('./_lib/stock-advisor-debate.js'),
   'stock-advisor/settings': () => import('./_routes/stock-advisor.js'),
+  'stock-advisor/schedule': () => import('./_routes/stock-advisor-schedule.js'),
+  'stock-advisor/schedule/run-now': () => import('./_routes/stock-advisor-schedule.js'),
   'stock-advisor/scheduled-run': () => import('./_routes/stock-advisor-scheduled.js'),
   // TSD Claude Plan 3
   'prices': () => import('./_routes/prices.js'),

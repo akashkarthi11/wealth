@@ -1,6 +1,7 @@
 import {sql,schema,json,sessionUser,body} from '../_lib.js';
 import {timingSafeEqual,randomUUID} from 'node:crypto';
 import {startJob,finishJob} from '../_jobs.js';
+import {SCHEDULE_TIMEZONE,DEFAULT_SCHEDULE_TIME,nextScheduledAt} from '../_lib/stock-advisor-schedule-time.js';
 
 // The agents' shared WEALTH_INGEST_SECRET (Plan 3) or the older advisor-only secret.
 function validIngestSecret(req){
@@ -78,18 +79,14 @@ function cleanMessages(input){
 
 
 
-function nextAutoResearchRunAt(now=new Date()){
- const next=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate(),4,18,0,0));
- if(next<=now)next.setUTCDate(next.getUTCDate()+1);
- return next.toISOString();
-}
-
 async function getAutoResearchSettings(uid){
- const rows=await sql.query('SELECT enabled,mode,selected_tickers,schedule_timezone,schedule_time,last_run_at,next_run_at,last_status,last_error FROM wealth_stock_advisor_settings WHERE user_id=$1',[uid]);
- const settings=rows[0]||{enabled:false,mode:'all',selected_tickers:[],schedule_timezone:'Asia/Kolkata',schedule_time:'09:48',last_run_at:null,next_run_at:null,last_status:'not_configured',last_error:null};
- if(settings.enabled&&!settings.next_run_at)settings.next_run_at=nextAutoResearchRunAt();
+ const rows=await sql.query('SELECT enabled,mode,selected_tickers,schedule_timezone,schedule_time,schedule_frequency,last_run_at,last_success_at,last_scheduled_date,next_run_at,last_status,last_error FROM wealth_stock_advisor_settings WHERE user_id=$1',[uid]);
+ const settings=rows[0]||{enabled:false,mode:'all',selected_tickers:[],schedule_timezone:SCHEDULE_TIMEZONE,schedule_time:DEFAULT_SCHEDULE_TIME,schedule_frequency:'daily',last_run_at:null,last_success_at:null,last_scheduled_date:null,next_run_at:null,last_status:'not_configured',last_error:null};
+ if(settings.enabled)settings.next_run_at=nextScheduledAt(new Date(),settings.schedule_time||DEFAULT_SCHEDULE_TIME,settings.schedule_frequency||'daily',settings.schedule_timezone||SCHEDULE_TIMEZONE).toISOString();
+ else settings.next_run_at=null;
  settings.scheduler_registered=String(process.env.VERCEL_ENV||'').toLowerCase()==='production';
  settings.scheduler_status=settings.enabled?(settings.scheduler_registered?'active':'preview_only'):'disabled';
+ settings.execution_window='09:48–10:47 IST';
  return settings;
 }
 async function saveAutoResearchSettings(req,res){
@@ -99,10 +96,10 @@ async function saveAutoResearchSettings(req,res){
  const selected=Array.isArray(input.selected_tickers)?[...new Set(input.selected_tickers.map(x=>String(x||'').trim().toUpperCase()).filter(x=>/^[A-Z0-9&.-]{1,20}$/.test(x)))]:[];
  if(selected.length>100)return json(res,400,{error:'Select no more than 100 stocks.'});
  if(mode==='manual'&&!selected.length)return json(res,400,{error:'Select at least one stock for manual mode.'});
- if(selected.length){const valid=await sql.query("SELECT DISTINCT upper(ticker) AS ticker FROM wealth_positions WHERE user_id=$1 AND category='INVESTMENT' AND record_type IN ('EQUITY','ETF') AND currency='INR' AND upper(ticker)=ANY($2::text[])",[uid,selected]);if(valid.length!==selected.length)return json(res,400,{error:'Manual selection may include only saved Indian equity holdings.'})}
- await sql.query("INSERT INTO wealth_stock_advisor_settings (user_id,enabled,mode,selected_tickers,schedule_timezone,schedule_time,next_run_at,last_status,last_error,updated_at) VALUES ($1,$2,$3,$4::jsonb,'Asia/Kolkata','09:48',$5,$6,NULL,now()) ON CONFLICT (user_id) DO UPDATE SET enabled=EXCLUDED.enabled,mode=EXCLUDED.mode,selected_tickers=EXCLUDED.selected_tickers,next_run_at=EXCLUDED.next_run_at,last_status=EXCLUDED.last_status,last_error=NULL,updated_at=now()",[uid,enabled,mode,JSON.stringify(selected),enabled?nextAutoResearchRunAt():null,enabled?'scheduled':'disabled']);
+ if(selected.length){const valid=await sql.query("SELECT DISTINCT upper(ticker) AS ticker FROM wealth_positions WHERE user_id=$1 AND category='INVESTMENT' AND record_type IN ('EQUITY','ETF') AND currency='INR' AND upper(ticker)=ANY($2::text[])",[uid,selected]);if(valid.length!==selected.length)return json(res,400,{error:'Manual selection may include only saved Indian equity or ETF holdings.'})}
+ await sql.query("INSERT INTO wealth_stock_advisor_settings (user_id,enabled,mode,selected_tickers,last_status,last_error,updated_at) VALUES ($1,$2,$3,$4::jsonb,$5,NULL,now()) ON CONFLICT (user_id) DO UPDATE SET enabled=EXCLUDED.enabled,mode=EXCLUDED.mode,selected_tickers=EXCLUDED.selected_tickers,last_status=EXCLUDED.last_status,last_error=NULL,updated_at=now()",[uid,enabled,mode,JSON.stringify(selected),enabled?'scheduled':'disabled']);
  const settings=await getAutoResearchSettings(uid);
- return json(res,200,{saved:true,settings,message:enabled?'Settings saved. Daily 09:48 IST Auto Research is configured; Preview deployments do not execute Vercel Cron.':'Auto Research is off for this account.'});
+ return json(res,200,{saved:true,settings,message:enabled?'Settings saved. Use Research Schedule to configure the daily IST time and frequency; Preview deployments do not receive automatic Vercel Cron events.':'Auto Research is off for this account.'});
 }
 
 // Free-model pilot: separate Gateway calls; only public company/ticker identifiers leave this application.

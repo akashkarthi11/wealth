@@ -1500,3 +1500,14 @@ b.pj-medium{color:#f5c26b}
 .advisor-message-details summary{cursor:pointer;color:#8de0c0;font-weight:700}
 .advisor-message-details p{margin:6px 0;overflow-wrap:anywhere}
 @media(max-width:520px){.advisor-round-card>summary{padding:11px}.advisor-round-messages{padding:0 7px 8px}.advisor-message-summary{font-size:12px}}
+
+/* Stock Advisor dynamic research schedule */
+.advisor-schedule-config{margin-top:16px;padding-top:15px;border-top:1px solid var(--line);min-width:0}
+.advisor-schedule-config .advisor-section-head{margin-bottom:10px}
+.advisor-schedule-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:10px 0}
+.advisor-schedule-controls label{display:grid;gap:6px;min-width:0;color:var(--muted);font-size:11px;font-weight:650}
+.advisor-schedule-controls input,.advisor-schedule-controls select{width:100%;min-width:0;min-height:44px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2,var(--panel));color:var(--text);font:inherit;font-size:14px}
+.advisor-schedule-config .advisor-intro-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:10px}
+.advisor-schedule-config .advisor-intro-actions button{min-height:42px}
+.advisor-schedule-config .advisor-auto-schedule{margin:12px 0 6px}
+@media(max-width:560px){.advisor-schedule-controls{grid-template-columns:minmax(0,1fr)}.advisor-schedule-config .advisor-intro-actions button{flex:1 1 auto}.advisor-schedule-config .advisor-intro-actions span{flex-basis:100%}}
