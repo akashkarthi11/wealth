@@ -36,11 +36,17 @@ async function collectMf({instrument,runId,db}){
  if(!rows.length)throw new Error('MFAPI returned no valid dated NAV observations');
  const meta=payload.meta||{},title='Mutual fund NAV — '+String(meta.scheme_name||instrument.name||scheme);
  const evidence={provider:'MFAPI.in',scheme_code:scheme,scheme_name:meta.scheme_name||instrument.name||null,fund_house:meta.fund_house||null,scheme_type:meta.scheme_type||null,scheme_category:meta.scheme_category||null,observations:rows,currency:'INR',retrieved_at:new Date().toISOString(),verification_basis:'Valid dated NAV observations returned by MFAPI; scheme code taken from saved instrument pricing symbol.'};
- await db.query(`INSERT INTO wealth_stock_advisor_data_sources(run_id,instrument_id,ticker,asset_type,source_type,title,url,publisher,published_at,retrieved_at,excerpt,evidence,verification_status)
- VALUES($1,$2,$3,'mutual_fund','fund_nav',$4,$5,'MFAPI.in',$6::timestamptz,now(),$7,$8::jsonb,'verified')
- ON CONFLICT(ticker,url) DO UPDATE SET run_id=EXCLUDED.run_id,instrument_id=EXCLUDED.instrument_id,title=EXCLUDED.title,published_at=EXCLUDED.published_at,retrieved_at=now(),excerpt=EXCLUDED.excerpt,evidence=EXCLUDED.evidence,verification_status='verified'`,
- [runId,instrument.id,instrument.symbol,title,url,rows[0].date,'Latest NAV ₹'+rows[0].nav+' as of '+rows[0].date+'; '+rows.length+' observations stored.',JSON.stringify(evidence)]);
- return {ticker:instrument.symbol,status:'updated',source_type:'fund_nav',observations:rows.length};
+ for(const observation of rows){
+  await db.query(`INSERT INTO wealth_instrument_prices(instrument_id,as_of,source,price,fx_to_inr,fetched_at)
+   VALUES($1,$2::timestamptz,'MFAPI.in',$3,NULL,now())
+   ON CONFLICT(instrument_id,as_of,source) DO UPDATE SET price=EXCLUDED.price,fetched_at=now()`,
+   [instrument.id,observation.date,observation.nav]);
+ }
+ await db.query(`INSERT INTO wealth_stock_advisor_research_sources(run_id,ticker,source_type,title,url,publisher,published_at,retrieved_at,excerpt,evidence,verification_status)
+  VALUES(NULL,$1,'fund_nav',$2,$3,'MFAPI.in',$4::timestamptz,now(),$5,$6::jsonb,'verified')
+  ON CONFLICT(ticker,url) DO UPDATE SET title=EXCLUDED.title,published_at=EXCLUDED.published_at,retrieved_at=now(),excerpt=EXCLUDED.excerpt,evidence=EXCLUDED.evidence,verification_status='verified'`,
+  [instrument.symbol,title,url,rows[0].date,'Latest NAV ₹'+rows[0].nav+' as of '+rows[0].date+'; '+rows.length+' dated NAV observations stored in wealth_instrument_prices.',JSON.stringify(evidence)]);
+ return {ticker:instrument.symbol,status:'updated',source_type:'fund_nav',observations:rows.length,price_table:'wealth_instrument_prices'};
 }
 async function collectEquityNews({instrument,runId,feeds,db}){
  const results=[];
@@ -54,10 +60,10 @@ async function collectEquityNews({instrument,runId,feeds,db}){
     if(!allowed(url))continue;
     const stamp=Date.parse(date),published=Number.isFinite(stamp)?new Date(stamp).toISOString():null;
     const evidence={feed_url:feed.url,feed_label:feed.label,official_exchange_feed:true,content_kind:'rss_listing_only',retrieved_at:new Date().toISOString()};
-    await db.query(`INSERT INTO wealth_stock_advisor_data_sources(run_id,instrument_id,ticker,asset_type,source_type,title,url,publisher,published_at,retrieved_at,excerpt,evidence,verification_status)
-    VALUES($1,$2,$3,$4,'corporate_announcement',$5,$6,'NSE',$7::timestamptz,now(),$8,$9::jsonb,'unverified')
-    ON CONFLICT(ticker,url) DO UPDATE SET run_id=EXCLUDED.run_id,instrument_id=EXCLUDED.instrument_id,title=EXCLUDED.title,published_at=EXCLUDED.published_at,retrieved_at=now(),excerpt=EXCLUDED.excerpt,evidence=EXCLUDED.evidence,verification_status='unverified'`,
-    [runId,instrument.id,instrument.symbol,instrument.asset_class,title.slice(0,500),url,published,clean(description).slice(0,1800),JSON.stringify(evidence)]);
+    await db.query(`INSERT INTO wealth_stock_advisor_research_sources(run_id,ticker,source_type,title,url,publisher,published_at,retrieved_at,excerpt,evidence,verification_status)
+    VALUES(NULL,$1,'corporate_announcement',$2,$3,'NSE',$4::timestamptz,now(),$5,$6::jsonb,'unverified')
+    ON CONFLICT(ticker,url) DO UPDATE SET title=EXCLUDED.title,published_at=EXCLUDED.published_at,retrieved_at=now(),excerpt=EXCLUDED.excerpt,evidence=EXCLUDED.evidence,verification_status='unverified'`,
+    [instrument.symbol,title.slice(0,500),url,published,clean(description).slice(0,1800),JSON.stringify(evidence)]);
     results.push({ticker:instrument.symbol,status:'stored_unverified',title:title.slice(0,160)});
    }
   }catch(error){results.push({ticker:instrument.symbol,status:'feed_error',error:String(error?.message||error).slice(0,160)})}
