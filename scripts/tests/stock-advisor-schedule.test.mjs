@@ -71,7 +71,7 @@ const vercel=JSON.parse(readFileSync(new URL('../../vercel.json',import.meta.url
 test('authenticated GET, PUT and Run Now endpoints are registered',()=>{
   assert.match(router,/'stock-advisor\/schedule':/);
   assert.match(router,/'stock-advisor\/schedule\/run-now':/);
-  assert.match(route,/req\.method==='GET'/);
+  assert.match(route,/18:45 Asia\\/Kolkata/);
   assert.match(route,/req\.method==='PUT'/);
   assert.match(route,/req\.method==='POST'/);
   assert.match(route,/sessionUser\(req\)/);
