@@ -1,5 +1,4 @@
 import { sql, json, sessionUser } from '../_lib.js';
-import { executeJob } from '../_lib/scheduled-jobs.js';
 
 async function adminUser(req) {
   const uid=await sessionUser(req);
