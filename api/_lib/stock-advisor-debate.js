@@ -1,5 +1,7 @@
 import { sql, json, sessionUser, body } from '../_lib.js';
 import { waitUntil } from '@vercel/functions';
+import { createHash } from 'node:crypto';
+import { collectMutualFundEvidence } from './stock-advisor-mfapi.js';
 import { collectNseNews } from './stock-advisor-live-evidence.js';
 
 export const FREE_AI_MODEL = 'nvidia/nemotron-3.5-lightning-free';
@@ -193,12 +195,13 @@ async function loadEvidence(uid, holding, assetType, runId) {
   }
   const sources = sourceRows.map(s => {
     const age = (now - Date.parse(s.retrieved_at)) / 3600000;
-    const fresh = s.verification_status === 'verified' && age >= 0 && age <= 24 * 45;
+    const maxAgeHours = s.source_type === 'fund_nav' ? 24 * 7 : s.source_type === 'exchange_filing' || s.source_type === 'corporate_announcement' ? 24 * 45 : 24 * 45;
+    const fresh = s.verification_status === 'verified' && age >= 0 && age <= maxAgeHours;
     evidenceRefs.push({type:s.source_type,id:s.id,title:s.title,url:s.url,status:fresh?'verified':s.verification_status,as_of:s.published_at || s.retrieved_at});
     return {...s, verification_status:fresh?'verified':(age>24*45?'stale':s.verification_status)};
   });
   const verifiedTypes = new Set(sources.filter(s=>s.verification_status==='verified').map(s=>s.source_type));
-  if (prices.some(p=>p.status==='fresh')) verifiedTypes.add('market_price');
+  if (prices.some(p=>p.status==='fresh') || sources.some(s=>s.source_type==='fund_nav'&&s.verification_status==='verified')) verifiedTypes.add('market_price');
   const required = assetType === 'gold_etf' || assetType === 'silver_etf' || assetType === 'other_etf'
     ? ['market_price','expense_ratio','tracking_error','liquidity_spread','nav_premium_discount','underlying_exposure','commodity_drivers']
     : assetType === 'mutual_fund'
@@ -279,10 +282,13 @@ async function processStep(req, runId) {
   if(!holdingRows.length) throw new Error('Saved investment disappeared; refusing to research an unknown asset.');
   if(!evidence){
     if(step!==0) throw new Error('The shared evidence snapshot is missing; resume from the first research step.');
-    const newsRefresh=await collectNseNews({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
+    const refreshes={};
+    if(run.asset_type==='mutual_fund') refreshes.mutual_fund=await collectMutualFundEvidence({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
+    if(run.asset_type==='indian_equity'||run.asset_type==='other_equity') refreshes.nse_news=await collectNseNews({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
     evidence=await loadEvidence(run.user_id,holdingRows[0],run.asset_type,run.id);
-    evidence.news_refresh=newsRefresh;
+    evidence.provider_refreshes=refreshes;
     evidence.captured_at=new Date().toISOString();
+    evidence.package_hash=createHash('sha256').update(JSON.stringify(evidence)).digest('hex');
     await sql.query("UPDATE wealth_stock_advisor_runs SET progress_json=jsonb_set(coalesce(progress_json,'{}'::jsonb),'{evidence_package}',$2::jsonb,true),updated_at=now() WHERE id=$1",[run.id,JSON.stringify(evidence)]);
   }
   if(step===8 && !cioReady(prior)) throw new Error('CIO adjudication is blocked until all eight analyst messages are persisted.');
@@ -312,7 +318,7 @@ async function processStep(req, runId) {
     missing_evidence:Array.isArray(parsed.missing_evidence)?parsed.missing_evidence.slice(0,20):evidence.missing_evidence_types,
     change_conditions:Array.isArray(parsed.change_conditions)?parsed.change_conditions.slice(0,12):[],
     evidence_gate:evidence.action_gate,missing_evidence_types:evidence.missing_evidence_types,
-    evidence_refs:evidence.evidence_refs,idempotency_key:'debate:'+runId+':'+step
+    evidence_refs:evidence.evidence_refs,evidence_package_hash:evidence.package_hash,idempotency_key:'debate:'+runId+':'+step
   };
   if(envelope.full.length>30000) throw new Error('Model response exceeded the safe message storage limit; retrying with a shorter response.');
   const full = envelope.full;
