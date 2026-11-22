@@ -67,5 +67,5 @@ test('Stock Advisor is grantable to User; Angel One and Records remain admin-onl
   assert.equal(routeAllowed('stock-advisor/free-run', ['stock-advisor']), true);
   assert.equal(routeAllowed('stock-advisor/free-run', ['overview']), false);
   assert.match(read('api/router.js'), /adminOnlyRoute\\(route\\) \\|\\| !routeAllowed/);
-  assert.match(read('app.js'), /OWNER_VIEWS=\\["data-quality","settings","angel-one","other"\\]/);
+  assert.match(read('app.js'), /OWNER_VIEWS=\["data-quality","settings","angel-one","other"\]/);
 });
