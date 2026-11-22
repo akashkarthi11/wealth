@@ -21,7 +21,7 @@ export async function runStockAdvisorDataCollection(db){
    summary.announcements=news.stored;
    summary.results.push({provider:news.provider,status:news.status,feeds_checked:news.feeds_checked,stored:news.stored,errors:news.errors});
    summary.results.push(...news.results);
-   if(news.status==='unavailable')summary.failed++;
+   if(news.status==='unavailable'||news.status==='partial')summary.failed++;
   }
   for(const instrument of funds){
    try{
