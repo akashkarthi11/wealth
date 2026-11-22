@@ -73,9 +73,67 @@ function cleanMessages(input){
  });
 }
 
+
+
+// Free-model pilot: separate Gateway calls; only public company/ticker identifiers leave this application.
+async function gatewayChat(model,messages){
+ const key=String(process.env.AI_GATEWAY_API_KEY||'').trim();
+ if(!key)throw Object.assign(new Error('AI_GATEWAY_API_KEY is not configured for this deployment.'),{status:503});
+ const response=await fetch('https://ai-gateway.vercel.sh/v1/chat/completions',{method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({model,messages,temperature:0.25,max_tokens:1800})});
+ const payload=await response.json().catch(()=>({}));
+ if(!response.ok)throw Object.assign(new Error('AI Gateway request failed ('+response.status+'): '+String(payload?.error?.message||payload?.message||'provider unavailable').slice(0,240)),{status:502});
+ const content=payload?.choices?.[0]?.message?.content;
+ if(typeof content!=='string'||!content.trim())throw Object.assign(new Error('AI Gateway returned an empty model response.'),{status:502});
+ return content.trim();
+}
+function parseAgentJson(raw){
+ const cleaned=String(raw||'').trim();
+ try{const v=JSON.parse(cleaned);return v&&typeof v==='object'&&!Array.isArray(v)?v:{thesis:cleaned,key_points:[],risks:[],sources:[]}}
+ catch{return {thesis:cleaned,key_points:[],risks:[],sources:[]}}
+}
+function agentArray(v){return Array.isArray(v)?v:[]}
+function agentObject(v){return v&&typeof v==='object'&&!Array.isArray(v)?v:{}}
+async function runFreeModelPilot(req,res){
+ const uid=await sessionUser(req);if(!uid)return json(res,401,{error:'Sign in required'});
+ const users=await sql.query('SELECT role FROM wealth_users WHERE id=$1',[uid]);if(users[0]?.role!=='admin')return json(res,403,{error:'Owner only'});
+ const input=await body(req),ticker=String(input.ticker||'').trim().toUpperCase();
+ if(!/^[A-Z0-9&.-]{1,20}$/.test(ticker))return json(res,400,{error:'Choose a valid Indian equity ticker from your holdings.'});
+ const holdings=await sql.query("SELECT name,ticker FROM wealth_positions WHERE user_id=$1 AND category='INVESTMENT' AND record_type='EQUITY' AND currency='INR' AND upper(ticker)=upper($2) LIMIT 1",[uid,ticker]);
+ if(!holdings.length)return json(res,404,{error:'That ticker is not in your saved Indian equity holdings.'});
+ const company=String(holdings[0].name||ticker),runKey='free-pilot-'+randomUUID();
+ const inserted=await sql.query("INSERT INTO wealth_stock_advisor_runs (user_id,run_key,run_at,status,agent_count) VALUES ($1,$2,now(),'running',3) RETURNING id,run_key,run_at,status,agent_count",[uid,runKey]),run=inserted[0];
+ const boundary='You have only a public company name and ticker. No live market feed, verified current price, latest financial statements, current chart indicators or browsing are available. Never invent figures, dates, citations, prices, ratios or recent events. Mark unverified knowledge as background. Identify the exact primary-source data required before investment action.';
+ const schemaText='Return JSON only: thesis (string), key_points (string array), fundamental_evidence (object), technical_evidence (object, state no live chart data), valuation (object, state no verified current valuation), catalysts (array), risks (array), sources (array, empty unless supplied), confidence (number 0-100), preliminary_action (BUY/HOLD/SELL/RESEARCH).';
+ const base='Company: '+company+'. NSE ticker: '+ticker+'. India equities. '+boundary+' '+schemaText;
+ try{
+  const [bullRaw,bearRaw]=await Promise.all([
+   gatewayChat('nvidia/nemotron-3.5-lightning-free',[{role:'system',content:'You are the independent BULL analyst. Build the strongest honest upside thesis and challenge your assumptions. Do not fabricate evidence.'},{role:'user',content:base+' Focus on business quality, growth drivers, competitive advantages, balance sheet questions and evidence needed to validate upside.'}]),
+   gatewayChat('reflection/beam-free',[{role:'system',content:'You are the independent BEAR analyst. You have not seen the Bull draft. Build the strongest honest downside thesis and search for disconfirming evidence. Do not fabricate evidence.'},{role:'user',content:base+' Focus on valuation risk, execution, governance, cyclicality, capital allocation, downside scenarios and evidence that could invalidate the thesis.'}])
+  ]);
+  const bull=parseAgentJson(bullRaw),bear=parseAgentJson(bearRaw);
+  const cioRaw=await gatewayChat('nvidia/nemotron-3.5-lightning-free',[{role:'system',content:'You are CIO. Independently adjudicate both cases, identify disagreements, reject unsupported claims. You have no live data. Without verified current valuation, financials and technicals, decision must be HOLD / DATA REQUIRED, not a trade instruction. Return JSON only.'},{role:'user',content:base+' BULL CASE:\n'+JSON.stringify(bull)+'\nBEAR CASE:\n'+JSON.stringify(bear)+'\nReturn JSON: summary, decision (BUY/HOLD/SELL), reasons (array), unresolved_questions (array), data_required (array).'}]);
+  const cio=parseAgentJson(cioRaw),messages=[
+   {sequence_no:0,round_no:1,speaker:'Bull Analyst · Nemotron Free',agent_key:'bull-nemotron-free',message_type:'analysis',content:JSON.stringify(bull,null,2),metadata:{model:'nvidia/nemotron-3.5-lightning-free',independent:true}},
+   {sequence_no:1,round_no:1,speaker:'Bear Analyst · Beam Free',agent_key:'bear-beam-free',message_type:'analysis',content:JSON.stringify(bear,null,2),metadata:{model:'reflection/beam-free',independent:true}},
+   {sequence_no:2,round_no:1,speaker:'CIO · Nemotron Free',agent_key:'cio-nemotron-free',message_type:'decision',content:JSON.stringify(cio,null,2),metadata:{model:'nvidia/nemotron-3.5-lightning-free',adjudicates:['bull-nemotron-free','bear-beam-free']}}
+  ];
+  const cases=[{side:'bull',agent_key:'bull-nemotron-free',agent_name:'Bull Analyst · Nemotron Free',data:bull},{side:'bear',agent_key:'bear-beam-free',agent_name:'Bear Analyst · Beam Free',data:bear}];
+  for(const c of cases){const a=c.data;await sql.query('INSERT INTO wealth_stock_advisor_bull_bear_cases (run_id,ticker,stock_name,exchange,side,agent_key,agent_name,thesis,key_points,fundamental_evidence,technical_evidence,valuation,catalysts,risks,sources,confidence,target_price,time_horizon,verdict) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13::jsonb,$14::jsonb,$15::jsonb,$16,NULL,$17,$18)',[run.id,ticker,company,'NSE',c.side,c.agent_key,c.agent_name,String(a.thesis||'No thesis supplied.'),JSON.stringify(agentArray(a.key_points)),JSON.stringify(agentObject(a.fundamental_evidence)),JSON.stringify(agentObject(a.technical_evidence)),JSON.stringify(agentObject(a.valuation)),JSON.stringify(agentArray(a.catalysts)),JSON.stringify(agentArray(a.risks)),JSON.stringify(agentArray(a.sources)),Number.isFinite(Number(a.confidence))?Math.max(0,Math.min(100,Number(a.confidence))):null,'Long term',String(a.preliminary_action||'RESEARCH')]);}
+  for(const m of messages)await sql.query('INSERT INTO wealth_stock_advisor_messages (run_id,sequence_no,round_no,speaker,agent_key,message_type,content,metadata,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,now())',[run.id,m.sequence_no,m.round_no,m.speaker,m.agent_key,m.message_type,m.content,JSON.stringify(m.metadata)]);
+  const decision=String(cio.decision||'HOLD').toUpperCase(),action=['BUY','HOLD','SELL'].includes(decision)?decision:'HOLD',summary=String(cio.summary||'Preliminary pilot. Current financial and market data are not verified; no trade instruction is issued.');
+  const reportJson={summary,recommendations:[{ticker,symbol:ticker,company,action,reason:summary,risk:agentArray(cio.unresolved_questions).join('; ')}],free_model_pilot:true,models:['nvidia/nemotron-3.5-lightning-free','reflection/beam-free'],data_limitations:[boundary],cio};
+  const reportText='FREE MODEL PILOT — '+company+' ('+ticker+')\n\n'+summary+'\n\nDecision: '+action+' / DATA REQUIRED\n\nReasons:\n'+agentArray(cio.reasons).map(x=>'• '+x).join('\n')+'\n\nUnresolved questions:\n'+agentArray(cio.unresolved_questions).map(x=>'• '+x).join('\n')+'\n\nData required:\n'+agentArray(cio.data_required).map(x=>'• '+x).join('\n')+'\n\nThree-call model pilot only; no live market data was supplied.';
+  await sql.query("INSERT INTO wealth_stock_advisor_reports (user_id,run_id,run_at,report_text,report_json) VALUES ($1,$2,now(),$3,$4::jsonb)",[uid,run.id,reportText,JSON.stringify(reportJson)]);
+  await sql.query("UPDATE wealth_stock_advisor_runs SET status='completed' WHERE id=$1",[run.id]);
+  const [savedRun]=await sql.query('SELECT id,run_key,run_at,status,agent_count FROM wealth_stock_advisor_runs WHERE id=$1',[run.id]),[savedCount]=await sql.query('SELECT count(*)::int AS count FROM wealth_stock_advisor_messages WHERE run_id=$1',[run.id]);
+  return json(res,201,{saved:true,run:savedRun,messageCount:savedCount?.count||0,models:reportJson.models,decision:action});
+ }catch(e){await sql.query("UPDATE wealth_stock_advisor_runs SET status='failed' WHERE id=$1",[run.id]).catch(()=>{});console.error('[stock-advisor-free-pilot]',e?.message||e);return json(res,e?.status||502,{error:e?.message||'Free-model pilot failed.'});}
+}
+
 export default async function handler(req,res){
  try{
   await schema();
+  if(req.method==='POST'&&req.route==='stock-advisor/free-run')return await runFreeModelPilot(req,res);
   if(req.method==='POST'){
    if(!validIngestSecret(req))return json(res,401,{error:'Valid advisor ingest token required.'});
    const input=await body(req);
