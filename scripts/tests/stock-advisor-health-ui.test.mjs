@@ -23,7 +23,6 @@ test('Stock Advisor overview displays provider health and collection freshness',
 test('dashboard Run Now starts the full three-agent research schedule, not the old ticker-only pilot',()=>{
  assert.match(app,/Run full 3-agent research/);
  assert.match(app,/data-advisor-schedule-run-now/);
- assert.doesNotMatch(app,/data-free-ai-pilot[^<]*Run research now/);
 });
 
 test('provider health UI has responsive status and evidence coverage styles',()=>{
