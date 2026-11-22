@@ -1361,3 +1361,20 @@ b.pj-medium{color:#f5c26b}
 .advisor-wa-meta time{font-variant-numeric:tabular-nums}
 .advisor-transcript{background:linear-gradient(180deg,#0d1c28,#10231f)}
 @media(max-width:600px){.advisor-wa-bubble{max-width:calc(100vw - 86px)}.advisor-history-controls{align-items:stretch}.advisor-history-controls input{flex:1}.advisor-history-controls span{width:100%;margin-left:0}}
+
+
+/* Advisor evidence cards: keep every structured Bull/Bear argument readable */
+.advisor-bullbear-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.advisor-bullbear-card{min-width:0;padding:15px;border:1px solid #30465b;border-radius:14px;background:#101e2d}
+.advisor-bullbear-card.bull{border-left:3px solid #58d2a3}
+.advisor-bullbear-card.bear{border-left:3px solid #e58d8d}
+.advisor-bullbear-side{font-size:10px;font-weight:850;letter-spacing:1px}
+.advisor-bullbear-card.bull .advisor-bullbear-side{color:#6fe0b5}
+.advisor-bullbear-card.bear .advisor-bullbear-side{color:#ffaaaa}
+.advisor-bullbear-card>p{white-space:pre-wrap;overflow-wrap:anywhere;color:#d7e2ef;font-size:13px;line-height:1.6}
+.advisor-bullbear-card ul{padding-left:19px;color:#bdcddd;font-size:12px;line-height:1.6}
+.advisor-bullbear-card details{margin-top:9px;padding:9px 10px;border-radius:9px;background:#0b1724}
+.advisor-bullbear-card summary{cursor:pointer;color:#b7d5d0;font-size:12px;font-weight:700}
+.advisor-bullbear-card pre{white-space:pre-wrap;overflow-wrap:anywhere;color:#b8c9da;font-size:11px;line-height:1.5}
+.advisor-bullbear-card>small{display:block;margin-top:9px;letter-spacing:0}
+@media(max-width:680px){.advisor-bullbear-list{grid-template-columns:1fr}}
