@@ -25,7 +25,7 @@ export async function collectNseNews({ticker,name,runId,db}){
      const parsed=Date.parse(date),published=Number.isFinite(parsed)?new Date(parsed).toISOString():null;
      const url=new URL(link,feed.url).toString();if(!hostAllowed(url))continue;
      const excerpt=description.slice(0,1800),evidence={feed_url:feed.url,feed_label:feed.label,official_exchange_feed:true,content_kind:'rss_item',retrieved_at:result.fetched_at};
-     const saved=await db.query("INSERT INTO wealth_stock_advisor_research_sources (run_id,ticker,source_type,title,url,publisher,published_at,retrieved_at,excerpt,evidence,verification_status) VALUES ($1,$2,'corporate_announcement',$3,$4,'NSE',$5::timestamptz,now(),$6,$7::jsonb,'verified') ON CONFLICT (run_id,ticker,url) DO UPDATE SET title=EXCLUDED.title,published_at=EXCLUDED.published_at,retrieved_at=now(),excerpt=EXCLUDED.excerpt,evidence=EXCLUDED.evidence,verification_status='verified' RETURNING id",[runId,ticker,title.slice(0,500),url,published,excerpt,JSON.stringify(evidence)]);
+     const saved=await db.query("INSERT INTO wealth_stock_advisor_research_sources (run_id,ticker,source_type,title,url,publisher,published_at,retrieved_at,excerpt,evidence,verification_status) VALUES ($1,$2,'corporate_announcement',$3,$4,'NSE',$5::timestamptz,now(),$6,$7::jsonb,'unverified') ON CONFLICT (run_id,ticker,url) DO UPDATE SET title=EXCLUDED.title,published_at=EXCLUDED.published_at,retrieved_at=now(),excerpt=EXCLUDED.excerpt,evidence=EXCLUDED.evidence,verification_status='unverified' RETURNING id",[runId,ticker,title.slice(0,500),url,published,excerpt,JSON.stringify(evidence)]);
      if(saved.length)result.stored++;
     }
    }catch(e){result.errors.push(String(e?.message||e).slice(0,160))}
