@@ -25,6 +25,8 @@ export const ROUTES = {
   'refresh-market-prices': () => import('./_routes/refresh-market-prices.js'),
   'snapshot': () => import('./_routes/snapshot.js'),
   'stock-advisor': () => import('./_routes/stock-advisor.js'),
+  'stock-advisor/free-run': () => import('./_routes/stock-advisor.js'),
+  'stock-advisor/settings': () => import('./_routes/stock-advisor.js'),
   // TSD Claude Plan 3
   'prices': () => import('./_routes/prices.js'),
   'email-imports': () => import('./_routes/email-imports.js'),
