@@ -1320,3 +1320,18 @@ b.pj-medium{color:#f5c26b}
 .advisor-decision-detail p{margin:5px 0 0;font-size:12px;line-height:1.55;color:#c3d0e1;white-space:pre-wrap;overflow-wrap:anywhere}
 @media(min-width:701px){.advisor-history{grid-column:1/-1}.advisor-transcript{grid-column:1/-1}.advisor-chat{max-width:100%}}
 @media(max-width:700px){.advisor-run-list{max-height:260px}.advisor-message{padding:11px}.advisor-message>p{font-size:12px}}
+
+
+/* Stock Advisor intro chat action: clear and thumb-friendly on mobile */
+.advisor-intro-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:18px}
+.advisor-chat-cta{display:flex;align-items:center;justify-content:center;gap:9px;min-height:54px;padding:12px 17px;border-radius:14px;font-weight:750}
+.advisor-chat-cta>span:first-child{font-size:20px;line-height:1}
+.advisor-chat-cta-hint{font-size:11px;font-weight:500;opacity:.82}
+.advisor-reload{min-height:48px}
+#advisorTranscript{scroll-margin-top:22px}
+.advisor-transcript-highlight{outline:2px solid #63cda4;outline-offset:3px;transition:outline-color .25s}
+@media(max-width:520px){
+ .advisor-intro-actions{display:grid;grid-template-columns:1fr;align-items:stretch}
+ .advisor-chat-cta{width:100%;min-height:58px;flex-wrap:wrap}
+ .advisor-reload{width:100%}
+}
