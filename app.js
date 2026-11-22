@@ -441,8 +441,26 @@ async function loadDataQuality(){
 
 function scheduledJobsHtml(data){
  const jobs=data?.jobs||[];
- return '<section class="chart-card"><div class="chart-head"><div><h4>Scheduled jobs</h4><p>Schedules and execution history are loaded from the database. Hobby plan dispatches all due jobs together once daily at 18:45 IST; saved times are due-time cutoffs, not exact-minute guarantees.</p></div><button type="button" class="ghost" data-jobs-refresh>↻ Refresh</button></div>'+
- (jobs.length?jobs.map(j=>'<article class="planned-bill-item" data-job-card="'+esc(j.id)+'"><div class="planned-bill-main"><b>'+esc(j.name)+'</b><small>'+esc(j.description||'')+'</small><small>Last run: '+esc(j.last_run_at?new Date(j.last_run_at).toLocaleString('en-IN'):'Never')+' · '+esc(j.last_status||'Not run')+'</small>'+(j.last_error?'<small class="error">'+esc(j.last_error)+'</small>':'')+'</div><div class="advisor-schedule-controls"><label>Time · IST<input type="time" max="18:45" data-job-time value="'+esc(j.schedule_time||'00:00')+'"></label><label>Frequency<select data-job-frequency><option value="daily"'+(j.schedule_frequency==='daily'?' selected':'')+'>Every day</option><option value="weekdays"'+(j.schedule_frequency==='weekdays'?' selected':'')+'>Monday–Friday</option></select></label></div><label class="advisor-auto-toggle"><input type="checkbox" data-job-enabled'+(j.enabled?' checked':'')+'><span><b>Enabled</b><small>Pause future runs without deleting execution history.</small></span></label><div class="advisor-intro-actions"><button type="button" class="primary" data-job-save="'+esc(j.id)+'">Save</button><button type="button" class="ghost" data-job-run="'+esc(j.id)+'">Run now</button></div><small>Next run: '+esc(j.next_run_at?new Date(j.next_run_at).toLocaleString('en-IN',{timeZone:j.timezone||'Asia/Kolkata'}):'Paused')+'</small>'+(j.recent_runs?.length?'<details><summary>Recent executions ('+j.recent_runs.length+')</summary>'+j.recent_runs.map(r=>'<small>'+esc(new Date(r.started_at).toLocaleString('en-IN'))+' · '+esc(r.trigger_type)+' · '+esc(r.status)+(r.error?' · '+esc(r.error):'')+'</small>').join('')+'</details>':'')+'</article>').join(''):'<p class="muted">No jobs registered.</p>')+'</section>';
+ const fmt=value=>value?new Date(value).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Kolkata'}):'Not yet';
+ const status=value=>{const s=String(value||'not_run').toLowerCase();const label=s==='success'?'Completed':s==='running'?'Running':s==='failed'?'Failed':s==='skipped'?'Skipped':'Not run';const tone=s==='success'?'success':s==='running'?'info':s==='failed'?'danger':'neutral';return '<span class="jobs-status '+tone+'">'+label+'</span>'};
+ const cards=jobs.map(j=>{
+  const enabled=!!j.enabled, time=String(j.schedule_time||'00:00').slice(0,5), frequency=j.schedule_frequency||'daily';
+  const runs=Array.isArray(j.recent_runs)?j.recent_runs:[];
+  return '<article class="jobs-card" data-job-card="'+esc(j.id)+'">'+
+   '<div class="jobs-card-head"><div class="jobs-job-title"><span class="jobs-job-icon">◷</span><div><h4>'+esc(j.name)+'</h4><p>'+esc(j.description||'Scheduled automation')+'</p></div></div>'+
+   '<label class="jobs-switch" title="'+(enabled?'Pause job':'Enable job')+'"><input type="checkbox" data-job-enabled'+(enabled?' checked':'')+' aria-label="Enable '+esc(j.name)+'"><span></span></label></div>'+
+   '<div class="jobs-card-meta"><div><small>Schedule</small><b>'+esc(time)+' · '+(frequency==='weekdays'?'Weekdays':'Every day')+'</b></div><div><small>Last run</small><b>'+esc(j.last_run_at?fmt(j.last_run_at):'Not run yet')+'</b></div></div>'+
+   '<div class="jobs-card-status"><span>Last result</span>'+status(j.last_status)+'</div>'+
+   (j.last_error?'<p class="jobs-error">'+esc(j.last_error)+'</p>':'')+
+   '<div class="jobs-card-actions"><button type="button" class="primary" data-job-run="'+esc(j.id)+'">▶ Run now</button><button type="button" class="ghost" data-job-edit-toggle="'+esc(j.id)+'">Edit schedule</button></div>'+
+   '<div class="jobs-edit-panel" data-job-edit hidden><div class="jobs-edit-title">Schedule settings</div><div class="jobs-edit-fields"><label>Time (IST)<input type="time" max="18:45" data-job-time value="'+esc(time)+'"></label><label>Repeat<select data-job-frequency><option value="daily"'+(frequency==='daily'?' selected':'')+'>Every day</option><option value="weekdays"'+(frequency==='weekdays'?' selected':'')+'>Monday–Friday</option></select></label></div><button type="button" class="primary" data-job-save="'+esc(j.id)+'">Save changes</button></div>'+
+   '<details class="jobs-history"><summary>Recent activity · '+runs.length+'</summary>'+(runs.length?'<div class="jobs-history-list">'+runs.map(run=>'<div><span>'+esc(run.started_at?fmt(run.started_at):'Unknown time')+' · '+esc(run.trigger_type||'Automatic')+'</span>'+status(run.status)+(run.error?'<small class="jobs-error">'+esc(run.error)+'</small>':'')+'</div>').join('')+'</div>':'<p class="muted">No execution history yet.</p>')+'</details>'+
+   '<p class="jobs-next">Next scheduled run: <b>'+esc(enabled&&j.next_run_at?fmt(j.next_run_at):enabled?'Waiting for dispatcher':'Paused')+'</b></p>'+
+  '</article>';
+ }).join('');
+ return '<section class="jobs-page"><div class="jobs-page-head"><div><h4>Your scheduled jobs</h4><p>Simple controls for your automatic tasks. Changes are saved to your existing schedules.</p></div><button type="button" class="ghost" data-jobs-refresh>↻ Refresh</button></div>'+
+ (jobs.length?'<div class="jobs-list">'+cards+'</div>':'<div class="jobs-empty">No scheduled jobs are configured yet.</div>')+
+ '<p class="jobs-footnote">Times are shown in India Standard Time. Automatic runs are processed by the central dispatcher; the saved time is a due-time cutoff.</p></section>';
 }
 async function loadJobs(){
  const box=document.getElementById('jobsBox');if(!box)return;
@@ -450,12 +468,22 @@ async function loadJobs(){
  catch(e){box.innerHTML='<section class="chart-card"><h4>Scheduled jobs unavailable</h4><p class="error">'+esc(e.message)+'</p></section>'}
 }
 document.addEventListener('click',async e=>{
- const refresh=e.target.closest('[data-jobs-refresh]'),save=e.target.closest('[data-job-save]'),run=e.target.closest('[data-job-run]');
- if(refresh){loadJobs();return}if(!save&&!run)return;
+ const refresh=e.target.closest('[data-jobs-refresh]'),save=e.target.closest('[data-job-save]'),run=e.target.closest('[data-job-run]'),edit=e.target.closest('[data-job-edit-toggle]');
+ if(refresh){loadJobs();return}
+ if(edit){const card=edit.closest('[data-job-card]'),panel=card?.querySelector('[data-job-edit]');if(panel){panel.hidden=!panel.hidden;edit.textContent=panel.hidden?'Edit schedule':'Close editor'}return}
+ if(!save&&!run)return;
  const card=e.target.closest('[data-job-card]');if(!card)return;
- const showError=err=>{let p=card.querySelector('[data-job-error]');if(!p){p=document.createElement('p');p.className='error';p.dataset.jobError='1';card.append(p)}p.textContent=err.message||'Request failed'};
- if(save){save.disabled=true;try{await api('/api/jobs',{method:'PUT',body:JSON.stringify({id:save.dataset.jobSave,enabled:!!card.querySelector('[data-job-enabled]')?.checked,schedule_time:card.querySelector('[data-job-time]')?.value,schedule_frequency:card.querySelector('[data-job-frequency]')?.value})});await loadJobs()}catch(err){showError(err)}finally{save.disabled=false}}
- else{run.disabled=true;run.textContent='Running…';try{await api('/api/jobs/run-now',{method:'POST',body:JSON.stringify({id:run.dataset.jobRun})});await loadJobs()}catch(err){showError(err)}finally{run.disabled=false;run.textContent='Run now'}}
+ const showError=err=>{let p=card.querySelector('[data-job-error]');if(!p){p=document.createElement('p');p.className='jobs-error';p.dataset.jobError='1';card.append(p)}p.textContent=err.message||'Request failed'};
+ if(save){save.disabled=true;save.textContent='Saving…';try{await api('/api/jobs',{method:'PUT',body:JSON.stringify({id:save.dataset.jobSave,enabled:!!card.querySelector('[data-job-enabled]')?.checked,schedule_time:card.querySelector('[data-job-time]')?.value,schedule_frequency:card.querySelector('[data-job-frequency]')?.value})});await loadJobs()}catch(err){showError(err)}finally{save.disabled=false;save.textContent='Save changes'}}
+ else{run.disabled=true;run.textContent='Starting…';try{await api('/api/jobs/run-now',{method:'POST',body:JSON.stringify({id:run.dataset.jobRun})});await loadJobs()}catch(err){showError(err)}finally{run.disabled=false;run.textContent='▶ Run now'}}
+});
+document.addEventListener('change',async e=>{
+ const toggle=e.target.closest('[data-job-enabled]');if(!toggle)return;
+ const card=toggle.closest('[data-job-card]');if(!card)return;
+ toggle.disabled=true;
+ try{await api('/api/jobs',{method:'PUT',body:JSON.stringify({id:card.dataset.jobCard,enabled:toggle.checked,schedule_time:card.querySelector('[data-job-time]')?.value,schedule_frequency:card.querySelector('[data-job-frequency]')?.value})});await loadJobs()}
+ catch(err){toggle.checked=!toggle.checked;let p=card.querySelector('[data-job-error]');if(!p){p=document.createElement('p');p.className='jobs-error';card.append(p)}p.textContent=err.message||'Could not update job'}
+ finally{toggle.disabled=false}
 });
 // ---- Interest sources (TSD Claude Plan 3, TR3-3.7): rates, accruals and credits per linked account, from v2. ----
 function interestSourcesHtml(d){
