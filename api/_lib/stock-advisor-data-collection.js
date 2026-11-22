@@ -95,13 +95,12 @@ async function collectTejHQEquity({instrument,db}){
   .filter(x=>/^\\d{4}-\\d{2}-\\d{2}$/.test(String(x.date||''))&&Number(x.close)>0)
   .sort((a,b)=>a.date.localeCompare(b.date)).slice(-260);
  if(rows.length<35)throw new Error('TejHQ returned insufficient OHLCV history ('+rows.length+' rows)');
- for(const row of rows){
-  const asOf=new Date(row.date+'T15:30:00+05:30');
-  await db.query(`INSERT INTO wealth_instrument_prices(instrument_id,as_of,source,price,fx_to_inr,fetched_at)
-   VALUES($1,$2::timestamptz,'TejHQ',$3,NULL,now())
-   ON CONFLICT(instrument_id,as_of,source) DO UPDATE SET price=EXCLUDED.price,fetched_at=now()`,
-   [instrument.id,asOf.toISOString(),Number(row.close)]);
- }
+ const priceRows=rows.map(row=>({as_of:new Date(row.date+'T15:30:00+05:30').toISOString(),price:Number(row.close)}));
+ await db.query(`INSERT INTO wealth_instrument_prices(instrument_id,as_of,source,price,fx_to_inr,fetched_at)
+  SELECT $1,(x->>'as_of')::timestamptz,'TejHQ',(x->>'price')::numeric,NULL,now()
+  FROM jsonb_array_elements($2::jsonb) x
+  ON CONFLICT(instrument_id,as_of,source) DO UPDATE SET price=EXCLUDED.price,fetched_at=now()`,
+  [instrument.id,JSON.stringify(priceRows)]);
  const tech=technicalSnapshot(rows),latest=rows.at(-1),retrieved=new Date().toISOString();
  const evidence={provider:'TejHQ',endpoint:url,exchange:'NSE',symbol,price_basis:'end-of-day OHLCV close; not an intraday quote',latest_bar:latest,technical_indicators:tech,history_start:rows[0].date,history_end:latest.date,history_rows:rows.length,retrieved_at:retrieved,methodology:'RSI(14), SMA(20/50/200), approximate MACD(12/26), 20-session average volume calculated from TejHQ daily OHLCV.'};
  await db.query(`INSERT INTO wealth_stock_advisor_research_sources(run_id,ticker,source_type,title,url,publisher,published_at,retrieved_at,excerpt,evidence,verification_status)
