@@ -20,7 +20,7 @@ async function nseFeeds(){
  }
  return feeds.slice(0,10);
 }
-function matches(text,ticker,name){
+export function cleanNseFeedItemMatches(text,ticker,name){
  const t=String(text||'').toLowerCase(),symbol=String(ticker||'').toLowerCase(),n=String(name||'').toLowerCase();
  return (symbol.length>1&&t.split(/[^a-z0-9&.-]+/).includes(symbol))||(n.length>=5&&t.includes(n));
 }
@@ -49,7 +49,7 @@ async function collectEquityNews({instrument,runId,feeds,db}){
    const xml=await getText(feed.url),items=[...xml.matchAll(/<item\\b[^>]*>([\\s\\S]*?)<\\/item>/gi)];
    for(const m of items){
     const title=tag(m[1],'title'),link=tag(m[1],'link'),description=tag(m[1],'description'),date=tag(m[1],'pubDate');
-    if(!title||!link||!matches(title+' '+description,instrument.symbol,instrument.name))continue;
+    if(!title||!link||!cleanNseFeedItemMatches(title+' '+description,instrument.symbol,instrument.name))continue;
     let url;try{url=new URL(link,feed.url).toString()}catch{continue}
     if(!allowed(url))continue;
     const stamp=Date.parse(date),published=Number.isFinite(stamp)?new Date(stamp).toISOString():null;
