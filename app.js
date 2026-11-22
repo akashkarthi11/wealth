@@ -717,11 +717,34 @@ async function loadAutoResearchOverview(){
  }catch(e){box.innerHTML='<section class="advisor-panel"><h4>Free AI Auto Research</h4><p class="error">'+esc(e.message||'Could not load Auto Research settings.')+'</p></section>'}
 }
 function stockAdvisorHtml(){return '<section class="stock-advisor-intro"><div class="eyebrow">INDIAN EQUITY RESEARCH</div><h3>Stock Advisor</h3><p>Independent free-model research with account-level controls and saved chat history.</p><div class="advisor-intro-actions"><button type="button" class="primary" data-stock-advisor-refresh>Refresh saved report</button><span id="stockAdvisorUpdated" class="muted"></span></div></section><div id="stockAdvisorContent"><p class="muted">Loading saved advisor runs…</p></div>'}
+function advisorStructuredContentHtml(value){
+ let parsed=value;
+ if(typeof parsed==='string'){
+  let candidate=parsed.trim().replace(/^\x60{3}(?:json)?\s*/i,'').replace(/\s*\x60{3}$/,'');
+  if((candidate.startsWith('{')&&candidate.endsWith('}'))||(candidate.startsWith('[')&&candidate.endsWith(']'))){
+   try{parsed=JSON.parse(candidate)}catch{return '<p class="advisor-message-text">'+esc(value)+'</p>'}
+  }else return '<p class="advisor-message-text">'+esc(value)+'</p>';
+ }
+ if(!parsed||typeof parsed!=='object')return '<p class="advisor-message-text">'+esc(String(parsed??''))+'</p>';
+ const human=k=>String(k).replace(/_/g,' ').replace(/([a-z])([A-Z])/g,'$1 $2').replace(/\b\w/g,c=>c.toUpperCase());
+ const scalar=v=>typeof v==='string'?esc(v):typeof v==='number'||typeof v==='boolean'?esc(String(v)):esc(JSON.stringify(v));
+ const parts=Array.isArray(parsed)?parsed.map((v,i)=>'<li>'+scalar(v)+'</li>').join(''):'';
+ if(Array.isArray(parsed))return '<ul class="advisor-message-list">'+parts+'</ul>';
+ const preferred=['thesis','key_points','catalysts','risks','risk_factors','valuation','financials','bear_case','bull_case','recommendation','conclusion'];
+ const keys=[...preferred.filter(k=>Object.prototype.hasOwnProperty.call(parsed,k)),...Object.keys(parsed).filter(k=>!preferred.includes(k))];
+ return '<div class="advisor-structured-content">'+keys.map(k=>{
+  const v=parsed[k],heading=human(k);
+  if(Array.isArray(v))return '<section class="advisor-structured-section"><b>'+esc(heading)+'</b><ul class="advisor-message-list">'+v.map(item=>'<li>'+scalar(item)+'</li>').join('')+'</ul></section>';
+  if(v&&typeof v==='object')return '<section class="advisor-structured-section"><b>'+esc(heading)+'</b><dl>'+Object.entries(v).map(([sub,val])=>'<dt>'+esc(human(sub))+'</dt><dd>'+scalar(val)+'</dd>').join('')+'</dl></section>';
+  return '<section class="advisor-structured-section"><b>'+esc(heading)+'</b><p>'+scalar(v)+'</p></section>';
+ }).join('')+'</div>';
+}
 function advisorMessageHtml(m,i){
  const speaker=String(m.speaker||m.agent_key||'Analyst').trim(),kind=String(m.message_type||'message').toLowerCase();
  const isSystem=/system|tool|source|data/.test(kind),time=m.created_at?new Date(m.created_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'';
  const key=String(m.agent_key||speaker).toLowerCase().replace(/[^a-z0-9]+/g,'-');
- return '<article class="advisor-wa-row '+(isSystem?'system':'')+'"><div class="advisor-wa-avatar avatar-'+esc(key)+'">'+esc(speaker.slice(0,1).toUpperCase())+'</div><div class="advisor-wa-bubble"><div class="advisor-wa-speaker">'+esc(speaker)+'</div><p>'+esc(m.content||'')+'</p><div class="advisor-wa-meta"><span>Round '+Number(m.round_no||1)+'</span><time>'+esc(time)+'</time></div></div></article>';
+ const content=advisorStructuredContentHtml(m.content??m.message??m.text??'');
+ return '<article class="advisor-wa-row '+(isSystem?'system':'')+'"><div class="advisor-wa-avatar avatar-'+esc(key)+'">'+esc(speaker.slice(0,1).toUpperCase())+'</div><div class="advisor-wa-bubble"><div class="advisor-wa-speaker">'+esc(speaker)+'</div>'+content+'<div class="advisor-wa-meta"><span>Round '+Number(m.round_no||1)+'</span><time>'+esc(time)+'</time></div></div></article>';
 }
 function advisorLegacyMessages(report){
  const raw=report?.report_json?.committee_debate??report?.report_json?.debate_transcript??null;
