@@ -79,7 +79,7 @@ export default async function handler(req,res){
    const run=runs[0];
    for(const m of messages){
     await sql.query(
-     'INSERT INTO wealth_stock_advisor_messages (run_id,sequence_no,round_no,speaker,agent_key,message_type,content,metadata,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,COALESCE($9::timestamptz,now())) ON CONFLICT (run_id,sequence_no) DO NOTHING',
+     'INSERT INTO wealth_stock_advisor_messages (run_id,sequence_no,round_no,speaker,agent_key,message_type,content,metadata,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,COALESCE($9::timestamptz,now())) ON CONFLICT (run_id,sequence_no) DO UPDATE SET round_no=EXCLUDED.round_no,speaker=EXCLUDED.speaker,agent_key=EXCLUDED.agent_key,message_type=EXCLUDED.message_type,content=EXCLUDED.content,metadata=EXCLUDED.metadata,created_at=EXCLUDED.created_at',
      [run.id,m.sequence_no,m.round_no,m.speaker,m.agent_key,m.message_type,m.content,JSON.stringify(m.metadata),m.created_at]
     );
    }
