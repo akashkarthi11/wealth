@@ -34,7 +34,7 @@ export async function runStockAdvisorDataCollection(db){
    try{
     const market=await collectTejHqEquityEvidence({ticker:instrument.symbol,name:instrument.name,db});
     summary.results.push(market);
-    if(market.status==='ok')summary.market_data_updated++;
+    if(market.status==='ok')summary.market_data_updated++;else if(market.status==='unavailable')summary.failed++;
    }catch(e){summary.failed++;summary.results.push({ticker:instrument.symbol,status:'market_data_failed',provider:'TejHQ',error:String(e?.message||e).slice(0,180)})}
   }
   if(String(process.env.FINCRUX_API_KEY||'').trim() && equities.length){
