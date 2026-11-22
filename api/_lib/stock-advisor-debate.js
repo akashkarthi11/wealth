@@ -1,5 +1,6 @@
 import { sql, json, sessionUser, body } from '../_lib.js';
 import { waitUntil } from '@vercel/functions';
+import { collectNseNews } from './stock-advisor-live-evidence.js';
 
 export const FREE_AI_MODEL = 'nvidia/nemotron-3.5-lightning-free';
 export const DEBATE_SEQUENCE = Object.freeze([
@@ -212,6 +213,7 @@ async function loadEvidence(uid, holding, assetType, runId) {
   const value = Number(holding.current_value || 0);
   const concentration = null;
   return {
+    captured_at:new Date(now).toISOString(),
     instrument:{ticker,name:String(holding.name||ticker),currency:holding.currency||'INR',record_type:holding.record_type,quantity:holding.quantity,current_value:holding.current_value,balance_as_of:holding.balance_as_of},
     asset_type:assetType, prices, sources, portfolio_snapshot:{holding_count:portfolioRows.reduce((s,r)=>s+Number(r.holdings||0),0),value_by_record_type:portfolioRows,holding_value_share_pct:concentration,mtf_exposure:'UNKNOWN — no current verified broker MTF record was supplied to this debate'},
     verified_evidence_types:[...verifiedTypes],missing_evidence_types:missing,action_gate:actionGate,evidence_refs:evidenceRefs
@@ -258,7 +260,7 @@ async function processStep(req, runId) {
   const claimed=await sql.query("UPDATE wealth_stock_advisor_run_jobs SET status='running',locked_at=now(),attempts=attempts+1,step_attempts=step_attempts+1,updated_at=now() WHERE id=(SELECT id FROM wealth_stock_advisor_run_jobs WHERE run_id=$1 AND stage='debate' AND available_at<=now() AND step_no<9 AND step_attempts<max_attempts AND (status='pending' OR (status='running' AND locked_at<now()-interval '90 seconds')) ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING id,step_no,step_attempts,max_attempts",[runId]);
   if(!claimed.length) return {idle:true};
   const job=claimed[0],step=Number(job.step_no),plan=DEBATE_SEQUENCE[step];
-  const runs=await sql.query('SELECT id,user_id,ticker,stock_name,asset_type,status FROM wealth_stock_advisor_runs WHERE id=$1',[runId]);
+  const runs=await sql.query('SELECT id,user_id,ticker,stock_name,asset_type,status,progress_json FROM wealth_stock_advisor_runs WHERE id=$1',[runId]);
   if(!runs.length) throw new Error('Debate run no longer exists.');
   const run=runs[0];
   const prior=await sql.query('SELECT id,sequence_no,round_no,speaker,agent_key,message_type,content,summary,metadata,evidence_refs FROM wealth_stock_advisor_messages WHERE run_id=$1 ORDER BY sequence_no',[runId]);
@@ -273,7 +275,15 @@ async function processStep(req, runId) {
   }
   const [holdingRows]=await Promise.all([sql.query("SELECT name,ticker,record_type,currency,quantity,current_value,balance_as_of FROM wealth_positions WHERE user_id=$1 AND upper(ticker)=upper($2) AND category='INVESTMENT' LIMIT 1",[run.user_id,run.ticker])]);
   if(!holdingRows.length) throw new Error('Saved investment disappeared; refusing to research an unknown asset.');
-  const evidence=await loadEvidence(run.user_id,holdingRows[0],run.asset_type,run.id);
+  let evidence=run.progress_json&&typeof run.progress_json==='object'?run.progress_json.evidence_package:null;
+  if(!evidence){
+    if(step!==0) throw new Error('The shared evidence snapshot is missing; resume from the first research step.');
+    const newsRefresh=await collectNseNews({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
+    evidence=await loadEvidence(run.user_id,holdingRows[0],run.asset_type,run.id);
+    evidence.news_refresh=newsRefresh;
+    evidence.captured_at=new Date().toISOString();
+    await sql.query("UPDATE wealth_stock_advisor_runs SET progress_json=jsonb_set(coalesce(progress_json,'{}'::jsonb),'{evidence_package}',$2::jsonb,true),updated_at=now() WHERE id=$1",[run.id,JSON.stringify(evidence)]);
+  }
   if(step===8 && !cioReady(prior)) throw new Error('CIO adjudication is blocked until all eight analyst messages are persisted.');
   const prompt=step===8?cioPrompt(prior,evidence,run.asset_type):rolePrompt(step,prior,evidence,run.asset_type);
   const model=await callFreeModel([{role:'system',content:prompt.system},{role:'user',content:prompt.user}]);
