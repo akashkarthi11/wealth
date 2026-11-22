@@ -71,7 +71,7 @@ const vercel=JSON.parse(readFileSync(new URL('../../vercel.json',import.meta.url
 test('authenticated GET, PUT and Run Now endpoints are registered',()=>{
   assert.match(router,/'stock-advisor\/schedule':/);
   assert.match(router,/'stock-advisor\/schedule\/run-now':/);
-  assert.match(route,/18:45 Asia\\/Kolkata/);
+  assert.match(route,/req.method==='GET'/);
   assert.match(route,/req\.method==='PUT'/);
   assert.match(route,/req\.method==='POST'/);
   assert.match(route,/sessionUser\(req\)/);
@@ -112,7 +112,7 @@ test('scheduler checks saved frequency and never changes portfolio records',()=>
   assert.doesNotMatch(service,/UPDATE wealth_positions|DELETE FROM wealth_positions|INSERT INTO wealth_positions/);
 });
 test('daily Cron and Preview limitation are explicit in backend and UI',()=>{
-  assert.match(route,/18:45 Asia\\/Kolkata/);
+  assert.match(route,/18:45 Asia\/Kolkata/);
   assert.match(cron,/Preview deployments do not receive Vercel Cron events/);
   assert.match(ui,/central dispatcher runs once daily at 18:45 IST/);
   assert.match(ui,/Preview only · Run Now available/);
