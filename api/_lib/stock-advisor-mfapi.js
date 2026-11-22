@@ -1,6 +1,6 @@
 const BASE='https://api.mfapi.in/mf';
 const timeout=ms=>AbortSignal.timeout(ms);
-const clean=s=>String(s||'').replace(/\\s+/g,' ').trim();
+const clean=s=>String(s||'').replace(/\s+/g,' ').trim();
 const normalize=s=>clean(s).toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
 
 async function getJson(url){
@@ -11,7 +11,7 @@ async function getJson(url){
 
 export async function resolveMfScheme(input={}){
  const raw=clean(input.schemeCode||input.ticker||input.name);
- if(/^\\d{4,8}$/.test(raw))return {schemeCode:raw,schemeName:clean(input.name)||raw,resolvedBy:'saved_scheme_code'};
+ if(/^\d{4,8}$/.test(raw))return {schemeCode:raw,schemeName:clean(input.name)||raw,resolvedBy:'saved_scheme_code'};
  if(!raw)throw new Error('Mutual fund scheme name or AMFI scheme code is required.');
  const matches=await getJson(BASE+'/search?q='+encodeURIComponent(raw));
  if(!Array.isArray(matches)||!matches.length)throw new Error('MFAPI returned no matching schemes.');
