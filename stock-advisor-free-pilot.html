@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101827">
+<title>Free AI Pilot · Stock Advisor</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1320;--panel:#111e2e;--panel2:#15263a;--line:#293d55;--text:#edf4fc;--muted:#91a4ba;--green:#69d7ad;--red:#f08c91;--amber:#edc47b;--blue:#8ebcff}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 15% 0%,#18304a 0,transparent 38%),var(--bg);color:var(--text);font:14px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}
+button,select{font:inherit}button{cursor:pointer}.shell{max-width:1120px;margin:auto;padding:24px 20px 60px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:22px}.brand{display:flex;align-items:center;gap:12px}.mark{width:42px;height:42px;display:grid;place-items:center;border-radius:13px;background:#1c3850;color:var(--green);font-weight:900;font-size:20px}.brand h1{font-size:17px;margin:0}.brand p{font-size:10px;letter-spacing:1.4px;color:var(--muted);margin:2px 0 0}.back{color:#b8c9db;text-decoration:none;border:1px solid var(--line);padding:9px 13px;border-radius:10px}
+.hero{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin:20px 0}.eyebrow{font-size:10px;letter-spacing:1.5px;font-weight:800;color:var(--green)}h2{font-size:27px;line-height:1.2;margin:7px 0}.sub{color:var(--muted);max-width:650px;margin:0}.pilot-pill{white-space:nowrap;border:1px solid #3c765f;background:#15352e;color:#91edc5;border-radius:30px;padding:7px 11px;font-size:11px;font-weight:800}
+.grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(260px,.8fr);gap:14px}.card{background:linear-gradient(160deg,#142439,#101b2a);border:1px solid var(--line);border-radius:17px;padding:17px;min-width:0}.card h3{font-size:15px;margin:0}.muted{color:var(--muted)}.small{font-size:11px;color:var(--muted)}
+.controls{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:15px}.btn{border:0;border-radius:11px;padding:11px 15px;font-weight:800;background:var(--green);color:#09251c}.btn.secondary{background:#20364e;color:#dbe9f8;border:1px solid #3a536e}.btn:disabled{opacity:.55;cursor:default}
+.agent-list{display:grid;gap:9px;margin-top:14px}.agent{display:flex;align-items:center;gap:11px;padding:11px;border:1px solid #2c4057;border-radius:12px;background:#0e1a29}.avatar{width:34px;height:34px;display:grid;place-items:center;border-radius:11px;background:#203d54;font-weight:900;color:#a8d5ff}.agent:nth-child(2) .avatar{background:#442a35;color:#ffb7b7}.agent:nth-child(3) .avatar{background:#3b3829;color:#f4d58f}.agent-info{flex:1;min-width:0}.agent-info b{display:block;font-size:13px}.agent-info small{display:block;color:var(--muted);font-size:11px}.state{font-size:10px;color:var(--green);font-weight:800}
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:13px}.metric{background:#0d1928;border:1px solid #293b51;border-radius:12px;padding:12px}.metric small{display:block;color:var(--muted);font-size:10px;font-weight:800;letter-spacing:1px}.metric b{display:block;font-size:22px;margin-top:3px}.metric.buy b{color:var(--green)}.metric.hold b{color:var(--amber)}.metric.sell b{color:var(--red)}
+.feed{display:grid;gap:10px;margin-top:14px}.bubble{max-width:94%;padding:11px 13px;border-radius:4px 13px 13px 13px;background:#142b3e;border:1px solid #2c485e}.bubble.bear{background:#2a202b;border-color:#513640}.bubble.risk{background:#2a2a20;border-color:#504a31}.bubble b{font-size:11px;color:#9fe0c6}.bubble.bear b{color:#ffb3b3}.bubble.risk b{color:#f3d18c}.bubble p{margin:5px 0 0;font-size:12px;color:#dce7f1;line-height:1.6}
+.side-stack{display:grid;align-content:start;gap:14px}.budget{display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding:11px;border-radius:11px;background:#0d1b27;border:1px solid #2b4b40}.budget strong{color:var(--green);font-size:19px}.provider{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #26384d}.provider:last-child{border:0}.provider b{font-size:12px}.provider span{font-size:10px;color:var(--green)}
+.checks{display:grid;gap:10px;margin-top:13px}.check{display:flex;align-items:flex-start;gap:9px;font-size:12px}.tick{color:var(--green);font-weight:900}.warning{padding:11px;border:1px solid #655234;background:#30291c;border-radius:11px;color:#f0d59d;font-size:11px;margin-top:13px}
+.section-head{display:flex;justify-content:space-between;align-items:center;gap:10px}.tag{font-size:10px;padding:4px 8px;border-radius:20px;background:#1b3045;color:#b8d3ed}
+.bottom{margin-top:14px}.bottom-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.action-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid #27394e}.action-row:last-child{border:0}.action-row b{font-size:13px}.action-row small{display:block;color:var(--muted);font-size:11px}.signal{font-size:10px;font-weight:900;padding:5px 8px;border-radius:7px}.signal.buy{color:var(--green);background:#17382e}.signal.hold{color:var(--amber);background:#3a3020}.signal.sell{color:var(--red);background:#3b252b}
+.foot{text-align:center;color:#71869e;font-size:10px;margin:20px 0 0}.hidden{display:none!important}
+@media(max-width:760px){.shell{padding:16px 13px 40px}.grid,.bottom-grid{grid-template-columns:1fr}.hero{display:block}.pilot-pill{display:inline-block;margin-top:12px}.hero h2{font-size:23px}.side-stack{grid-template-columns:1fr 1fr}.side-stack .card:first-child{grid-column:1/-1}}
+@media(max-width:480px){.side-stack{grid-template-columns:1fr}.metrics{gap:6px}.metric{padding:10px}.metric b{font-size:19px}.controls .btn{width:100%}.back{font-size:11px}}
+</style>
+</head>
+<body>
+<main class="shell">
+<header class="top"><div class="brand"><div class="mark">K·</div><div><h1>My Wealth · Stock Advisor</h1><p>INDIAN EQUITY RESEARCH</p></div></div><a class="back" href="./">← Back to Wealth Ledger</a></header>
+<section class="hero"><div><div class="eyebrow">EXPERIMENTAL WORKSPACE</div><h2>Free AI Pilot</h2><p class="sub">A low-cost committee workflow for fresh Indian-equity research. Bull, Bear and Portfolio Risk agents challenge one another before a final BUY / HOLD / SELL view.</p></div><span class="pilot-pill">PILOT · UI PREVIEW</span></section>
+<div class="grid">
+<section class="card"><div class="section-head"><div><h3>Committee run</h3><div class="small">One fresh review · no legacy report data mixed in</div></div><span class="tag">3 agents</span></div>
+<div class="agent-list">
+<div class="agent"><div class="avatar">B+</div><div class="agent-info"><b>Bull Analyst</b><small>Growth, quality, earnings and catalysts</small></div><span class="state">READY</span></div>
+<div class="agent"><div class="avatar">B−</div><div class="agent-info"><b>Bear Analyst</b><small>Valuation, downside, governance and technical risks</small></div><span class="state">READY</span></div>
+<div class="agent"><div class="avatar">PR</div><div class="agent-info"><b>Portfolio Risk</b><small>Diversification, concentration, MTF and cash flow</small></div><span class="state">READY</span></div>
+</div>
+<div class="controls"><span class="small">Pilot mode · simulated interaction only</span><button class="btn" id="runBtn" type="button">▶ Preview committee run</button></div>
+<div class="metrics"><div class="metric buy"><small>BUY</small><b id="buyCount">—</b></div><div class="metric hold"><small>HOLD</small><b id="holdCount">—</b></div><div class="metric sell"><small>SELL</small><b id="sellCount">—</b></div></div>
+</section>
+<aside class="side-stack">
+<section class="card"><h3>Cost guardrail</h3><div class="budget"><div><div class="small">TARGET AI SPEND</div><b>Free tier / local</b></div><strong>₹0</strong></div><p class="small">Use free-tier quotas or a local model only. Add paid fallback only after explicit approval.</p></section>
+<section class="card"><h3>Provider setup</h3><div class="provider"><b>Free-tier provider</b><span>NOT CONNECTED</span></div><div class="provider"><b>Local model</b><span>OPTIONAL</span></div><div class="provider"><b>Secrets in browser</b><span>NEVER</span></div><p class="small">Provider selection and credentials are intentionally not wired in this HTML preview.</p></section>
+</aside>
+</div>
+<section class="card bottom"><div class="section-head"><div><h3>Agent conversation</h3><div class="small">WhatsApp-style transcript · demo content, not live research</div></div><span class="tag" id="runState">NOT STARTED</span></div>
+<div class="feed" id="feed"><div class="bubble"><b>System</b><p>Ready to preview the committee flow. This page does not call an AI provider or fetch live market data.</p></div></div></section>
+<div class="bottom-grid bottom">
+<section class="card"><div class="section-head"><h3>Decision preview</h3><span class="tag">Example only</span></div>
+<div class="action-row"><div><b>Quality compounder</b><small>Illustrative company · sample rationale</small></div><span class="signal buy">BUY</span></div>
+<div class="action-row"><div><b>Existing core holding</b><small>Illustrative company · hold pending valuation</small></div><span class="signal hold">HOLD</span></div>
+<div class="action-row"><div><b>High-risk position</b><small>Illustrative company · risk exceeds thesis</small></div><span class="signal sell">SELL</span></div>
+</section>
+<section class="card"><h3>Before enabling real runs</h3><div class="checks"><div class="check"><span class="tick">✓</span><span>Read the current Production portfolio and broker holdings.</span></div><div class="check"><span class="tick">✓</span><span>Fetch fresh fundamentals, technicals and source timestamps.</span></div><div class="check"><span class="tick">✓</span><span>Persist each agent message, Bull/Bear evidence and final report.</span></div><div class="check"><span class="tick">✓</span><span>Enforce provider budgets, rate limits and no-paid-fallback rules.</span></div></div><div class="warning">No investment advice is generated in this preview. Sample decisions are placeholders and must not be acted on.</div></section>
+</div>
+<p class="foot">Static HTML prototype · No API calls · No Production database writes</p>
+</main>
+<script>
+const runBtn=document.getElementById('runBtn'),feed=document.getElementById('feed'),state=document.getElementById('runState');
+runBtn.addEventListener('click',()=>{feed.innerHTML='<div class="bubble"><b>System · Demo</b><p>Starting the sample workflow… No AI provider is being called.</p></div><div class="bubble"><b>Bull Analyst · Sample</b><p>Test the upside case using revenue growth, return ratios, cash conversion, competitive position and earnings catalysts. Require dated sources before any conclusion.</p></div><div class="bubble bear"><b>Bear Analyst · Sample</b><p>Challenge the valuation, downside scenario, debt, governance signals and technical breakdown risk. Reject the thesis if expected return does not compensate for downside.</p></div><div class="bubble risk"><b>Portfolio Risk · Sample</b><p>Check sector weights, single-stock concentration, small-cap exposure, available cash and Angel One MTF borrowing cost before sizing any action.</p></div><div class="bubble"><b>Committee Chair · Sample</b><p>Demo complete. Real BUY / HOLD / SELL counts will appear only after a live run is connected to verified market data and saved recommendations.</p></div>';document.getElementById('buyCount').textContent='—';document.getElementById('holdCount').textContent='—';document.getElementById('sellCount').textContent='—';state.textContent='DEMO COMPLETE';runBtn.textContent='↻ Replay demo';});
+</script>
+</body>
+</html>
