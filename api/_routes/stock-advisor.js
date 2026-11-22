@@ -43,7 +43,9 @@ function cleanMessages(input){
   const createdAt=m.created_at??m.timestamp??null;
   if(createdAt&&!Number.isFinite(Date.parse(createdAt)))throw Object.assign(new Error('Message timestamps must be valid dates.'),{status:400});
   const metadata=m.metadata&&typeof m.metadata==='object'&&!Array.isArray(m.metadata)?m.metadata:{};
-  return {sequence_no:Number.isInteger(m.sequence_no)?m.sequence_no:i,
+  const sequenceNo=Number.isInteger(m.sequence_no)?m.sequence_no:i;
+  if(sequenceNo<0)throw Object.assign(new Error('Message sequence numbers must be zero or greater.'),{status:400});
+  return {sequence_no:sequenceNo,
    round_no:Number.isInteger(m.round_no)&&m.round_no>0?m.round_no:1,
    speaker,agent_key:String(m.agent_key??m.agent_id??'').slice(0,100),
    message_type:String(m.message_type??m.type??'message').slice(0,40),
