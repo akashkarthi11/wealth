@@ -1,4 +1,4 @@
-const APP_BUILD_ID='20261122-dashboard-friendly';
+const APP_BUILD_ID='20261123-jobs-ops';
 (function promptForUpdatedApp(){
   try {
     const key='wealth-ledger:app-build';
@@ -469,6 +469,18 @@ function scheduledJobsHtml(data){
  const jobs=data?.jobs||[];
  const fmt=value=>value?new Date(value).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Kolkata'}):'Not yet';
  const status=value=>{const s=String(value||'not_run').toLowerCase();const label=s==='success'?'Completed':s==='running'?'Running':s==='failed'?'Failed':s==='skipped'?'Skipped':'Not run';const tone=s==='success'?'success':s==='running'?'info':s==='failed'?'danger':'neutral';return '<span class="jobs-status '+tone+'">'+label+'</span>'};
+ const active=jobs.filter(j=>!!j.enabled).length;
+ const running=jobs.filter(j=>String(j.last_status||'').toLowerCase()==='running').length;
+ const failed=jobs.filter(j=>String(j.last_status||'').toLowerCase()==='failed').length;
+ const paused=jobs.length-active;
+ const nextJob=jobs.filter(j=>j.enabled&&j.next_run_at).sort((a,b)=>new Date(a.next_run_at)-new Date(b.next_run_at))[0];
+ const overview='<section class="jobs-overview" aria-label="Scheduled jobs overview">'+
+  '<article><span>Active</span><b>'+active+'</b><small>Enabled schedules</small></article>'+
+  '<article><span>Paused</span><b>'+paused+'</b><small>Not running automatically</small></article>'+
+  '<article><span>Running</span><b>'+running+'</b><small>Currently executing</small></article>'+
+  '<article class="'+(failed?'has-failures':'')+'"><span>Failed</span><b>'+failed+'</b><small>Latest result needs attention</small></article>'+
+ '</section>'+
+ '<section class="jobs-next-up"><span class="jobs-next-icon">◷</span><div><small>NEXT SCHEDULED JOB</small><b>'+(nextJob?esc(nextJob.name):'No upcoming run scheduled')+'</b><span>'+(nextJob?esc(fmt(nextJob.next_run_at)):'Enable a job and save its schedule to see it here')+'</span></div></section>';
  const cards=jobs.map(j=>{
   const enabled=!!j.enabled, time=String(j.schedule_time||'00:00').slice(0,5), frequency=j.schedule_frequency||'daily';
   const runs=Array.isArray(j.recent_runs)?j.recent_runs:[];
@@ -477,16 +489,23 @@ function scheduledJobsHtml(data){
    '<label class="jobs-switch" title="'+(enabled?'Pause job':'Enable job')+'"><input type="checkbox" data-job-enabled'+(enabled?' checked':'')+' aria-label="Enable '+esc(j.name)+'"><span></span></label></div>'+
    '<div class="jobs-card-meta"><div><small>Schedule</small><b>'+esc(time)+' · '+(frequency==='weekdays'?'Weekdays':'Every day')+'</b></div><div><small>Last run</small><b>'+esc(j.last_run_at?fmt(j.last_run_at):'Not run yet')+'</b></div></div>'+
    '<div class="jobs-card-status"><span>Last result</span>'+status(j.last_status)+'</div>'+
-   (j.last_error?'<p class="jobs-error">'+esc(j.last_error)+'</p>':'')+
+   (j.last_error?'<p class="jobs-error" role="alert">'+esc(j.last_error)+'</p>':'')+
    '<div class="jobs-card-actions"><button type="button" class="primary" data-job-run="'+esc(j.id)+'">▶ Run now</button><button type="button" class="ghost" data-job-edit-toggle="'+esc(j.id)+'">Edit schedule</button></div>'+
    '<div class="jobs-edit-panel" data-job-edit hidden><div class="jobs-edit-title">Schedule settings</div><div class="jobs-edit-fields"><label>Time (IST)<input type="time" max="18:45" data-job-time value="'+esc(time)+'"></label><label>Repeat<select data-job-frequency><option value="daily"'+(frequency==='daily'?' selected':'')+'>Every day</option><option value="weekdays"'+(frequency==='weekdays'?' selected':'')+'>Monday–Friday</option></select></label></div><button type="button" class="primary" data-job-save="'+esc(j.id)+'">Save changes</button></div>'+
-   '<details class="jobs-history"><summary>Recent activity · '+runs.length+'</summary>'+(runs.length?'<div class="jobs-history-list">'+runs.map(run=>'<div><span>'+esc(run.started_at?fmt(run.started_at):'Unknown time')+' · '+esc(run.trigger_type||'Automatic')+'</span>'+status(run.status)+(run.error?'<small class="jobs-error">'+esc(run.error)+'</small>':'')+'</div>').join('')+'</div>':'<p class="muted">No execution history yet.</p>')+'</details>'+
+   '<details class="jobs-history"><summary>Execution history <span>'+runs.length+' recent</span></summary>'+(runs.length?'<div class="jobs-history-list">'+runs.map(run=>{
+    const began=run.started_at?fmt(run.started_at):'Unknown start time';
+    const finished=run.finished_at?fmt(run.finished_at):'';
+    const elapsed=run.started_at&&run.finished_at?Math.max(0,new Date(run.finished_at)-new Date(run.started_at)):null;
+    const duration=elapsed==null?'':elapsed<1000?' · <1 sec':' · '+(elapsed<60000?Math.round(elapsed/1000)+' sec':Math.floor(elapsed/60000)+'m '+Math.round((elapsed%60000)/1000)+'s');
+    return '<div><span><b>'+esc(began)+'</b><small>'+(finished?'Finished '+esc(finished):'')+esc(run.trigger_type?' · '+run.trigger_type:'')+duration+'</small>'+(run.error?'<small class="jobs-error">'+esc(run.error)+'</small>':'')+'</span>'+status(run.status)+'</div>';
+   }).join('')+'</div>':'<p class="muted">No execution history yet. Use Run now to test this job.</p>')+'</details>'+
    '<p class="jobs-next">Next scheduled run: <b>'+esc(enabled&&j.next_run_at?fmt(j.next_run_at):enabled?'Waiting for dispatcher':'Paused')+'</b></p>'+
   '</article>';
  }).join('');
- return '<section class="jobs-page"><div class="jobs-page-head"><div><h4>Your scheduled jobs</h4><p>Simple controls for your automatic tasks. Changes are saved to your existing schedules.</p></div><button type="button" class="ghost" data-jobs-refresh>↻ Refresh</button></div>'+
+ return '<section class="jobs-page"><div class="jobs-page-head"><div><h4>Your scheduled jobs</h4><p>Monitor every automation, change its schedule and inspect recent runs. Changes are saved to your existing database schedules.</p></div><button type="button" class="ghost" data-jobs-refresh>↻ Refresh</button></div>'+
+ overview+
  (jobs.length?'<div class="jobs-list">'+cards+'</div>':'<div class="jobs-empty">No scheduled jobs are configured yet.</div>')+
- '<p class="jobs-footnote">Times are shown in India Standard Time. Automatic runs are processed by the central dispatcher; the saved time is a due-time cutoff.</p></section>';
+ '<p class="jobs-footnote">All times are India Standard Time. The central dispatcher processes due jobs; the saved time is a due-time cutoff, not an exact-minute guarantee. Run history is retained by the existing jobs service.</p></section>';
 }
 function stockResearchScheduleCard(settings,schedule,data){
  const holdings=Array.isArray(data?.holdings)?data.holdings:[];
