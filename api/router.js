@@ -27,6 +27,7 @@ export const ROUTES = {
   'stock-advisor': () => import('./_routes/stock-advisor.js'),
   'stock-advisor/free-run': () => import('./_routes/stock-advisor.js'),
   'stock-advisor/settings': () => import('./_routes/stock-advisor.js'),
+  'stock-advisor/scheduled-run': () => import('./_routes/stock-advisor-scheduled.js'),
   // TSD Claude Plan 3
   'prices': () => import('./_routes/prices.js'),
   'email-imports': () => import('./_routes/email-imports.js'),
