@@ -1,4 +1,4 @@
-const APP_BUILD_ID='20261122-dashboard-refresh';
+const APP_BUILD_ID='20261122-dashboard-friendly';
 (function promptForUpdatedApp(){
   try {
     const key='wealth-ledger:app-build';
@@ -340,25 +340,25 @@ function analyticsHtml(banks=[],other=[]){
  const stats=monthlySpendStats(),daily=dailySpendStats(),cash=monthlyCashSeries(),yearly=yearlyAverageSpendSeries(),balances=historicalCashBalances();
  const month=currentMonthKey(),income=sumTotals(spendOf('income',m=>m===month)),spend=daily.monthTotal;
  const bank=modelV2?Number(modelV2.totals.casa||0):wealthPosition().casa; const liabilities=modelV2?Number(modelV2.totals.liabilities||0):wealthPosition().liabilities;
- const summary='<section class="dashboard-pulse"><div class="dashboard-section-title"><div><span class="eyebrow">YOUR MONEY · THIS MONTH</span><h3>Financial pulse</h3><p>'+esc(daily.monthLabel)+' · a quick read of your cash flow</p></div><span class="dashboard-live-mark">● Live ledger</span></div>'+
+ const summary='<section class="dashboard-pulse"><div class="dashboard-section-title"><div><span class="eyebrow">YOUR MONEY</span><h3>This month at a glance</h3><p>'+esc(daily.monthLabel)+' · see what came in and what went out</p></div><span class="dashboard-live-mark">✓ From your ledger</span></div>'+
   '<div class="dashboard-pulse-grid"><article class="dashboard-pulse-card spend"><small>SPENT THIS MONTH</small><strong>'+money(spend)+'</strong><span>'+money(daily.monthAverage)+' daily average</span></article>'+
   '<article class="dashboard-pulse-card income"><small>INCOME THIS MONTH</small><strong>'+money(income)+'</strong><span>Recorded money in</span></article>'+
   '<article class="dashboard-pulse-card"><small>MONTHLY SPEND AVERAGE</small><strong>'+money(stats.average)+'</strong><span>'+stats.months+' recorded calendar month(s)</span></article>'+
   '<article class="dashboard-pulse-card"><small>SPENDING THIS YEAR</small><strong>'+money(daily.yearTotal)+'</strong><span>'+daily.yearLabel+' year to date</span></article></div></section>';
- const secondary='<section class="dashboard-secondary"><div class="dashboard-section-title"><div><span class="eyebrow">QUICK OVERVIEW</span><h3>Money snapshot</h3></div></div><div class="dashboard-snapshot-grid">'+
-  '<article><span class="dashboard-snapshot-icon">▣</span><div><small>BANK CASH</small><b>'+money(bank)+'</b></div></article>'+
-  '<article><span class="dashboard-snapshot-icon">↗</span><div><small>LIABILITIES</small><b>'+money(liabilities)+'</b></div></article>'+
-  '<article><span class="dashboard-snapshot-icon">⌂</span><div><small>BANK ACCOUNTS</small><b>'+banks.length+'</b></div></article>'+
-  '<article><span class="dashboard-snapshot-icon">≡</span><div><small>TRANSACTIONS</small><b>'+transactionTotalCount()+'</b></div></article></div></section>';
- const cashCard='<section class="chart-card dashboard-main-chart"><div class="chart-head"><div><span class="eyebrow">CASH FLOW</span><h4>Income vs spending</h4><p>Monthly movement · tap a month to inspect values</p></div></div>'+svgLineChart(cash,['income','spend'],['Money in','Spending'],v=>money(v))+'</section>';
+ const secondary='<section class="dashboard-secondary"><div class="dashboard-section-title"><div><span class="eyebrow">YOUR ACCOUNTS</span><h3>What you have and what you owe</h3></div></div><div class="dashboard-snapshot-grid">'+
+  '<article><span class="dashboard-snapshot-icon">▣</span><div><small>Cash in bank accounts</small><b>'+money(bank)+'</b></div></article>'+
+  '<article><span class="dashboard-snapshot-icon">↗</span><div><small>Amounts you owe</small><b>'+money(liabilities)+'</b></div></article>'+
+  '<article><span class="dashboard-snapshot-icon">⌂</span><div><small>Accounts</small><b>'+banks.length+'</b></div></article>'+
+  '<article><span class="dashboard-snapshot-icon">≡</span><div><small>Recorded entries</small><b>'+transactionTotalCount()+'</b></div></article></div></section>';
+ const cashCard='<section class="chart-card dashboard-main-chart"><div class="chart-head"><div><span class="eyebrow">MONEY IN & OUT</span><h4>Income compared with spending</h4><p>Month by month · tap any point to see the amount</p></div></div>'+svgLineChart(cash,['income','spend'],['Money in','Spending'],v=>money(v))+'</section>';
  const interest=interestChartHtml();
- const history='<details class="dashboard-history"><summary><span><b>Long-term trends</b><small>Yearly spending and historical bank balances</small></span><i>＋</i></summary><div class="dashboard-history-content">'+
-  '<section class="chart-card"><div class="chart-head"><div><h4>Average monthly spend by year</h4><p>Expenses only · months with recorded spending</p></div></div>'+svgLineChart(yearly,['average'],['Average monthly spend'],v=>money(v))+(yearly.length?'<p class="chart-foot">'+yearly.map(x=>esc(x.month)+': '+money(x.average)+' / month').join(' &nbsp; | &nbsp; ')+'</p>':'')+'</section>'+
-  '<section class="chart-card"><div class="chart-head"><div><h4>Bank balance history</h4><p>Saved account snapshots over time</p></div></div>'+svgLineChart(balances.map(d=>({date:d.date,total:d.total})),['total'],['Total bank cash'],v=>money(v))+(balances.length?'<p class="chart-foot">Latest recorded balance: '+money(balances[balances.length-1].total)+' · '+balances[balances.length-1].date+'</p>':'')+'</section></div></details>';
+ const history='<details class="dashboard-history"><summary><span><b>Explore past trends</b><small>See how your spending and bank balances have changed</small></span><i>＋</i></summary><div class="dashboard-history-content">'+
+  '<section class="chart-card"><div class="chart-head"><div><h4>Average monthly spending each year</h4><p>Expenses only · months with recorded spending</p></div></div>'+svgLineChart(yearly,['average'],['Average monthly spend'],v=>money(v))+(yearly.length?'<p class="chart-foot">'+yearly.map(x=>esc(x.month)+': '+money(x.average)+' / month').join(' &nbsp; | &nbsp; ')+'</p>':'')+'</section>'+
+  '<section class="chart-card"><div class="chart-head"><div><h4>How your bank balance changed</h4><p>Saved account snapshots over time</p></div></div>'+svgLineChart(balances.map(d=>({date:d.date,total:d.total})),['total'],['Total bank cash'],v=>money(v))+(balances.length?'<p class="chart-foot">Latest recorded balance: '+money(balances[balances.length-1].total)+' · '+balances[balances.length-1].date+'</p>':'')+'</section></div></details>';
  return '<div class="dashboard-home">'+summary+secondary+
-  '<section class="dashboard-spend-tools"><div class="dashboard-section-title"><div><span class="eyebrow">SPENDING INSIGHTS</span><h3>Understand your spending</h3></div></div>'+
-  '<div class="dashboard-insight-grid"><button type="button" class="dashboard-insight-card spend-click-card" data-month-spend-breakdown aria-expanded="'+(showMonthSpend?'true':'false')+'"><span class="dashboard-insight-icon">◷</span><span><small>DAILY AVERAGE · THIS MONTH</small><b>'+money(daily.monthAverage)+'</b><em>'+money(daily.monthTotal)+' spent · '+daily.monthDays+' days</em></span><i>›</i></button>'+
-  '<button type="button" class="dashboard-insight-card spend-click-card" data-spend-breakdown aria-expanded="'+(showCategorySpend?'true':'false')+'"><span class="dashboard-insight-icon">▥</span><span><small>AVERAGE MONTHLY SPEND</small><b>'+money(stats.average)+'</b><em>View category breakdown</em></span><i>›</i></button></div>'+
+  '<section class="dashboard-spend-tools"><div class="dashboard-section-title"><div><span class="eyebrow">SPENDING</span><h3>Where your money goes</h3><p>Tap a card to see the details behind the number</p></div></div>'+
+  '<div class="dashboard-insight-grid"><button type="button" class="dashboard-insight-card spend-click-card" data-month-spend-breakdown aria-expanded="'+(showMonthSpend?'true':'false')+'"><span class="dashboard-insight-icon">◷</span><span><small>AVERAGE PER DAY · THIS MONTH</small><b>'+money(daily.monthAverage)+'</b><em>'+money(daily.monthTotal)+' spent across '+daily.monthDays+' days · tap for details</em></span><i>›</i></button>'+
+  '<button type="button" class="dashboard-insight-card spend-click-card" data-spend-breakdown aria-expanded="'+(showCategorySpend?'true':'false')+'"><span class="dashboard-insight-icon">▥</span><span><small>AVERAGE PER MONTH</small><b>'+money(stats.average)+'</b><em>Tap to see your category breakdown</em></span><i>›</i></button></div>'+
   (showMonthSpend?monthCategorySpendHtml():'')+(showCategorySpend?categorySpendHtml():'')+'</section>'+
   '<div class="dashboard-chart-toolbar">'+chartRangeRowHtml()+'</div>'+cashCard+interest+history+
   '<div class="dashboard-legacy-counts" hidden>'+other.length+'</div>'+rewardsTileHtml()+'</div>';
