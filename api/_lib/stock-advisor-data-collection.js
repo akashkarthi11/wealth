@@ -1,8 +1,8 @@
 const NSE_RSS_INDEX='https://www.nseindia.com/static/rss-feed';
 const NSE_HOSTS=new Set(['www.nseindia.com','nsearchives.nseindia.com','nseindia.com']);
 const timeout=ms=>AbortSignal.timeout(ms);
-const clean=s=>String(s||'').replace(/<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>/g,'$1').replace(/<[^>]+>/g,' ').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/\\s+/g,' ').trim();
-const tag=(block,name)=>{const m=block.match(new RegExp('<'+name+'[^>]*>([\\s\\S]*?)<\\/'+name+'>','i'));return m?clean(m[1]):''};
+const clean=s=>String(s||'').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g,'$1').replace(/<[^>]+>/g,' ').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/\s+/g,' ').trim();
+const tag=(block,name)=>{const m=block.match(new RegExp('<'+name+'[^>]*>([\s\S]*?)<\/'+name+'>','i'));return m?clean(m[1]):''};
 const allowed=url=>{try{return NSE_HOSTS.has(new URL(url).hostname)}catch{return false}};
 async function getText(url,accept='application/rss+xml, application/xml, text/xml, text/html;q=0.9'){
  const r=await fetch(url,{headers:{'User-Agent':'MyWealthPersonalResearch/1.0','Accept':accept},signal:timeout(10000)});
@@ -11,7 +11,7 @@ async function getText(url,accept='application/rss+xml, application/xml, text/xm
 }
 async function nseFeeds(){
  const html=await getText(NSE_RSS_INDEX,'text/html');
- const links=[...html.matchAll(/<a\\b[^>]*href=["']([^"']+)["'][^>]*>([\\s\\S]*?)<\\/a>/gi)],feeds=[];
+ const links=[...html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)],feeds=[];
  for(const m of links){
   const label=clean(m[2]).toLowerCase();
   if(!/(announcement|financial result|board meeting|corporate information|press release|circular)/.test(label))continue;
@@ -26,7 +26,7 @@ export function cleanNseFeedItemMatches(text,ticker,name){
 }
 async function collectMf({instrument,runId,db}){
  const scheme=String(instrument.price_source_symbol||instrument.symbol||'').trim();
- if(!/^\\d{4,8}$/.test(scheme))return {ticker:instrument.symbol,status:'skipped',reason:'No saved AMFI scheme code'};
+ if(!/^\d{4,8}$/.test(scheme))return {ticker:instrument.symbol,status:'skipped',reason:'No saved AMFI scheme code'};
  const url='https://api.mfapi.in/mf/'+encodeURIComponent(scheme);
  const payload=await (await fetch(url,{headers:{Accept:'application/json'},signal:timeout(10000)})).json();
  const rows=(Array.isArray(payload?.data)?payload.data:[]).map(x=>{
@@ -46,7 +46,7 @@ async function collectEquityNews({instrument,runId,feeds,db}){
  const results=[];
  for(const feed of feeds){
   try{
-   const xml=await getText(feed.url),items=[...xml.matchAll(/<item\\b[^>]*>([\\s\\S]*?)<\\/item>/gi)];
+   const xml=await getText(feed.url),items=[...xml.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)];
    for(const m of items){
     const title=tag(m[1],'title'),link=tag(m[1],'link'),description=tag(m[1],'description'),date=tag(m[1],'pubDate');
     if(!title||!link||!cleanNseFeedItemMatches(title+' '+description,instrument.symbol,instrument.name))continue;
