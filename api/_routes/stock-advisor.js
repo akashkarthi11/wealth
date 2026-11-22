@@ -1,7 +1,7 @@
 import {sql,schema,json,sessionUser,body} from '../_lib.js';
 import {timingSafeEqual,randomUUID} from 'node:crypto';
 import {startJob,finishJob} from '../_jobs.js';
-import {SCHEDULE_TIMEZONE,DEFAULT_SCHEDULE_TIME,nextScheduledAt} from '../_lib/stock-advisor-schedule-time.js';
+import {SCHEDULE_TIMEZONE,DEFAULT_SCHEDULE_TIME,nextScheduledAt,getLocalDateTime} from '../_lib/stock-advisor-schedule-time.js';
 
 // The agents' shared WEALTH_INGEST_SECRET (Plan 3) or the older advisor-only secret.
 function validIngestSecret(req){
@@ -97,7 +97,9 @@ async function saveAutoResearchSettings(req,res){
  if(selected.length>100)return json(res,400,{error:'Select no more than 100 stocks.'});
  if(mode==='manual'&&!selected.length)return json(res,400,{error:'Select at least one stock for manual mode.'});
  if(selected.length){const valid=await sql.query("SELECT DISTINCT upper(ticker) AS ticker FROM wealth_positions WHERE user_id=$1 AND category='INVESTMENT' AND record_type IN ('EQUITY','ETF') AND currency='INR' AND upper(ticker)=ANY($2::text[])",[uid,selected]);if(valid.length!==selected.length)return json(res,400,{error:'Manual selection may include only saved Indian equity or ETF holdings.'})}
- await sql.query("INSERT INTO wealth_stock_advisor_settings (user_id,enabled,mode,selected_tickers,last_status,last_error,updated_at) VALUES ($1,$2,$3,$4::jsonb,$5,NULL,now()) ON CONFLICT (user_id) DO UPDATE SET enabled=EXCLUDED.enabled,mode=EXCLUDED.mode,selected_tickers=EXCLUDED.selected_tickers,last_status=EXCLUDED.last_status,last_error=NULL,updated_at=now()",[uid,enabled,mode,JSON.stringify(selected),enabled?'scheduled':'disabled']);
+ const now=new Date(),local=getLocalDateTime(now,SCHEDULE_TIMEZONE),[currentSchedule]=await sql.query('SELECT schedule_time FROM wealth_stock_advisor_settings WHERE user_id=$1',[uid]);
+ const scheduleTime=currentSchedule?.schedule_time||DEFAULT_SCHEDULE_TIME,prior=new Date(Date.UTC(local.year,local.month-1,local.day-1)).toISOString().slice(0,10),lastScheduledDate=enabled&&local.time<scheduleTime?prior:local.date;
+ await sql.query("INSERT INTO wealth_stock_advisor_settings (user_id,enabled,mode,selected_tickers,last_scheduled_date,last_status,last_error,updated_at) VALUES ($1,$2,$3,$4::jsonb,$5,$6,NULL,now()) ON CONFLICT (user_id) DO UPDATE SET enabled=EXCLUDED.enabled,mode=EXCLUDED.mode,selected_tickers=EXCLUDED.selected_tickers,last_scheduled_date=EXCLUDED.last_scheduled_date,last_status=EXCLUDED.last_status,last_error=NULL,updated_at=now()",[uid,enabled,mode,JSON.stringify(selected),lastScheduledDate,enabled?'scheduled':'disabled']);
  const settings=await getAutoResearchSettings(uid);
  return json(res,200,{saved:true,settings,message:enabled?'Settings saved. Use Research Schedule to configure the daily IST time and frequency; Preview deployments do not receive automatic Vercel Cron events.':'Auto Research is off for this account.'});
 }

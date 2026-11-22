@@ -87,6 +87,11 @@ test('scheduled executions use per-user per-date idempotency and retry failed ru
   assert.match(service,/attempt_count<3/);
   assert.match(service,/dueScheduleDates/);
 });
+test('saving or disabling a schedule resets the catch-up cursor so intentional downtime is not replayed',()=>{
+  assert.match(route,/last_scheduled_date=EXCLUDED\.last_scheduled_date/);
+  assert.match(service,/last_scheduled_date/);
+  assert.match(route,/local\.time<time\?prior:local\.date/);
+});
 test('enabling a manual schedule requires at least one saved ticker',()=>{
   assert.match(route,/Select at least one saved investment before enabling the schedule/);
   assert.match(ui,/await api\('\/api\/stock-advisor\/settings'/);

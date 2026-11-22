@@ -3,7 +3,7 @@ import { sql, schema, json, sessionUser, body } from '../_lib.js';
 import { executeUserResearch } from '../_lib/stock-advisor-schedule-service.js';
 import {
   SCHEDULE_TIMEZONE, DEFAULT_SCHEDULE_TIME, HOBBY_POLL_WINDOW,
-  isValidScheduleTime, nextScheduledAt, formatScheduleTime
+  isValidScheduleTime, nextScheduledAt, formatScheduleTime, getLocalDateTime
 } from '../_lib/stock-advisor-schedule-time.js';
 
 function defaultSettings() {
@@ -42,8 +42,11 @@ async function putSchedule(req,res) {
   if(!['daily','weekdays'].includes(frequency))return json(res,400,{error:'Frequency must be daily or weekdays.'});
   const timezone=String(input.timezone??input.schedule_timezone??SCHEDULE_TIMEZONE);
   if(timezone!==SCHEDULE_TIMEZONE)return json(res,400,{error:'Only Asia/Kolkata (IST) is currently supported.'});
-  const next=input.enabled?nextScheduledAt(new Date(),time,frequency,timezone).toISOString():null;
-  await sql.query("INSERT INTO wealth_stock_advisor_settings (user_id,enabled,mode,selected_tickers,schedule_timezone,schedule_time,schedule_frequency,next_run_at,last_status,last_error,updated_at) VALUES ($1,$2,'all','[]'::jsonb,$3,$4,$5,$6,$7,NULL,now()) ON CONFLICT (user_id) DO UPDATE SET enabled=EXCLUDED.enabled,schedule_timezone=EXCLUDED.schedule_timezone,schedule_time=EXCLUDED.schedule_time,schedule_frequency=EXCLUDED.schedule_frequency,next_run_at=EXCLUDED.next_run_at,last_status=CASE WHEN EXCLUDED.enabled THEN 'scheduled' ELSE 'disabled' END,last_error=NULL,updated_at=now()",[uid,input.enabled,timezone,time,frequency,next,input.enabled?'scheduled':'disabled']);
+  const now=new Date(),local=getLocalDateTime(now,timezone);
+  const prior=new Date(Date.UTC(local.year,local.month-1,local.day-1)).toISOString().slice(0,10);
+  const lastScheduledDate=input.enabled&&local.time<time?prior:local.date;
+  const next=input.enabled?nextScheduledAt(now,time,frequency,timezone).toISOString():null;
+  await sql.query("INSERT INTO wealth_stock_advisor_settings (user_id,enabled,mode,selected_tickers,schedule_timezone,schedule_time,schedule_frequency,last_scheduled_date,next_run_at,last_status,last_error,updated_at) VALUES ($1,$2,'all','[]'::jsonb,$3,$4,$5,$6,$7,$8,NULL,now()) ON CONFLICT (user_id) DO UPDATE SET enabled=EXCLUDED.enabled,schedule_timezone=EXCLUDED.schedule_timezone,schedule_time=EXCLUDED.schedule_time,schedule_frequency=EXCLUDED.schedule_frequency,last_scheduled_date=EXCLUDED.last_scheduled_date,next_run_at=EXCLUDED.next_run_at,last_status=CASE WHEN EXCLUDED.enabled THEN 'scheduled' ELSE 'disabled' END,last_error=NULL,updated_at=now()",[uid,input.enabled,timezone,time,frequency,lastScheduledDate,next,input.enabled?'scheduled':'disabled']);
   return json(res,200,{saved:true,settings:await loadSchedule(uid)});
 }
 async function runNow(req,res) {
