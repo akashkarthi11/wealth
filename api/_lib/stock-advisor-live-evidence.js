@@ -38,23 +38,23 @@ async function getFeed(url) {
 async function saveItem({runId,ticker,sourceType,title,url,published,excerpt,feed,db}) {
   const evidence={feed_url:feed.url,feed_label:feed.label,official_exchange_feed:true,content_kind:'rss_listing_only',retrieved_at:new Date().toISOString()};
   if(runId) {
-    await db.query(\`
+    await db.query(`
       INSERT INTO wealth_stock_advisor_research_sources
         (run_id,ticker,source_type,title,url,publisher,published_at,retrieved_at,excerpt,evidence,verification_status)
       VALUES($1,$2,$3,$4,$5,'NSE',$6::timestamptz,now(),$7,$8::jsonb,'unverified')
       ON CONFLICT(run_id,ticker,url) DO UPDATE SET
         title=EXCLUDED.title,published_at=EXCLUDED.published_at,retrieved_at=now(),
         excerpt=EXCLUDED.excerpt,evidence=EXCLUDED.evidence,verification_status='unverified'
-    \`,[runId,ticker,sourceType,title.slice(0,500),url,published,excerpt.slice(0,1800),JSON.stringify(evidence)]);
+    `,[runId,ticker,sourceType,title.slice(0,500),url,published,excerpt.slice(0,1800),JSON.stringify(evidence)]);
   } else {
-    await db.query(\`
+    await db.query(`
       INSERT INTO wealth_stock_advisor_research_sources
         (run_id,ticker,source_type,title,url,publisher,published_at,retrieved_at,excerpt,evidence,verification_status)
       VALUES(NULL,$1,$2,$3,$4,'NSE',$5::timestamptz,now(),$6,$7::jsonb,'unverified')
       ON CONFLICT(ticker,url) WHERE run_id IS NULL DO UPDATE SET
         source_type=EXCLUDED.source_type,title=EXCLUDED.title,published_at=EXCLUDED.published_at,
         retrieved_at=now(),excerpt=EXCLUDED.excerpt,evidence=EXCLUDED.evidence,verification_status='unverified'
-    \`,[ticker,sourceType,title.slice(0,500),url,published,excerpt.slice(0,1800),JSON.stringify(evidence)]);
+    `,[ticker,sourceType,title.slice(0,500),url,published,excerpt.slice(0,1800),JSON.stringify(evidence)]);
   }
 }
 
