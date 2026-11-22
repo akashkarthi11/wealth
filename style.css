@@ -1405,3 +1405,10 @@ b.pj-medium{color:#f5c26b}
 .advisor-auto-stock span{min-width:0}
 .advisor-auto-stock b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media(max-width:560px){.advisor-auto-stock-list{grid-template-columns:1fr}}
+
+/* Stock Advisor Auto Research schedule details */
+.advisor-auto-schedule{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:14px 0}
+.advisor-auto-schedule>div{display:grid;gap:5px;min-width:0;padding:11px;border:1px solid var(--line);border-radius:11px;background:#101b2b}
+.advisor-auto-schedule small{font-size:10px;color:var(--muted)}
+.advisor-auto-schedule b{font-size:12px;overflow-wrap:anywhere}
+@media(max-width:560px){.advisor-auto-schedule{grid-template-columns:1fr}}
