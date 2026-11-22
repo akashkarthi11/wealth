@@ -56,7 +56,8 @@ async function claimJob(job,triggerType) {
   const rows=await sql.query(`UPDATE wealth_scheduled_jobs
     SET locked_until=now()+interval '12 minutes',lock_token=$2,updated_at=now()
     WHERE id=$1 AND (locked_until IS NULL OR locked_until<now())
-    RETURNING id,job_key,handler_key,name,schedule_time::text,schedule_frequency,timezone,next_run_at`,[job.id,lock]);
+      AND ($3='manual' OR (enabled=true AND next_run_at<=now()))
+    RETURNING id,job_key,handler_key,name,schedule_time::text,schedule_frequency,timezone,next_run_at`,[job.id,lock,triggerType]);
   if(!rows.length)return null;
   const claimed=rows[0];
   if(triggerType==='scheduled'){
