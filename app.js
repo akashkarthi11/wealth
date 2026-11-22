@@ -488,13 +488,85 @@ function scheduledJobsHtml(data){
  (jobs.length?'<div class="jobs-list">'+cards+'</div>':'<div class="jobs-empty">No scheduled jobs are configured yet.</div>')+
  '<p class="jobs-footnote">Times are shown in India Standard Time. Automatic runs are processed by the central dispatcher; the saved time is a due-time cutoff.</p></section>';
 }
+function stockResearchScheduleCard(settings,schedule,data){
+ const holdings=Array.isArray(data?.holdings)?data.holdings:[];
+ const selected=Array.isArray(settings?.selected_tickers)?settings.selected_tickers:[];
+ const mode=settings?.mode==='manual'?'manual':'all';
+ const enabled=!!settings?.enabled;
+ const time=String(schedule?.schedule_time||settings?.schedule_time||'09:48').slice(0,5);
+ const frequency=schedule?.schedule_frequency||settings?.schedule_frequency||'daily';
+ const options=holdings.filter(h=>h.ticker).map(h=>'<label class="advisor-auto-stock"><input type="checkbox" data-research-stock value="'+esc(h.ticker)+'"'+(selected.includes(h.ticker)?' checked':'')+'><span><b>'+esc(h.name||h.ticker)+'</b><small>'+esc(h.ticker)+'</small></span></label>').join('');
+ const next=schedule?.next_run_at_ist||schedule?.next_run_at;
+ const last=schedule?.last_execution?.finished_at||schedule?.last_run_at;
+ return '<article class="jobs-card research-schedule-card" data-research-schedule-card>'+
+  '<div class="jobs-card-head"><div class="jobs-job-title"><span class="jobs-job-icon">✦</span><div><h4>Free AI Auto Research</h4><p>Automatically research your saved Indian equity portfolio. No trades or portfolio changes.</p></div></div>'+
+  '<label class="jobs-switch" title="'+(enabled?'Pause research':'Enable research')+'"><input type="checkbox" data-research-enabled'+(enabled?' checked':'')+' aria-label="Enable Free AI Auto Research"><span></span></label></div>'+
+  '<div class="jobs-edit-panel" style="display:block;margin-top:12px"><div class="jobs-edit-title">Research settings</div>'+
+  '<div class="jobs-edit-fields"><label>Research coverage<select data-research-mode><option value="all"'+(mode==='all'?' selected':'')+'>All saved eligible Indian equities and ETFs</option><option value="manual"'+(mode==='manual'?' selected':'')+'>Selected holdings only</option></select></label>'+
+  '<label>Run by (IST)<input type="time" max="09:48" data-research-time value="'+esc(time)+'"></label>'+
+  '<label>Repeat<select data-research-frequency><option value="daily"'+(frequency==='daily'?' selected':'')+'>Every day</option><option value="weekdays"'+(frequency==='weekdays'?' selected':'')+'>Monday–Friday</option></select></label></div>'+
+  '<div data-research-manual-stocks'+(mode==='manual'?'':' hidden')+'><p class="muted">Choose the holdings to include in each run.</p><div class="advisor-auto-stock-list">'+(options||'<p class="muted">No eligible Indian equity or ETF holdings found.</p>')+'</div></div>'+
+  '<div class="jobs-card-actions"><button type="button" class="primary" data-research-save>Save research schedule</button><button type="button" class="ghost" data-research-run>Run now</button></div>'+
+  '<p class="muted">Free model only · Central dispatcher: 18:45 IST · Your selected time is a due-time cutoff (maximum 09:48 IST), not an exact-minute guarantee.</p>'+
+  '<p class="jobs-next">Next scheduled run: <b>'+(enabled?esc(next||'Waiting for dispatcher'):'Paused')+'</b></p>'+
+  (last?'<p class="jobs-next">Last run: <b>'+esc(fmtJobDate(last))+'</b></p>':'')+
+  '</div><p class="jobs-error" data-research-error hidden></p><p class="muted" data-research-status></p></article>';
+}
+function fmtJobDate(value){return value?new Date(value).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Kolkata'}):'Not yet'}
 async function loadJobs(){
  const box=document.getElementById('jobsBox');if(!box)return;
- try{box.innerHTML=scheduledJobsHtml(await api('/api/jobs'))}
- catch(e){box.innerHTML='<section class="chart-card"><h4>Scheduled jobs unavailable</h4><p class="error">'+esc(e.message)+'</p></section>'}
+ try{
+  const [jobs,settings,schedule,data]=await Promise.all([
+   api('/api/jobs'),api('/api/stock-advisor/settings'),api('/api/stock-advisor/schedule'),api('/api/stock-advisor')
+  ]);
+  box.innerHTML=scheduledJobsHtml(jobs);
+  const list=box.querySelector('.jobs-list');
+  const card=stockResearchScheduleCard(settings,schedule,data);
+  if(list)list.insertAdjacentHTML('afterbegin',card);
+  else{
+   const page=box.querySelector('.jobs-page');
+   if(page){const empty=page.querySelector('.jobs-empty');if(empty)empty.remove();page.insertAdjacentHTML('beforeend','<div class="jobs-list">'+card+'</div>')}
+  }
+ }catch(e){box.innerHTML='<section class="chart-card"><h4>Scheduled jobs unavailable</h4><p class="error">'+esc(e.message)+'</p></section>'}
 }
+
+document.addEventListener('change',e=>{
+ const mode=e.target.closest('[data-research-mode]');
+ if(mode){const panel=mode.closest('[data-research-schedule-card]')?.querySelector('[data-research-manual-stocks]');if(panel)panel.hidden=mode.value!=='manual'}
+});
 document.addEventListener('click',async e=>{
+ const researchSave=e.target.closest('[data-research-save]'),researchRun=e.target.closest('[data-research-run]');
+ if(researchSave||researchRun){
+  const card=e.target.closest('[data-research-schedule-card]');if(!card)return;
+  const status=card.querySelector('[data-research-status]'),error=card.querySelector('[data-research-error]');
+  const showResearchError=message=>{if(error){error.hidden=false;error.textContent=message||'Could not complete the request.'}};
+  if(error){error.hidden=true;error.textContent=''}
+  if(researchRun){
+   researchRun.disabled=true;researchRun.textContent='Starting…';
+   try{const result=await api('/api/stock-advisor/schedule/run-now',{method:'POST',body:JSON.stringify({})});if(status)status.textContent=result.message||'Research run started.';await loadJobs()}
+   catch(err){showResearchError(err.message)}
+   finally{researchRun.disabled=false;researchRun.textContent='Run now'}
+   return;
+  }
+  const enabled=!!card.querySelector('[data-research-enabled]')?.checked;
+  const mode=card.querySelector('[data-research-mode]')?.value||'all';
+  const selected_tickers=[...card.querySelectorAll('[data-research-stock]:checked')].map(x=>x.value);
+  const schedule_time=card.querySelector('[data-research-time]')?.value||'09:48';
+  const schedule_frequency=card.querySelector('[data-research-frequency]')?.value||'daily';
+  if(schedule_time>'09:48'){showResearchError('Choose a time no later than 09:48 IST.');return}
+  if(mode==='manual'&&!selected_tickers.length){showResearchError('Select at least one holding for manual research.');return}
+  researchSave.disabled=true;researchSave.textContent='Saving…';if(status)status.textContent='Saving your research settings…';
+  try{
+   await api('/api/stock-advisor/settings',{method:'POST',body:JSON.stringify({enabled,mode,selected_tickers})});
+   await api('/api/stock-advisor/schedule',{method:'PUT',body:JSON.stringify({enabled,schedule_time,schedule_frequency,timezone:'Asia/Kolkata'})});
+   if(status)status.textContent='Research schedule saved.';
+   await loadJobs();
+  }catch(err){showResearchError(err.message);if(status)status.textContent=''}
+  finally{researchSave.disabled=false;researchSave.textContent='Save research schedule'}
+  return;
+ }
  const refresh=e.target.closest('[data-jobs-refresh]'),save=e.target.closest('[data-job-save]'),run=e.target.closest('[data-job-run]'),edit=e.target.closest('[data-job-edit-toggle]');
+
  if(refresh){loadJobs();return}
  if(edit){const card=edit.closest('[data-job-card]'),panel=card?.querySelector('[data-job-edit]');if(panel){panel.hidden=!panel.hidden;edit.textContent=panel.hidden?'Edit schedule':'Close editor'}return}
  if(!save&&!run)return;
