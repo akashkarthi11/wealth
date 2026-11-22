@@ -78,5 +78,7 @@ test('share bars carry tap-to-read data and a readout; events are bound once', (
   assert.match(src, /<rect class="ichart-hit" x="0" y="0" width="'\+W\+'" height="'\+H\+'" fill="transparent" pointer-events="all"\/><\/svg>/);
   assert.match(src, /const svg=e\.target\.closest\('\.ichart svg'\);if\(svg\)\{const box=svg\.closest\('\.ichart'\);chartShow\(box,chartIndexAt\(svg,e\.clientX\)\)\}/);
   assert.match(src, /chartWidget\('interest-day',interestChartDef\(/);
-  assert.match(src, /chartRangeRowHtml\(\)\+'<section class="chart-card"><div class="chart-head"><div><h4>Cash flow trend<\/h4>/);
+  // Dashboard redesign (2026-11-22): period toolbar remains; cash-flow chart uses the new dashboard card markup.
+  assert.match(src, /chartRangeRowHtml\(\)/);
+  assert.match(src, /class="chart-card dashboard-main-chart"[\s\S]*Income vs spending/);
 });
