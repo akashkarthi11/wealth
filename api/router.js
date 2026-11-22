@@ -54,6 +54,8 @@ export const ROUTES = {
   'interest/accounts': () => import('./_routes/interest.js'),
   'obligations': () => import('./_routes/obligations.js'),
   'nightly': () => import('./_routes/nightly.js'),
+  'interest-accrual': () => import('./_routes/interest-accrual.js'),
+  'backup': () => import('./_routes/backup.js'),
   // TSD Claude Plan 4, Part A
   'rewards': () => import('./_routes/rewards.js'),
   'rewards/balances': () => import('./_routes/rewards.js'),
