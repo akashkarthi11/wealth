@@ -65,7 +65,10 @@ async function reserveDailySlot(db, ticker, url, dateKey) {
       jsonb_build_object('provider','Fincrux','request_date_ist',$3,'reservation',true),
       'unverified'
     FROM quota WHERE used < ${MAX_DAILY_REQUESTS}
-    ON CONFLICT (ticker,url) WHERE run_id IS NULL DO NOTHING
+    ON CONFLICT (ticker,url) WHERE run_id IS NULL DO UPDATE
+      SET title=EXCLUDED.title,retrieved_at=now(),excerpt=EXCLUDED.excerpt,
+          evidence=EXCLUDED.evidence,verification_status='unverified'
+      WHERE wealth_stock_advisor_research_sources.retrieved_at < (date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata')
     RETURNING id
   `, [ticker, url, dateKey, title]);
   return rows[0]?.id || null;
@@ -85,6 +88,15 @@ export async function collectFincruxFinancials({ instrument, db } = {}) {
   if (!/^[A-Z0-9&.-]{1,30}$/.test(ticker)) {
     result.status = 'failed';
     result.error = 'Invalid NSE ticker.';
+    return result;
+  }
+  const [cached] = await db.query(
+    "SELECT retrieved_at FROM wealth_stock_advisor_research_sources WHERE run_id IS NULL AND upper(ticker)=upper($1) AND publisher='Fincrux' AND source_type='financial_statement' ORDER BY retrieved_at DESC LIMIT 1",
+    [ticker]
+  );
+  if (cached?.retrieved_at && Date.now() - Date.parse(cached.retrieved_at) < 30 * 86400000) {
+    result.status = 'skipped';
+    result.reason = 'A Fincrux financial snapshot was already collected within the last 30 days.';
     return result;
   }
   const dateKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
