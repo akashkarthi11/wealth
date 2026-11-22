@@ -15,7 +15,7 @@ export default async function handler(req,res) {
     const failed=result.results.filter(x=>x.status==='failed'||x.status==='partial').length;
     const status=failed?(failed===result.results.length?'failed':'partial'):'succeeded';
     await finishJob(job,status,result);
-    return json(res,200,{ok:failed===0,scheduled_window:'18:45 Asia/Kolkata (central daily dispatcher)',timezone:'Asia/Kolkata',...result,limitations:['The central dispatcher runs once daily at 18:45 IST on the Hobby plan.','The selected schedule time is a due-time cutoff no later than 09:48 IST; it is not an exact-minute execution promise.','Preview deployments do not receive Vercel Cron events.','Research runs are queued through the resumable debate worker; no orders or portfolio records are changed.']});
+    return json(res,200,{ok:failed===0,scheduled_window:'18:45 IST (Asia/Kolkata) central daily dispatcher',timezone:'Asia/Kolkata',...result,limitations:['The central dispatcher runs once daily at 18:45 IST on the Hobby plan.','The selected schedule time is a due-time cutoff no later than 09:48 IST; it is not an exact-minute execution promise.','Preview deployments do not receive Vercel Cron events.','Research runs are queued through the resumable debate worker; no orders or portfolio records are changed.']});
   } catch(error) {
     await finishJob(job,'failed',{error:String(error?.message||error).slice(0,300)});
     console.error('[stock-advisor-scheduled]',error?.message||error);
