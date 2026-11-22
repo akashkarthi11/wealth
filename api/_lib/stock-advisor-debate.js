@@ -415,12 +415,16 @@ async function handleWorker(req,res) {
   try {
     const result=await processStep(req,runId);
     const [job]=await sql.query("SELECT status,step_no,step_attempts,last_error,available_at FROM wealth_stock_advisor_run_jobs WHERE run_id=$1 AND stage='debate'",[runId]);
-    // The progress endpoint is the poll-driven continuation trigger. Do not chain
-    // another worker invocation from this background task; that would outlive the
-    // current UI polling cycle and can exceed the Hobby function duration.
+    // Keep the queue moving in the background. Each step is a separate
+    // waitUntil task, and the database's available_at/provider limiter controls
+    // pacing. This means the user does not need to keep the dashboard open.
+    if (job?.status === 'pending' && Number(job.step_no) < 9) {
+      const waitMs = Math.max(0, Math.min(30000, Date.parse(job.available_at || '') - Date.now() || 0));
+      scheduleWorker(req, runId, waitMs);
+    }
     return json(res,202,{ok:true,status:job?.status||owned.status,step:job?.step_no||0,result});
   } catch(error) {
-    const [job]=await sql.query("SELECT id,step_no,step_attempts,max_attempts FROM wealth_stock_advisor_run_jobs WHERE run_id=$1 AND stage='debate'",[runId]);
+    const [job]=await sql.query("SELECT id,step_no,step_attempts,max_attempts,available_at FROM wealth_stock_advisor_run_jobs WHERE run_id=$1 AND stage='debate'",[runId]);
     const deferred=error?.code==='AI_DEFERRED';
     const exhausted=!deferred && job && Number(job.step_attempts)>=Number(job.max_attempts);
     const [savedCount]=await sql.query('SELECT count(*)::int AS count FROM wealth_stock_advisor_messages WHERE run_id=$1',[runId]);
@@ -431,6 +435,10 @@ async function handleWorker(req,res) {
     await sql.query("UPDATE wealth_stock_advisor_run_jobs SET status=$2,step_attempts=CASE WHEN $5 THEN GREATEST(step_attempts-1,0) ELSE step_attempts END,locked_at=NULL,available_at=now()+($3::text||' milliseconds')::interval,last_error=$4,updated_at=now() WHERE run_id=$1 AND stage='debate'",[runId,exhausted?'failed':'pending',delay,deferred?null:String(error?.message||error).slice(0,1000),deferred]);
     await sql.query("UPDATE wealth_stock_advisor_runs SET status=$2,last_error=$3,updated_at=now() WHERE id=$1",[runId,exhausted?finalStatus:'running',deferred?null:String(error?.message||error).slice(0,1000)]);
     console.error('[stock-advisor-debate:step]',runId,job?.step_no,error?.message||error);
+    if (!exhausted) {
+      const waitMs = Math.max(1000, Math.min(30000, Date.parse(job?.available_at || '') - Date.now() || 3000));
+      scheduleWorker(req, runId, waitMs);
+    }
     return json(res,202,{ok:false,status:exhausted?finalStatus:deferred?'queued':'retrying',step:job?.step_no||0,error:exhausted?'A debate step failed after its retry limit.':deferred?'Waiting for the shared AI provider slot.':'A transient error occurred; the step will be retried.'});
   }
 }
