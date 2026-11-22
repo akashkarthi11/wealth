@@ -97,11 +97,15 @@ async function saveAutoResearchSettings(req,res){
 async function gatewayChat(model,messages){
  const key=String(process.env.AI_GATEWAY_API_KEY||'').trim();
  if(!key)throw Object.assign(new Error('AI_GATEWAY_API_KEY is not configured for this deployment.'),{status:503});
- const response=await fetch('https://ai-gateway.vercel.sh/v1/chat/completions',{method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({model,messages,temperature:0.25,max_tokens:1800})});
+ const response=await fetch('https://ai-gateway.vercel.sh/v1/chat/completions',{method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({model,messages,temperature:0.25,max_tokens:4096,reasoning:{effort:'none'},response_format:{type:'json_object'}})});
  const payload=await response.json().catch(()=>({}));
  if(!response.ok)throw Object.assign(new Error('AI Gateway request failed ('+response.status+'): '+String(payload?.error?.message||payload?.message||'provider unavailable').slice(0,240)),{status:502});
- const content=payload?.choices?.[0]?.message?.content;
- if(typeof content!=='string'||!content.trim())throw Object.assign(new Error('AI Gateway returned an empty model response.'),{status:502});
+ const choice=payload?.choices?.[0],content=choice?.message?.content;
+ if(typeof content!=='string'||!content.trim()){
+  const finishReason=String(choice?.finish_reason||'unknown');
+  const completionTokens=Number(payload?.usage?.completion_tokens||0);
+  throw Object.assign(new Error('AI Gateway returned no final content (finish_reason='+finishReason+', completion_tokens='+completionTokens+').'),{status:502});
+ }
  return content.trim();
 }
 function parseAgentJson(raw){
