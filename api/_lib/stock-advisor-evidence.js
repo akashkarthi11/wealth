@@ -3,7 +3,7 @@
  * Provider adapters must return normalized source records; agents must never receive
  * unlabelled figures as if they were verified facts.
  */
-const ALLOWED_SOURCE_TYPES = new Set(['exchange_filing','company_filing','financial_statement','market_price','technical_indicator','news','broker_research','web']);
+const ALLOWED_SOURCE_TYPES = new Set(['exchange_filing','company_filing','financial_statement','market_price','technical_indicator','news','broker_research','web','fund_nav','fund_profile','portfolio_composition','benchmark_data','corporate_announcement']);
 const MAX_SOURCE_AGE_HOURS = Object.freeze({ market_price: 36, technical_indicator: 36, news: 24 * 14, web: 24 * 45 });
 
 export function normalizeResearchSource(input, now = Date.now()) {
@@ -44,7 +44,7 @@ export function buildEvidenceContext(sources, now = Date.now()) {
   const verified = normalized.filter(source => source.verification_status === 'verified');
   const stale = normalized.filter(source => source.verification_status === 'stale');
   const missingTypes = ['market_price', 'financial_statement', 'technical_indicator']
-    .filter(type => !verified.some(source => source.source_type === type));
+    .filter(type => !verified.some(source => source.source_type === type || (type === 'market_price' && source.source_type === 'fund_nav')));
   return {
     sources: normalized,
     verified_source_count: verified.length,
