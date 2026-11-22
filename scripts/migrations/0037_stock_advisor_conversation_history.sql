@@ -41,7 +41,8 @@ CREATE TABLE IF NOT EXISTS wealth_stock_advisor_reports (
   report_json jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamptz NOT NULL DEFAULT now()
 );
-\nALTER TABLE wealth_stock_advisor_reports
+
+ALTER TABLE wealth_stock_advisor_reports
   ADD COLUMN IF NOT EXISTS run_id uuid REFERENCES wealth_stock_advisor_runs(id) ON DELETE SET NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS wealth_stock_advisor_reports_run_id_uidx
   ON wealth_stock_advisor_reports(run_id) WHERE run_id IS NOT NULL;
