@@ -36,3 +36,15 @@ test('empty Gateway responses include finish reason and token diagnostics', () =
   assert.match(advisorRoute, /completion_tokens/);
   assert.match(advisorRoute, /no final content/);
 });
+
+test('fresh MFAPI NAV counts as price evidence but does not invent equity fundamentals', () => {
+  const source = { title:'NAV observation', url:'https://api.mfapi.in/mf/119551', source_type:'fund_nav', verification_status:'verified', retrieved_at:new Date(now).toISOString(), published_at:new Date(now).toISOString() };
+  const result = buildEvidenceContext([source], now);
+  assert.ok(!result.missing_evidence_types.includes('market_price'));
+  assert.ok(result.missing_evidence_types.includes('financial_statement'));
+  assert.equal(result.action_gate,'DATA_REQUIRED');
+});
+test('old MFAPI NAV is downgraded using its seven-day freshness limit', () => {
+  const source = normalizeResearchSource({ title:'Old NAV', url:'https://api.mfapi.in/mf/119551', source_type:'fund_nav', verification_status:'verified', retrieved_at:'2026-11-10T00:00:00Z' }, now);
+  assert.equal(source.verification_status,'stale');
+});
