@@ -24,7 +24,7 @@ export async function resolveMfScheme(input={}){
  return {schemeCode:String(selected.schemeCode),schemeName:clean(selected.schemeName),resolvedBy:exact?'exact_name':directGrowth?'direct_growth_name':'name_contains'};
 }
 
-export async function collectMutualFundEvidence({ticker,name,runId,db,schemeCode}={}){
+export async function collectMutualFundEvidence({ticker,name,runId,db,schemeCode,instrumentId}={}){
  const result={provider:'MFAPI.in',ticker:String(ticker||'').toUpperCase(),fetched_at:new Date().toISOString(),status:'unavailable',scheme:null,observations:0,stored:0,error:null};
  try{
   const scheme=await resolveMfScheme({schemeCode,name:name||ticker});
@@ -40,9 +40,28 @@ export async function collectMutualFundEvidence({ticker,name,runId,db,schemeCode
   result.observations=navRows.length;
   const latest=navRows[0];
   const evidence={provider:'MFAPI.in',scheme_code:scheme.schemeCode,scheme_name:result.scheme.scheme_name,fund_house:result.scheme.fund_house,scheme_type:result.scheme.scheme_type,scheme_category:result.scheme.scheme_category,nav_observations:navRows,currency:'INR',provider_retrieved_at:result.fetched_at,verification_basis:'Valid dated NAV observations returned by MFAPI API; scheme identity resolved by code or name match.'};
-  const saved=await db.query("INSERT INTO wealth_stock_advisor_research_sources (run_id,ticker,source_type,title,url,publisher,published_at,retrieved_at,excerpt,evidence,verification_status) VALUES ($1,$2,'fund_nav',$3,$4,'MFAPI.in',$5::timestamptz,$6::timestamptz,$7,$8::jsonb,'verified') ON CONFLICT (run_id,ticker,url) DO UPDATE SET title=EXCLUDED.title,published_at=EXCLUDED.published_at,retrieved_at=EXCLUDED.retrieved_at,excerpt=EXCLUDED.excerpt,evidence=EXCLUDED.evidence,verification_status='verified' RETURNING id",
-  [runId,ticker,'Mutual fund NAV — '+result.scheme.scheme_name,'https://api.mfapi.in/mf/'+scheme.schemeCode,latest.date,result.fetched_at,'Latest NAV ₹'+latest.nav+' as of '+latest.date+'; '+navRows.length+' historical observations included.',JSON.stringify(evidence)]);
+  const [instrument] = instrumentId
+    ? [{id:instrumentId}]
+    : await db.query('SELECT id FROM wealth_instruments WHERE upper(symbol)=upper($1) LIMIT 1',[ticker]);
+  if(instrument?.id){
+   for(const observation of navRows){
+    await db.query(`INSERT INTO wealth_instrument_prices(instrument_id,as_of,source,price,fx_to_inr,fetched_at)
+      VALUES($1,$2::timestamptz,'MFAPI.in',$3,1,$4::timestamptz)
+      ON CONFLICT(instrument_id,as_of,source) DO UPDATE SET price=EXCLUDED.price,fx_to_inr=EXCLUDED.fx_to_inr,fetched_at=EXCLUDED.fetched_at`,
+      [instrument.id,observation.date,observation.nav,result.fetched_at]);
+   }
+  }
+  const sourceUrl='https://api.mfapi.in/mf/'+scheme.schemeCode;
+  let saved;
+  if(runId){
+   saved=await db.query("INSERT INTO wealth_stock_advisor_research_sources (run_id,ticker,source_type,title,url,publisher,published_at,retrieved_at,excerpt,evidence,verification_status) VALUES ($1,$2,'fund_nav',$3,$4,'MFAPI.in',$5::timestamptz,$6::timestamptz,$7,$8::jsonb,'verified') ON CONFLICT (run_id,ticker,url) DO UPDATE SET title=EXCLUDED.title,published_at=EXCLUDED.published_at,retrieved_at=EXCLUDED.retrieved_at,excerpt=EXCLUDED.excerpt,evidence=EXCLUDED.evidence,verification_status='verified' RETURNING id",
+    [runId,ticker,'Mutual fund NAV — '+result.scheme.scheme_name,sourceUrl,latest.date,result.fetched_at,'Latest NAV ₹'+latest.nav+' as of '+latest.date+'; '+navRows.length+' historical observations included.',JSON.stringify(evidence)]);
+  }else{
+   saved=await db.query("INSERT INTO wealth_stock_advisor_research_sources (run_id,ticker,source_type,title,url,publisher,published_at,retrieved_at,excerpt,evidence,verification_status) VALUES (NULL,$1,'fund_nav',$2,$3,'MFAPI.in',$4::timestamptz,$5::timestamptz,$6,$7::jsonb,'verified') ON CONFLICT (ticker,url) WHERE run_id IS NULL DO UPDATE SET title=EXCLUDED.title,published_at=EXCLUDED.published_at,retrieved_at=EXCLUDED.retrieved_at,excerpt=EXCLUDED.excerpt,evidence=EXCLUDED.evidence,verification_status='verified' RETURNING id",
+    [ticker,'Mutual fund NAV — '+result.scheme.scheme_name,sourceUrl,latest.date,result.fetched_at,'Latest NAV ₹'+latest.nav+' as of '+latest.date+'; '+navRows.length+' historical observations included.',JSON.stringify(evidence)]);
+  }
   result.stored=saved.length?1:0;
+  result.price_rows=instrument?.id?navRows.length:0;
   result.status='ok';
  }catch(error){result.error=String(error?.message||error).slice(0,240)}
  return result;
