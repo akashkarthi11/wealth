@@ -74,7 +74,7 @@ export async function runStockAdvisorDataCollection(db){
    ORDER BY i.symbol LIMIT 250`);
   summary.instruments=instruments.length;
   const funds=instruments.filter(i=>i.asset_class==='indian_mutual_fund');
-  const equities=instruments.filter(i=>i.asset_class!=='indian_mutual_fund'&&!['precious_metal','fixed_deposit','bond','retirement_asset'].includes(i.asset_class));
+  const equities=instruments.filter(i=>i.asset_class==='indian_equity');
   let feeds=[];
   if(equities.length){try{feeds=await nseFeeds();summary.feeds=feeds.length}catch(e){summary.results.push({provider:'NSE feed discovery',status:'failed',error:String(e?.message||e).slice(0,180)})}}
   for(const instrument of funds){
