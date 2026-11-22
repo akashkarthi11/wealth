@@ -1,6 +1,7 @@
 import {sql,schema,json,sessionUser,body} from '../_lib.js';
 import {timingSafeEqual,randomUUID} from 'node:crypto';
 import {startJob,finishJob} from '../_jobs.js';
+import {SCHEDULE_TIMEZONE,DEFAULT_SCHEDULE_TIME,nextScheduledAt,getLocalDateTime} from '../_lib/stock-advisor-schedule-time.js';
 
 // The agents' shared WEALTH_INGEST_SECRET (Plan 3) or the older advisor-only secret.
 function validIngestSecret(req){
@@ -65,29 +66,27 @@ function cleanMessages(input){
   const metadata=m.metadata&&typeof m.metadata==='object'&&!Array.isArray(m.metadata)?m.metadata:{};
   const sequenceNo=Number.isInteger(m.sequence_no)?m.sequence_no:i;
   if(sequenceNo<0)throw Object.assign(new Error('Message sequence numbers must be zero or greater.'),{status:400});
+  const sentences=content.replace(/\\s+/g,' ').split(/(?<=[.!?])\\s+/).slice(0,3).join(' ').slice(0,900);
+  const evidenceRefs=Array.isArray(m.evidence_refs)?m.evidence_refs:[];
   return {sequence_no:sequenceNo,
    round_no:Number.isInteger(m.round_no)&&m.round_no>0?m.round_no:1,
    speaker,agent_key:String(m.agent_key??m.agent_id??'').slice(0,100),
    message_type:String(m.message_type??m.type??'message').slice(0,40),
-   content,metadata,created_at:createdAt};
+   content,summary:String(m.summary||sentences),ticker:String(m.ticker||'').toUpperCase(),asset_type:String(m.asset_type||''),evidence_refs:evidenceRefs,metadata,created_at:createdAt};
  });
 }
 
 
 
 
-function nextAutoResearchRunAt(now=new Date()){
- const next=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate(),4,18,0,0));
- if(next<=now)next.setUTCDate(next.getUTCDate()+1);
- return next.toISOString();
-}
-
 async function getAutoResearchSettings(uid){
- const rows=await sql.query('SELECT enabled,mode,selected_tickers,schedule_timezone,schedule_time,last_run_at,next_run_at,last_status,last_error FROM wealth_stock_advisor_settings WHERE user_id=$1',[uid]);
- const settings=rows[0]||{enabled:false,mode:'all',selected_tickers:[],schedule_timezone:'Asia/Kolkata',schedule_time:'09:48',last_run_at:null,next_run_at:null,last_status:'not_configured',last_error:null};
- if(settings.enabled&&!settings.next_run_at)settings.next_run_at=nextAutoResearchRunAt();
+ const rows=await sql.query('SELECT enabled,mode,selected_tickers,schedule_timezone,schedule_time,schedule_frequency,last_run_at,last_success_at,last_scheduled_date,next_run_at,last_status,last_error FROM wealth_stock_advisor_settings WHERE user_id=$1',[uid]);
+ const settings=rows[0]||{enabled:false,mode:'all',selected_tickers:[],schedule_timezone:SCHEDULE_TIMEZONE,schedule_time:DEFAULT_SCHEDULE_TIME,schedule_frequency:'daily',last_run_at:null,last_success_at:null,last_scheduled_date:null,next_run_at:null,last_status:'not_configured',last_error:null};
+ if(settings.enabled)settings.next_run_at=nextScheduledAt(new Date(),settings.schedule_time||DEFAULT_SCHEDULE_TIME,settings.schedule_frequency||'daily',settings.schedule_timezone||SCHEDULE_TIMEZONE).toISOString();
+ else settings.next_run_at=null;
  settings.scheduler_registered=String(process.env.VERCEL_ENV||'').toLowerCase()==='production';
  settings.scheduler_status=settings.enabled?(settings.scheduler_registered?'active':'preview_only'):'disabled';
+ settings.execution_window='09:48–10:47 IST';
  return settings;
 }
 async function saveAutoResearchSettings(req,res){
@@ -97,10 +96,12 @@ async function saveAutoResearchSettings(req,res){
  const selected=Array.isArray(input.selected_tickers)?[...new Set(input.selected_tickers.map(x=>String(x||'').trim().toUpperCase()).filter(x=>/^[A-Z0-9&.-]{1,20}$/.test(x)))]:[];
  if(selected.length>100)return json(res,400,{error:'Select no more than 100 stocks.'});
  if(mode==='manual'&&!selected.length)return json(res,400,{error:'Select at least one stock for manual mode.'});
- if(selected.length){const valid=await sql.query("SELECT DISTINCT upper(ticker) AS ticker FROM wealth_positions WHERE user_id=$1 AND category='INVESTMENT' AND record_type='EQUITY' AND currency='INR' AND upper(ticker)=ANY($2::text[])",[uid,selected]);if(valid.length!==selected.length)return json(res,400,{error:'Manual selection may include only saved Indian equity holdings.'})}
- await sql.query("INSERT INTO wealth_stock_advisor_settings (user_id,enabled,mode,selected_tickers,schedule_timezone,schedule_time,next_run_at,last_status,last_error,updated_at) VALUES ($1,$2,$3,$4::jsonb,'Asia/Kolkata','09:48',$5,$6,NULL,now()) ON CONFLICT (user_id) DO UPDATE SET enabled=EXCLUDED.enabled,mode=EXCLUDED.mode,selected_tickers=EXCLUDED.selected_tickers,next_run_at=EXCLUDED.next_run_at,last_status=EXCLUDED.last_status,last_error=NULL,updated_at=now()",[uid,enabled,mode,JSON.stringify(selected),enabled?nextAutoResearchRunAt():null,enabled?'scheduled':'disabled']);
+ if(selected.length){const valid=await sql.query("SELECT DISTINCT upper(ticker) AS ticker FROM wealth_positions WHERE user_id=$1 AND category='INVESTMENT' AND record_type IN ('EQUITY','ETF') AND currency='INR' AND upper(ticker)=ANY($2::text[])",[uid,selected]);if(valid.length!==selected.length)return json(res,400,{error:'Manual selection may include only saved Indian equity or ETF holdings.'})}
+ const now=new Date(),local=getLocalDateTime(now,SCHEDULE_TIMEZONE),[currentSchedule]=await sql.query('SELECT schedule_time FROM wealth_stock_advisor_settings WHERE user_id=$1',[uid]);
+ const scheduleTime=currentSchedule?.schedule_time||DEFAULT_SCHEDULE_TIME,prior=new Date(Date.UTC(local.year,local.month-1,local.day-1)).toISOString().slice(0,10),lastScheduledDate=enabled&&local.time<scheduleTime?prior:local.date;
+ await sql.query("INSERT INTO wealth_stock_advisor_settings (user_id,enabled,mode,selected_tickers,last_scheduled_date,last_status,last_error,updated_at) VALUES ($1,$2,$3,$4::jsonb,$5,$6,NULL,now()) ON CONFLICT (user_id) DO UPDATE SET enabled=EXCLUDED.enabled,mode=EXCLUDED.mode,selected_tickers=EXCLUDED.selected_tickers,last_scheduled_date=EXCLUDED.last_scheduled_date,last_status=EXCLUDED.last_status,last_error=NULL,updated_at=now()",[uid,enabled,mode,JSON.stringify(selected),lastScheduledDate,enabled?'scheduled':'disabled']);
  const settings=await getAutoResearchSettings(uid);
- return json(res,200,{saved:true,settings,message:enabled?'Settings saved. Daily 09:48 IST Auto Research is configured; Preview deployments do not execute Vercel Cron.':'Auto Research is off for this account.'});
+ return json(res,200,{saved:true,settings,message:enabled?'Settings saved. Use Research Schedule to configure the daily IST time and frequency; Preview deployments do not receive automatic Vercel Cron events.':'Auto Research is off for this account.'});
 }
 
 // Free-model pilot: separate Gateway calls; only public company/ticker identifiers leave this application.
@@ -203,8 +204,8 @@ export default async function handler(req,res){
    }
    for(const m of messages){
     await sql.query(
-     'INSERT INTO wealth_stock_advisor_messages (run_id,sequence_no,round_no,speaker,agent_key,message_type,content,metadata,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,COALESCE($9::timestamptz,now())) ON CONFLICT (run_id,sequence_no) DO UPDATE SET round_no=EXCLUDED.round_no,speaker=EXCLUDED.speaker,agent_key=EXCLUDED.agent_key,message_type=EXCLUDED.message_type,content=EXCLUDED.content,metadata=EXCLUDED.metadata,created_at=EXCLUDED.created_at',
-     [run.id,m.sequence_no,m.round_no,m.speaker,m.agent_key,m.message_type,m.content,JSON.stringify(m.metadata),m.created_at]
+     'INSERT INTO wealth_stock_advisor_messages (run_id,sequence_no,round_no,speaker,agent_key,message_type,content,summary,metadata,ticker,asset_type,evidence_refs,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12::jsonb,COALESCE($13::timestamptz,now())) ON CONFLICT (run_id,sequence_no) DO UPDATE SET round_no=EXCLUDED.round_no,speaker=EXCLUDED.speaker,agent_key=EXCLUDED.agent_key,message_type=EXCLUDED.message_type,content=EXCLUDED.content,summary=EXCLUDED.summary,metadata=EXCLUDED.metadata,ticker=EXCLUDED.ticker,asset_type=EXCLUDED.asset_type,evidence_refs=EXCLUDED.evidence_refs,created_at=EXCLUDED.created_at',
+     [run.id,m.sequence_no,m.round_no,m.speaker,m.agent_key,m.message_type,m.content,m.summary,JSON.stringify(m.metadata),m.ticker,m.asset_type,JSON.stringify(m.evidence_refs),m.created_at]
     );
    }
    const saved=await sql.query(
@@ -221,18 +222,24 @@ export default async function handler(req,res){
   const requestedRun=String(new URL(req.url,'https://wealth.local').searchParams.get('run_id')||'').trim();
   const settings=await getAutoResearchSettings(uid);
   const [runs,holdings]=await Promise.all([
-   sql.query('SELECT id,run_key,run_at,status,agent_count,created_at FROM wealth_stock_advisor_runs WHERE user_id=$1 ORDER BY run_at DESC,created_at DESC',[uid]),
-   sql.query("SELECT name,ticker,quantity,current_value,balance_as_of FROM wealth_positions WHERE user_id=$1 AND category='INVESTMENT' AND record_type='EQUITY' AND currency='INR' ORDER BY name",[uid])
+   sql.query('SELECT id,run_key,run_at,status,agent_count,ticker,stock_name,asset_type,next_step,total_steps,last_completed_round,last_completed_speaker,last_error,created_at,updated_at FROM wealth_stock_advisor_runs WHERE user_id=$1 ORDER BY run_at DESC,created_at DESC',[uid]),
+   sql.query("SELECT name,ticker,record_type,currency,quantity,current_value,balance_as_of FROM wealth_positions WHERE user_id=$1 AND category='INVESTMENT' AND record_type IN ('EQUITY','ETF','MUTUAL_FUND','FIXED_DEPOSIT','BOND','EPF','GOLD','SILVER') AND currency='INR' AND ticker IS NOT NULL ORDER BY name",[uid])
   ]);
   const run=(requestedRun?runs.find(r=>r.id===requestedRun):runs[0])||null;
   let report=null,messages=[],bullBearCases=[];
   if(run){
    const result=await Promise.all([
     sql.query('SELECT id,run_id,run_at,report_text,report_json FROM wealth_stock_advisor_reports WHERE user_id=$1 AND run_id=$2 LIMIT 1',[uid,run.id]),
-    sql.query('SELECT id,sequence_no,round_no,speaker,agent_key,message_type,content,metadata,created_at FROM wealth_stock_advisor_messages WHERE run_id=$1 ORDER BY sequence_no ASC',[run.id]),
+    sql.query('SELECT id,sequence_no,round_no,speaker,agent_key,message_type,summary,metadata,ticker,asset_type,evidence_refs,created_at FROM wealth_stock_advisor_messages WHERE run_id=$1 ORDER BY sequence_no ASC',[run.id]),
     sql.query('SELECT id,ticker,stock_name,exchange,side,agent_key,agent_name,thesis,key_points,fundamental_evidence,technical_evidence,valuation,catalysts,risks,sources,confidence,target_price,time_horizon,verdict,created_at FROM wealth_stock_advisor_bull_bear_cases WHERE run_id=$1 ORDER BY ticker,side,agent_key',[run.id])
    ]);
-   report=result[0][0]||null;messages=result[1];bullBearCases=result[2];
+   const storedReport=result[0][0]||null;
+   if(storedReport){
+    const safeJson={...(storedReport.report_json||{})};
+    for(const key of ['committee_debate','debate_transcript','transcript','messages','turns','dialogue','raw_messages','full_messages']) delete safeJson[key];
+    report={...storedReport,report_text:String(safeJson.summary||storedReport.report_text||'').slice(0,900),report_json:safeJson};
+   }
+   messages=result[1];bullBearCases=result[2];
   }
   if(requestedRun&&!run)return json(res,404,{error:'Advisor run not found.'});
   return json(res,200,{report,run,runs,messages,bull_bear_cases:bullBearCases,holdings,settings});
