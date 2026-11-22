@@ -212,7 +212,7 @@ async function loadEvidence(uid, holding, assetType, runId) {
   const ticker = String(holding.ticker || '').toUpperCase();
   const [instrumentRows, sourceRows, portfolioRows] = await Promise.all([
     sql.query('SELECT i.id AS instrument_id,i.symbol,i.name,i.currency,p.price,p.as_of,p.source,p.fetched_at,p.fx_to_inr FROM wealth_instruments i LEFT JOIN LATERAL (SELECT price,as_of,source,fetched_at,fx_to_inr FROM wealth_instrument_prices WHERE instrument_id=i.id ORDER BY as_of DESC LIMIT 5) p ON true WHERE upper(i.symbol)=upper($1)',[ticker]),
-    sql.query('SELECT id,source_type,title,url,publisher,published_at,retrieved_at,excerpt,evidence,verification_status FROM wealth_stock_advisor_research_sources WHERE run_id=$1 AND upper(ticker)=upper($2) ORDER BY retrieved_at DESC LIMIT 30',[runId,ticker]),
+    sql.query('SELECT id,source_type,title,url,publisher,published_at,retrieved_at,excerpt,evidence,verification_status FROM wealth_stock_advisor_research_sources WHERE (run_id=$1 OR run_id IS NULL) AND upper(ticker)=upper($2) ORDER BY (run_id=$1) DESC,retrieved_at DESC LIMIT 40',[runId,ticker]),
     sql.query("SELECT record_type,currency,count(*)::int AS holdings,sum(coalesce(current_value,0))::numeric AS value FROM wealth_positions WHERE user_id=$1 AND category='INVESTMENT' GROUP BY record_type,currency ORDER BY value DESC",[uid])
   ]);
   const now = Date.now(), evidenceRefs = [], prices = [];
