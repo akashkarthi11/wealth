@@ -31,6 +31,26 @@ async function latestSavedReport(uid){
   report_json:payload.report_json||payload.reportJson||payload};
 }
 
+function cleanBullBearCases(input){
+ if(input==null)return [];
+ if(!Array.isArray(input))throw Object.assign(new Error('bull_bear_cases must be an array.'),{status:400});
+ if(input.length>1000)throw Object.assign(new Error('A run can contain at most 1000 Bull/Bear cases.'),{status:400});
+ const json=(v,fallback,type)=>{const x=v==null?fallback:v;if(typeof x!==type)throw Object.assign(new Error('Invalid Bull/Bear evidence structure.'),{status:400});return x};
+ return input.map(c=>{
+  if(!c||typeof c!=='object'||Array.isArray(c))throw Object.assign(new Error('Each Bull/Bear case must be an object.'),{status:400});
+  const side=String(c.side||'').toLowerCase(),ticker=String(c.ticker||c.symbol||'').trim().toUpperCase(),stockName=String(c.stock_name||c.stockName||c.company||ticker).trim(),thesis=String(c.thesis||c.argument||'').trim();
+  if(!['bull','bear'].includes(side)||!ticker||ticker.length>30||!stockName||stockName.length>160||!thesis||thesis.length>30000)throw Object.assign(new Error('Each Bull/Bear case needs side, ticker, stock name and thesis.'),{status:400});
+  const confidence=c.confidence==null?null:Number(c.confidence),target=c.target_price==null&&c.targetPrice==null?null:Number(c.target_price??c.targetPrice);
+  if(confidence!=null&&(!Number.isFinite(confidence)||confidence<0||confidence>100))throw Object.assign(new Error('Bull/Bear confidence must be 0–100.'),{status:400});
+  if(target!=null&&(!Number.isFinite(target)||target<0))throw Object.assign(new Error('Bull/Bear target price must be zero or greater.'),{status:400});
+  return {ticker,stock_name:stockName,exchange:String(c.exchange||'NSE').slice(0,20),side,agent_key:String(c.agent_key||c.agent_id||'').slice(0,100),agent_name:String(c.agent_name||c.agent||'').slice(0,100),thesis,key_points:json(c.key_points??c.keyPoints,[],'object'),fundamental_evidence:json(c.fundamental_evidence??c.fundamentalEvidence,{},'object'),technical_evidence:json(c.technical_evidence??c.technicalEvidence,{},'object'),valuation:json(c.valuation,{},'object'),catalysts:json(c.catalysts,[],'object'),risks:json(c.risks,[],'object'),sources:json(c.sources,[],'object'),confidence,target_price:target,time_horizon:c.time_horizon??c.timeHorizon??null,verdict:c.verdict??null};
+ }).map(c=>{
+  for(const k of ['key_points','catalysts','risks','sources'])if(!Array.isArray(c[k]))throw Object.assign(new Error(k+' must be an array.'),{status:400});
+  for(const k of ['fundamental_evidence','technical_evidence','valuation'])if(!c[k]||Array.isArray(c[k])||typeof c[k]!=='object')throw Object.assign(new Error(k+' must be an object.'),{status:400});
+  return c;
+ });
+}
+
 function cleanMessages(input){
  if(input==null)return [];
  if(!Array.isArray(input))throw Object.assign(new Error('messages must be an array.'),{status:400});
@@ -62,7 +82,7 @@ export default async function handler(req,res){
    const reportJson=input.report_json??input.reportJson;
    if(!reportJson||typeof reportJson!=='object'||Array.isArray(reportJson))return json(res,400,{error:'report_json must be a JSON object.'});
    const reportText=String(input.report_text??input.reportText??reportJson.summary??'').trim();
-   const messages=cleanMessages(input.messages??input.transcript);
+   const messages=cleanMessages(input.messages??input.transcript);\n   const bullBearCases=cleanBullBearCases(input.bull_bear_cases??input.bullBearCases);
    if(!reportText&&!Array.isArray(reportJson.recommendations))return json(res,400,{error:'Provide report_text or structured recommendations.'});
    const runAt=input.run_at??input.runAt??null;
    if(runAt&&!Number.isFinite(Date.parse(runAt)))return json(res,400,{error:'run_at must be a valid ISO date.'});
@@ -79,6 +99,12 @@ export default async function handler(req,res){
     [uid,runKey,runAt,status,agentCount]
    );
    const run=runs[0];
+   for(const c of bullBearCases){
+    await sql.query(
+     'INSERT INTO wealth_stock_advisor_bull_bear_cases (run_id,ticker,stock_name,exchange,side,agent_key,agent_name,thesis,key_points,fundamental_evidence,technical_evidence,valuation,catalysts,risks,sources,confidence,target_price,time_horizon,verdict) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13::jsonb,$14::jsonb,$15::jsonb,$16,$17,$18,$19) ON CONFLICT (run_id,ticker,side,agent_key) DO UPDATE SET stock_name=EXCLUDED.stock_name,exchange=EXCLUDED.exchange,agent_name=EXCLUDED.agent_name,thesis=EXCLUDED.thesis,key_points=EXCLUDED.key_points,fundamental_evidence=EXCLUDED.fundamental_evidence,technical_evidence=EXCLUDED.technical_evidence,valuation=EXCLUDED.valuation,catalysts=EXCLUDED.catalysts,risks=EXCLUDED.risks,sources=EXCLUDED.sources,confidence=EXCLUDED.confidence,target_price=EXCLUDED.target_price,time_horizon=EXCLUDED.time_horizon,verdict=EXCLUDED.verdict,updated_at=now()',
+     [run.id,c.ticker,c.stock_name,c.exchange,c.side,c.agent_key,c.agent_name,c.thesis,JSON.stringify(c.key_points),JSON.stringify(c.fundamental_evidence),JSON.stringify(c.technical_evidence),JSON.stringify(c.valuation),JSON.stringify(c.catalysts),JSON.stringify(c.risks),JSON.stringify(c.sources),c.confidence,c.target_price,c.time_horizon,c.verdict]
+    );
+   }
    for(const m of messages){
     await sql.query(
      'INSERT INTO wealth_stock_advisor_messages (run_id,sequence_no,round_no,speaker,agent_key,message_type,content,metadata,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,COALESCE($9::timestamptz,now())) ON CONFLICT (run_id,sequence_no) DO UPDATE SET round_no=EXCLUDED.round_no,speaker=EXCLUDED.speaker,agent_key=EXCLUDED.agent_key,message_type=EXCLUDED.message_type,content=EXCLUDED.content,metadata=EXCLUDED.metadata,created_at=EXCLUDED.created_at',
@@ -92,7 +118,7 @@ export default async function handler(req,res){
    const job=await startJob('advisor-ingest');
    await finishJob(job,'succeeded',{runId:run.id,messages:messages.length,reportSaved:saved.length===1});
    const count=await sql.query('SELECT count(*)::int AS count FROM wealth_stock_advisor_messages WHERE run_id=$1',[run.id]);
-   return json(res,201,{saved:true,run,report:saved[0],messageCount:count[0]?.count??0});
+   return json(res,201,{saved:true,run,report:saved[0],messageCount:count[0]?.count??0,bullBearCaseCount:bullBearCases.length});
   }
   if(req.method!=='GET')return json(res,405,{error:'Method not allowed'});
   const uid=await sessionUser(req);if(!uid)return json(res,401,{error:'Sign in required'});
@@ -102,18 +128,18 @@ export default async function handler(req,res){
    sql.query("SELECT name,ticker,quantity,current_value,balance_as_of FROM wealth_positions WHERE user_id=$1 AND category='INVESTMENT' AND record_type='EQUITY' AND currency='INR' ORDER BY name",[uid])
   ]);
   const run=(requestedRun?runs.find(r=>r.id===requestedRun):runs[0])||null;
-  let report=null,messages=[];
+  let report=null,messages=[],bullBearCases=[];
   if(run){
    const result=await Promise.all([
     sql.query('SELECT id,run_id,run_at,report_text,report_json FROM wealth_stock_advisor_reports WHERE user_id=$1 AND run_id=$2 LIMIT 1',[uid,run.id]),
-    sql.query('SELECT id,sequence_no,round_no,speaker,agent_key,message_type,content,metadata,created_at FROM wealth_stock_advisor_messages WHERE run_id=$1 ORDER BY sequence_no ASC',[run.id])
+    sql.query('SELECT id,sequence_no,round_no,speaker,agent_key,message_type,content,metadata,created_at FROM wealth_stock_advisor_messages WHERE run_id=$1 ORDER BY sequence_no ASC',[run.id]),\n    sql.query('SELECT id,ticker,stock_name,exchange,side,agent_key,agent_name,thesis,key_points,fundamental_evidence,technical_evidence,valuation,catalysts,risks,sources,confidence,target_price,time_horizon,verdict,created_at FROM wealth_stock_advisor_bull_bear_cases WHERE run_id=$1 ORDER BY ticker,side,agent_key',[run.id])
    ]);
-   report=result[0][0]||null;messages=result[1];
+   report=result[0][0]||null;messages=result[1];bullBearCases=result[2];
   }else if(!requestedRun){
    report=await latestSavedReport(uid);
   }
   if(requestedRun&&!run)return json(res,404,{error:'Advisor run not found.'});
-  return json(res,200,{report,run,runs,messages,holdings});
+  return json(res,200,{report,run,runs,messages,bull_bear_cases:bullBearCases,holdings});
  }catch(e){
   if(e?.status===400)return json(res,400,{error:e.message});
   console.error('[wealth-stock-advisor]',e?.message||e);
