@@ -3,6 +3,7 @@ import { waitUntil } from '@vercel/functions';
 import { createHash } from 'node:crypto';
 import { collectMutualFundEvidence } from './stock-advisor-mfapi.js';
 import { collectNseNews } from './stock-advisor-live-evidence.js';
+import { collectTejHqEquityEvidence } from './stock-advisor-tejhq.js';
 
 export const FREE_AI_MODEL = 'nvidia/nemotron-3.5-lightning-free';
 export const DEBATE_SEQUENCE = Object.freeze([
@@ -224,7 +225,7 @@ async function loadEvidence(uid, holding, assetType, runId) {
   const sources = sourceRows.map(s => {
     const freshnessTimestamp = s.source_type === 'fund_nav' ? (s.published_at || s.retrieved_at) : s.retrieved_at;
     const age = (now - Date.parse(freshnessTimestamp)) / 3600000;
-    const maxAgeHours = s.source_type === 'fund_nav' ? 24 * 7 : 24 * 45;
+    const maxAgeHours = s.source_type === 'fund_nav' ? 24 * 7 : s.source_type === 'technical_indicator' ? 36 : 24 * 45;
     const fresh = s.verification_status === 'verified' && age >= 0 && age <= maxAgeHours;
     evidenceRefs.push({type:s.source_type,id:s.id,title:s.title,url:s.url,status:fresh?'verified':s.verification_status,as_of:s.published_at || s.retrieved_at});
     return {...s, verification_status:fresh?'verified':(age>24*45?'stale':s.verification_status)};
@@ -328,7 +329,10 @@ async function processStep(req, runId) {
     if(step!==0) throw new Error('The shared evidence snapshot is missing; resume from the first research step.');
     const refreshes={};
     if(run.asset_type==='mutual_fund') refreshes.mutual_fund=await collectMutualFundEvidence({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
-    if(run.asset_type==='indian_equity'||run.asset_type==='other_equity') refreshes.nse_news=await collectNseNews({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
+    if(run.asset_type==='indian_equity') {
+       refreshes.tejhq=await collectTejHqEquityEvidence({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
+       refreshes.nse_news=await collectNseNews({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
+     }
     evidence=await loadEvidence(run.user_id,holdingRows[0],run.asset_type,run.id);
     evidence.provider_refreshes=refreshes;
     evidence.captured_at=new Date().toISOString();
