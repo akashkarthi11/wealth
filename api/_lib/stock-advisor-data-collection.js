@@ -1,31 +1,8 @@
 import { collectFincruxFinancials } from './stock-advisor-fincrux.js';
+import { collectNseNewsBatch, cleanNseFeedItemMatches } from './stock-advisor-live-evidence.js';
+export { cleanNseFeedItemMatches } from './stock-advisor-live-evidence.js';
 
-const NSE_RSS_INDEX='https://www.nseindia.com/static/rss-feed';
-const NSE_HOSTS=new Set(['www.nseindia.com','nsearchives.nseindia.com','nseindia.com']);
 const timeout=ms=>AbortSignal.timeout(ms);
-const clean=s=>String(s||'').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g,'$1').replace(/<[^>]+>/g,' ').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/\s+/g,' ').trim();
-const tag=(block,name)=>{const m=[...String(block||'').matchAll(/<([a-z]+)[^>]*>([\s\S]*?)<\/\1>/gi)].find(x=>x[1].toLowerCase()===String(name).toLowerCase());return m?clean(m[2]):''};
-const allowed=url=>{try{return NSE_HOSTS.has(new URL(url).hostname)}catch{return false}};
-async function getText(url,accept='application/rss+xml, application/xml, text/xml, text/html;q=0.9'){
- const r=await fetch(url,{headers:{'User-Agent':'MyWealthPersonalResearch/1.0','Accept':accept},signal:timeout(10000)});
- if(!r.ok)throw new Error('Provider HTTP '+r.status+' for '+new URL(url).hostname);
- return r.text();
-}
-async function nseFeeds(){
- const html=await getText(NSE_RSS_INDEX,'text/html');
- const links=[...html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)],feeds=[];
- for(const m of links){
-  const label=clean(m[2]).toLowerCase();
-  if(!/(announcement|financial result|board meeting|corporate information|press release|circular)/.test(label))continue;
-  let url;try{url=new URL(m[1],NSE_RSS_INDEX).toString()}catch{continue}
-  if(allowed(url)&&/rss|xml/i.test(url))feeds.push({url,label});
- }
- return feeds.slice(0,10);
-}
-export function cleanNseFeedItemMatches(text,ticker,name){
- const t=String(text||'').toLowerCase(),symbol=String(ticker||'').toLowerCase(),n=String(name||'').toLowerCase();
- return (symbol.length>1&&t.split(/[^a-z0-9&.-]+/).includes(symbol))||(n.length>=5&&t.includes(n));
-}
 async function collectMf({instrument,runId,db}){
  const scheme=String(instrument.price_source_symbol||instrument.symbol||'').trim();
  if(!/^\d{4,8}$/.test(scheme))return {ticker:instrument.symbol,status:'skipped',reason:'No saved AMFI scheme code'};
@@ -50,29 +27,6 @@ async function collectMf({instrument,runId,db}){
   [instrument.symbol,title,url,rows[0].date,'Latest NAV ₹'+rows[0].nav+' as of '+rows[0].date+'; '+rows.length+' dated NAV observations stored in wealth_instrument_prices.',JSON.stringify(evidence)]);
  return {ticker:instrument.symbol,status:'updated',source_type:'fund_nav',observations:rows.length,price_table:'wealth_instrument_prices'};
 }
-async function collectEquityNews({instrument,runId,feeds,db}){
- const results=[];
- for(const feed of feeds){
-  try{
-   const xml=await getText(feed.url),items=[...xml.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)];
-   for(const m of items){
-    const title=tag(m[1],'title'),link=tag(m[1],'link'),description=tag(m[1],'description'),date=tag(m[1],'pubDate');
-    if(!title||!link||!cleanNseFeedItemMatches(title+' '+description,instrument.symbol,instrument.name))continue;
-    let url;try{url=new URL(link,feed.url).toString()}catch{continue}
-    if(!allowed(url))continue;
-    const stamp=Date.parse(date),published=Number.isFinite(stamp)?new Date(stamp).toISOString():null;
-    const evidence={feed_url:feed.url,feed_label:feed.label,official_exchange_feed:true,content_kind:'rss_listing_only',retrieved_at:new Date().toISOString()};
-    await db.query(`INSERT INTO wealth_stock_advisor_research_sources(run_id,ticker,source_type,title,url,publisher,published_at,retrieved_at,excerpt,evidence,verification_status)
-    VALUES(NULL,$1,'corporate_announcement',$2,$3,'NSE',$4::timestamptz,now(),$5,$6::jsonb,'unverified')
-    ON CONFLICT(ticker,url) WHERE run_id IS NULL DO UPDATE SET title=EXCLUDED.title,published_at=EXCLUDED.published_at,retrieved_at=now(),excerpt=EXCLUDED.excerpt,evidence=EXCLUDED.evidence,verification_status='unverified'`,
-    [instrument.symbol,title.slice(0,500),url,published,clean(description).slice(0,1800),JSON.stringify(evidence)]);
-    results.push({ticker:instrument.symbol,status:'stored_unverified',title:title.slice(0,160)});
-   }
-  }catch(error){results.push({ticker:instrument.symbol,status:'feed_error',error:String(error?.message||error).slice(0,160)})}
- }
- return results;
-}
-
 const TEJHQ_BASE='https://api.tejhq.dev/v1';
 function technicalSnapshot(rows){
  const closes=rows.map(x=>Number(x.close)).filter(x=>Number.isFinite(x)&&x>0);
@@ -123,8 +77,14 @@ export async function runStockAdvisorDataCollection(db){
   summary.instruments=instruments.length;
   const funds=instruments.filter(i=>i.asset_class==='indian_mutual_fund');
   const equities=instruments.filter(i=>i.asset_class==='indian_equity');
-  let feeds=[];
-  if(equities.length){try{feeds=await nseFeeds();summary.feeds=feeds.length}catch(e){summary.results.push({provider:'NSE feed discovery',status:'failed',error:String(e?.message||e).slice(0,180)})}}
+  if(equities.length){
+   const news=await collectNseNewsBatch({instruments:equities,db});
+   summary.feeds=news.feeds_checked;
+   summary.announcements=news.stored;
+   summary.results.push({provider:news.provider,status:news.status,feeds_checked:news.feeds_checked,stored:news.stored,errors:news.errors});
+   summary.results.push(...news.results);
+   if(news.status==='unavailable')summary.failed++;
+  }
   for(const instrument of funds){
    try{const r=await collectMf({instrument,runId:run.id,db});summary.results.push(r);if(r.status==='updated')summary.nav_updated++;else summary.skipped++}
    catch(e){summary.failed++;summary.results.push({ticker:instrument.symbol,status:'failed',error:String(e?.message||e).slice(0,180)})}
