@@ -1237,13 +1237,13 @@ b.pj-medium{color:#f5c26b}
 .pd-rewards.choose .pd-rewards-head{color:#f5c26b}
 .pd-choose-hint{margin:2px 0 8px;color:#e8d29a;font-size:13px;line-height:1.5}
 .pd-yellow{color:#f5c26b;font-weight:600}
-.act-tag.reward.need{background:#3a2e0e;color:#f5c26b;border:1px solid #8a6d1f}
 .of-map{margin-top:10px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#0f1a2c;display:flex;flex-direction:column;gap:8px}
-.of-map.need{border-color:#8a6d1f;background:#2a2412}
 .of-map-head{font-weight:700;font-size:13px}
-.of-map.need .of-map-head{color:#f5c26b}
 .of-map-actions{display:flex;justify-content:flex-end}
 
+.act-row.inactive{opacity:.55}
+.act-row.inactive .act-amt{text-decoration:line-through}
+.act-tag.inactive{color:#c8d3e6;border-color:#4a5a73;background:#1b2638}
 /* Cashback: the account that receives it */
 .pd-recv,.of-recv{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:4px 0 8px 44px;color:var(--muted);font-size:12px}
 .pd-recv select,.of-recv select{min-height:36px;max-width:100%;font-size:13px}
@@ -1294,3 +1294,114 @@ b.pj-medium{color:#f5c26b}
 /* interest sheet: fixed deposit (2026-11-14) */
 .in-row3{grid-template-columns:repeat(3,minmax(0,1fr))}
 @media (max-width:620px){.in-row3{grid-template-columns:1fr 1fr}.in-row3>.ofs-f:first-child{grid-column:1/-1}}
+
+
+/* Stock Advisor: persisted agent conversation and run history */
+.advisor-history,.advisor-transcript{grid-column:1/-1}
+.advisor-run-list{display:grid;gap:7px;max-height:320px;overflow:auto}
+.advisor-run-item{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:11px 12px;border:1px solid #2b3c55;border-radius:11px;background:#0d1929;color:var(--text);text-align:left}
+.advisor-run-item.active{border-color:#63cda4;background:#142c2c}
+.advisor-run-item>span:first-child{display:grid;gap:4px;min-width:0}
+.advisor-run-item b{font-size:12px;font-weight:700}
+.advisor-run-item small{font-size:10px;color:var(--muted);text-transform:capitalize}
+.advisor-run-arrow{font-size:21px;color:#91a4bd}
+.advisor-chat{display:grid;gap:10px}
+.advisor-message{min-width:0;padding:12px;border:1px solid #30435d;border-radius:13px;background:#0d1929}
+.advisor-message:nth-child(even){background:#142238}
+.advisor-message-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.advisor-message-head b{font-size:12px;color:#a9c8ee}
+.advisor-message-head span{font-size:10px;color:#91a4bd;white-space:nowrap}
+.advisor-message>p{margin:9px 0;color:#d4deeb;font-size:13px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
+.advisor-message>small{display:block;color:#8094ae;font-size:10px;text-align:right}
+.advisor-message-system{border-style:dashed;background:#101b2b}
+.advisor-message-system .advisor-message-head b{color:#e2c98b}
+.advisor-decision-detail{border-top:1px solid #2b3c55;margin-top:10px;padding-top:9px}
+.advisor-decision-detail b{font-size:11px;color:#a9c8ee}
+.advisor-decision-detail p{margin:5px 0 0;font-size:12px;line-height:1.55;color:#c3d0e1;white-space:pre-wrap;overflow-wrap:anywhere}
+@media(min-width:701px){.advisor-history{grid-column:1/-1}.advisor-transcript{grid-column:1/-1}.advisor-chat{max-width:100%}}
+@media(max-width:700px){.advisor-run-list{max-height:260px}.advisor-message{padding:11px}.advisor-message>p{font-size:12px}}
+
+
+/* Stock Advisor intro chat action: clear and thumb-friendly on mobile */
+.advisor-intro-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:18px}
+.advisor-chat-cta{display:flex;align-items:center;justify-content:center;gap:9px;min-height:54px;padding:12px 17px;border-radius:14px;font-weight:750}
+.advisor-chat-cta>span:first-child{font-size:20px;line-height:1}
+.advisor-chat-cta-hint{font-size:11px;font-weight:500;opacity:.82}
+.advisor-reload{min-height:48px}
+#advisorTranscript{scroll-margin-top:22px}
+.advisor-transcript-highlight{outline:2px solid #63cda4;outline-offset:3px;transition:outline-color .25s}
+@media(max-width:520px){
+ .advisor-intro-actions{display:grid;grid-template-columns:1fr;align-items:stretch}
+ .advisor-chat-cta{width:100%;min-height:58px;flex-wrap:wrap}
+ .advisor-reload{width:100%}
+}
+
+/* Stock Advisor chat-first layout */
+.advisor-tabs{display:flex;gap:6px;padding:5px;background:#0b1726;border:1px solid var(--line);border-radius:14px;margin:12px 0}
+.advisor-tabs button{flex:1;min-height:43px;border:0;border-radius:10px;background:transparent;color:var(--muted);font-weight:750}
+.advisor-tabs button.active{background:#1b3550;color:#eaf3ff;box-shadow:inset 0 0 0 1px #3c6284}
+.advisor-tabs button span{margin-left:5px;font-size:11px}
+.advisor-history-panel{padding:14px;border:1px solid var(--line);border-radius:16px;background:var(--panel,#101b2b);margin-bottom:12px}
+.advisor-history-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.advisor-history-controls label{font-size:12px;font-weight:750}
+.advisor-history-controls input{min-height:40px;padding:7px 10px;border:1px solid #3a4b62;border-radius:9px;background:#0d1929;color:var(--text)}
+.advisor-history-controls span{margin-left:auto;color:var(--muted);font-size:11px}
+.advisor-run-heading{display:grid;gap:4px;padding:5px 2px 12px}
+.advisor-run-heading b{font-size:14px}
+.advisor-run-heading small{font-size:11px;color:var(--muted)}
+.advisor-wa-chat{display:flex;flex-direction:column;gap:12px;padding:10px 0}
+.advisor-wa-row{display:flex;align-items:flex-start;gap:8px;max-width:100%}
+.advisor-wa-avatar{flex:0 0 30px;width:30px;height:30px;display:grid;place-items:center;border-radius:50%;background:#284c69;color:#e8f4ff;font-weight:800;font-size:12px}
+.advisor-wa-bubble{min-width:0;max-width:min(88%,680px);padding:10px 12px;border:1px solid #2c4358;border-radius:4px 14px 14px 14px;background:#12283a}
+.advisor-wa-row:nth-child(even) .advisor-wa-bubble{background:#173328;border-color:#315342;border-radius:4px 14px 14px 14px}
+.advisor-wa-row.system .advisor-wa-bubble{background:#252b35;border-style:dashed}
+.advisor-wa-speaker{font-size:11px;font-weight:800;color:#8fd7c0;margin-bottom:5px}
+.advisor-wa-bubble p{margin:0;color:#e3edf5;font-size:13px;line-height:1.58;white-space:pre-wrap;overflow-wrap:anywhere}
+.advisor-wa-meta{display:flex;justify-content:flex-end;gap:9px;margin-top:7px;color:#91a6b5;font-size:9px}
+.advisor-wa-meta time{font-variant-numeric:tabular-nums}
+.advisor-transcript{background:linear-gradient(180deg,#0d1c28,#10231f)}
+@media(max-width:600px){.advisor-wa-bubble{max-width:calc(100vw - 86px)}.advisor-history-controls{align-items:stretch}.advisor-history-controls input{flex:1}.advisor-history-controls span{width:100%;margin-left:0}}
+
+
+/* Advisor evidence cards: keep every structured Bull/Bear argument readable */
+.advisor-bullbear-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.advisor-bullbear-card{min-width:0;padding:15px;border:1px solid #30465b;border-radius:14px;background:#101e2d}
+.advisor-bullbear-card.bull{border-left:3px solid #58d2a3}
+.advisor-bullbear-card.bear{border-left:3px solid #e58d8d}
+.advisor-bullbear-side{font-size:10px;font-weight:850;letter-spacing:1px}
+.advisor-bullbear-card.bull .advisor-bullbear-side{color:#6fe0b5}
+.advisor-bullbear-card.bear .advisor-bullbear-side{color:#ffaaaa}
+.advisor-bullbear-card>p{white-space:pre-wrap;overflow-wrap:anywhere;color:#d7e2ef;font-size:13px;line-height:1.6}
+.advisor-bullbear-card ul{padding-left:19px;color:#bdcddd;font-size:12px;line-height:1.6}
+.advisor-bullbear-card details{margin-top:9px;padding:9px 10px;border-radius:9px;background:#0b1724}
+.advisor-bullbear-card summary{cursor:pointer;color:#b7d5d0;font-size:12px;font-weight:700}
+.advisor-bullbear-card pre{white-space:pre-wrap;overflow-wrap:anywhere;color:#b8c9da;font-size:11px;line-height:1.5}
+.advisor-bullbear-card>small{display:block;margin-top:9px;letter-spacing:0}
+@media(max-width:680px){.advisor-bullbear-list{grid-template-columns:1fr}}
+
+/* Stock Advisor refresh: action-oriented overview and message filters */
+.advisor-chat-filters{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:12px 0 8px}
+.advisor-filter{display:grid;gap:5px;color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.08em}
+.advisor-filter select{width:100%;min-height:42px;padding:8px 10px;border:1px solid #3a4b62;border-radius:10px;background:#0d1929;color:var(--text);font-size:13px;letter-spacing:0}
+.advisor-chat-count{margin:0 0 8px;color:var(--muted);font-size:11px}
+.advisor-filter-message.hidden{display:none!important}
+.advisor-plan-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0}
+.advisor-plan-field{display:grid;gap:3px;min-width:0;padding:9px 10px;border:1px solid #2d4058;border-radius:10px;background:#0c1827}
+.advisor-plan-field small{font-size:9px;color:var(--muted);font-weight:800;letter-spacing:.07em}
+.advisor-plan-field b{font-size:13px;overflow-wrap:anywhere;color:#e8f1fc}
+.advisor-stock-card>p{white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:520px){.advisor-chat-filters{grid-template-columns:1fr 1fr;gap:7px}.advisor-plan-grid{gap:6px}.advisor-plan-field{padding:8px}.advisor-plan-field b{font-size:12px}}
+
+/* Per-account Auto Research controls */
+.advisor-auto-toggle,.advisor-auto-stock{display:flex;align-items:center;gap:11px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#0d1929}
+.advisor-auto-toggle{margin:12px 0}
+.advisor-auto-toggle input,.advisor-auto-stock input{width:18px;height:18px;accent-color:#54c9a1;flex:0 0 auto}
+.advisor-auto-toggle span,.advisor-auto-stock span{display:grid;gap:3px}
+.advisor-auto-toggle small,.advisor-auto-stock small{color:var(--muted);font-size:11px}
+.advisor-auto-label{display:block;margin:12px 0 6px;font-size:12px;color:var(--muted)}
+#advisorAutoMode{width:100%;min-height:42px;padding:8px 10px;border:1px solid #3a4b62;border-radius:9px;background:#0d1929;color:var(--text)}
+.advisor-auto-stock-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.advisor-auto-stock{font-size:12px;min-width:0}
+.advisor-auto-stock span{min-width:0}
+.advisor-auto-stock b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:560px){.advisor-auto-stock-list{grid-template-columns:1fr}}

@@ -145,12 +145,12 @@ function ofAutoTitle(f, programs) {
 // ---- the form model -------------------------------------------------------------------------------------------------------
 const ofBlank = accountId => ({ id: '', accountId: accountId || '', title: '', preset: '', rewardUnit: 'cashback', benefitType: 'percent', benefitValue: '', blockAmount: '', maxBenefit: '', programId: '',
   merchants: [], paymentMode: 'any', minSpend: '', maxSpend: '', weekdays: [], validFrom: '', validTo: '', frequency: 'unlimited', maxUses: '', period: 'none', periodMaxUses: '',
-  periodMaxBenefit: '', cycleDay: '', applyMode: 'auto', couponCode: '', exclusiveGroup: '', receiveAccountId: '', verifyStatus: 'to_verify', sourceUrl: '', notes: '', lastCheckedOn: '', active: true });
+  periodMaxBenefit: '', cycleDay: '', applyMode: 'auto', couponCode: '', exclusiveGroup: '', receiveAccountId: '', creditTiming: 'now', verifyStatus: 'to_verify', sourceUrl: '', notes: '', lastCheckedOn: '', active: true });
 const ofFromRow = o => ({ id: o.id, accountId: o.account_id, title: o.title, preset: o.preset || '', rewardUnit: o.reward_unit, benefitType: o.benefit_type, benefitValue: o.benefit_value,
   blockAmount: o.block_amount ?? '', maxBenefit: o.max_benefit ?? '', programId: o.program_id || '', merchants: [...(o.merchants || [])], paymentMode: o.payment_mode, minSpend: o.min_spend ?? '',
   maxSpend: o.max_spend ?? '', weekdays: [...(o.weekdays || [])], validFrom: o.valid_from || '', validTo: o.valid_to || '', frequency: o.frequency, maxUses: o.max_uses ?? '', period: o.period,
   periodMaxUses: o.period_max_uses ?? '', periodMaxBenefit: o.period_max_benefit ?? '', cycleDay: o.cycle_day ?? '', applyMode: o.apply_mode || 'auto', couponCode: o.coupon_code || '',
-  exclusiveGroup: o.exclusive_group || '', receiveAccountId: o.receive_account_id || '', verifyStatus: o.verify_status, sourceUrl: o.source_url || '', notes: o.notes || '', lastCheckedOn: o.last_checked_on || '', active: o.active });
+  exclusiveGroup: o.exclusive_group || '', receiveAccountId: o.receive_account_id || '', creditTiming: o.credit_timing || 'now', verifyStatus: o.verify_status, sourceUrl: o.source_url || '', notes: o.notes || '', lastCheckedOn: o.last_checked_on || '', active: o.active });
 // form -> the snake_case row the sentence / example functions read
 const ofRowOf = f => ({ reward_unit: f.rewardUnit, benefit_type: f.benefitType, benefit_value: ofNum(f.benefitValue), block_amount: ofNum(f.blockAmount), max_benefit: ofNum(f.maxBenefit),
   program_id: f.programId || null, merchants: f.merchants, payment_mode: f.paymentMode, min_spend: ofNum(f.minSpend), max_spend: ofNum(f.maxSpend), weekdays: f.weekdays,
@@ -246,6 +246,8 @@ function ofSecGets() {
   h += '<div class="ofs-f"><span>Reward</span>' + ofSeg('rewardGroup', g, [['cash', 'Cashback'], ['points', 'Points'], ['off', 'Discount']]) + '</div>';
   if (g === 'cash') h += ofField('Cashback is received in', '<select data-of="receiveAccountId"><option value="">The same account (default)</option>' + s.data.accounts.map(a => '<option value="' + esc(a.id) + '"' + (a.id === f.receiveAccountId ? ' selected' : '') + '>' + esc(ofAcct(a)) + '</option>').join('') + '</select>')
     + '<p class="ofs-hint">Cashback is often credited to a different account than the card that earned it. You can also change it on each payment.</p>';
+  if (g === 'cash') h += ofField('When the bank credits it', '<select data-of="creditTiming"><option value="now"' + (f.creditTiming !== 'settle' ? ' selected' : '') + '>Right away: added to the history when you accept</option><option value="settle"' + (f.creditTiming === 'settle' ? ' selected' : '') + '>After settlement: I mark it received when it lands</option></select>')
+    + '<p class="ofs-hint">Some banks credit cashback only after the statement is settled. Then nothing is added until you tap Mark received.</p>';
   if (!cash) {
     h += ofField('Reward program (where the points are kept)', '<select data-of="programId" data-of-struct><option value="">Choose…</option>' + progs.map(p => '<option value="' + esc(p.id) + '"' + (p.id === f.programId ? ' selected' : '') + '>' + esc(p.name + ' (' + p.unit + ')') + '</option>').join('') + '<option value="__new__">+ New program…</option></select>');
     if (s.newProg) h += ofNewProgramHtml();
@@ -512,6 +514,7 @@ function ofPendOfferLabel(m, choose) {
   if (m.usesLeftPeriod != null) why.push(m.usesLeftPeriod + ' use' + (m.usesLeftPeriod === 1 ? '' : 's') + ' left this period');
   if (m.benefitLeftPeriod != null) why.push((m.kind === 'points' ? ofUn(m.benefitLeftPeriod) : ofRs(m.benefitLeftPeriod)) + ' left this period');
   if (m.oneTime) why.push('one-time offer');
+  if (m.creditTiming === 'settle') why.push('credited after settlement');
   if (m.couponCode) why.push('code ' + m.couponCode);
   if (m.verifyStatus !== 'verified') why.push('to verify');
   return '<label class="pd-offer' + (m.shadowed ? ' dim' : '') + '"><input type="checkbox" class="rm-switch" data-of-apply="' + esc(m.id) + '"' + (on ? ' checked' : '') + (m.shadowed ? ' disabled' : '') + ' aria-label="Apply ' + esc(m.title) + '">'
@@ -543,8 +546,8 @@ async function loadPendingTx() {
 }
 function ofAcceptMessage(r) {
   const parts = ['Accepted. Balance ' + esc(money(r.before)) + ' → <b>' + esc(money(r.after)) + '</b>.'];
-  for (const a of r.applied || []) parts.push('<span class="pd-got">' + esc(ofEarnText({ ...a, rewardUnit: a.unit, kind: a.kind })) + '</span> from ' + esc(a.title) + (a.kind === 'points' ? ' (added to points)' : (r.cashbackPosted || []).some(p => p.earningId === a.id) ? ' (added to history as Cashback)' : ' (expected)'));
-  if (r.needsChoice) parts.push('<span class="pd-yellow">' + (r.offers || []).filter(m => !m.shadowed).length + ' rewards match this payment and none was chosen. Find it in Transactions (yellow) and map the ones you want.</span>');
+  for (const a of r.applied || []) parts.push('<span class="pd-got">' + esc(ofEarnText({ ...a, rewardUnit: a.unit, kind: a.kind })) + '</span> from ' + esc(a.title) + (a.kind === 'points' ? ' (added to points)' : (r.cashbackPosted || []).some(p => p.earningId === a.id) ? ' (added to history as Cashback)' : a.creditTiming === 'settle' ? ' (credited after settlement: tap Mark received when it lands)' : ' (expected)'));
+  if (r.needsChoice) parts.push('<span class="pd-yellow">' + (r.offers || []).filter(m => !m.shadowed).length + ' rewards match this payment and none was chosen. Open it in Transactions to map the ones you want.</span>');
   else if (!(r.applied || []).length) parts.push((r.offers || []).length ? 'No offer applied.' : 'No offer matched this payment.');
   if (r.offerError) parts.push('<span class="error">Offers could not be applied: ' + esc(r.offerError) + '</span>');
   return parts.join(' ');
@@ -555,7 +558,7 @@ document.addEventListener('click', async e => {
   const ids = accept && card ? [...card.querySelectorAll('[data-of-apply]:checked')].map(c => c.dataset.ofApply) : [];
   const receive = {};
   if (accept && card) for (const id of ids) { const sel = card.querySelector('[data-of-recv="' + id + '"]'); if (sel && sel.value) receive[id] = sel.value; }
-  if (accept && !confirm('Accept this payment?\n\nThe balance of its account will be updated' + (ids.length ? ' and ' + ids.length + ' offer' + (ids.length === 1 ? '' : 's') + ' applied.' : '.') + (!ids.length && card && card.querySelector('.pd-rewards.choose') ? '\n\nSeveral rewards match and none is ticked, so none is mapped now. The payment stays yellow in Transactions until you map them.' : ''))) return;
+  if (accept && !confirm('Accept this payment?\n\nThe balance of its account will be updated' + (ids.length ? ' and ' + ids.length + ' offer' + (ids.length === 1 ? '' : 's') + ' applied.' : '.') + (!ids.length && card && card.querySelector('.pd-rewards.choose') ? '\n\nSeveral rewards match and none is ticked, so none is mapped now. You can map them later from the payment in Transactions.' : ''))) return;
   a.disabled = true;
   try {
     const r = await api('/api/transaction-accept', { method: 'POST', body: JSON.stringify({ action: accept ? 'accept' : 'dismiss', transactionId: id, applyOfferIds: accept ? ids : undefined, receive: accept ? receive : undefined }) });
@@ -582,7 +585,7 @@ function ofEarnRowHtml(e, received) {
   const sug = e.suggest ? '<div class="earn-suggest"><span aria-hidden="true">★</span> A credit of <b>' + esc(ofRs(e.suggest.amount)) + '</b> on ' + esc(ofDay(e.suggest.date)) + ' (' + esc(e.suggest.category || 'credit') + ') looks like this one.</div>' : '';
   const acts = received ? '<button type="button" class="ghost" data-earn-reopen="' + esc(e.id) + '">Reopen</button>'
     : (e.suggest ? '<button type="button" class="primary" data-earn-link="' + esc(e.id) + '" data-earn-credit="' + esc(e.suggest.transactionId) + '">Link &amp; mark received</button>' : '<button type="button" class="ghost" data-earn-receive="' + esc(e.id) + '">Mark received</button>')
-      + '<button type="button" class="ghost danger" data-earn-remove="' + esc(e.id) + '">Remove</button>';
+      + '<button type="button" class="ghost danger" data-earn-remove="' + esc(e.id) + '"' + (e.credited_transaction_id ? ' data-earn-posted="1"' : '') + '>Remove</button>';
   return '<article class="earn-row"><div class="earn-main"><b>' + esc(what) + ' <em>' + esc(e.title || 'Offer') + '</em></b><small>' + esc(pay) + '</small>' + (received ? '<small class="earn-ok">Received' + (e.credited_on ? ' ' + esc(ofDay(e.credited_on)) : '') + (e.credited_transaction_id ? ' · linked to the credit' : '') + '</small>' : '') + sug + '</div><div class="earn-actions">' + acts + '</div></article>';
 }
 function rewardsEarningsHtml(d) {
@@ -637,7 +640,7 @@ document.addEventListener('click', async e => {
     if (t.dataset.earnLink) await ofEarnAction({ action: 'received', earningId: t.dataset.earnLink, creditedTransactionId: t.dataset.earnCredit });
     else if (t.dataset.earnReceive) await ofEarnAction({ action: 'received', earningId: t.dataset.earnReceive });
     else if (t.dataset.earnReopen) await ofEarnAction({ action: 'expected', earningId: t.dataset.earnReopen });
-    else if (t.dataset.earnRemove) { if (!confirm('Remove this reward?\n\nIt stops counting toward the offer limits. The payment itself is not changed.')) { t.disabled = false; return; } await ofEarnAction({ action: 'cancel', earningId: t.dataset.earnRemove }); }
+    else if (t.dataset.earnRemove) { if (!confirm(t.dataset.earnPosted ? 'Remove this reward?\n\nThe Cashback entry it added to your history becomes inactive and the account balance is put back.' : 'Remove this reward?\n\nIt stops counting toward the offer limits. The payment itself is not changed.')) { t.disabled = false; return; } await ofEarnAction({ action: 'cancel', earningId: t.dataset.earnRemove }); }
     else if (t.dataset.txApplyOffers) {
       const r = await api('/api/transaction-accept', { method: 'POST', body: JSON.stringify({ action: 'apply_offers', transactionId: t.dataset.txApplyOffers }) });
       try { await loadDashboard(); } catch { }
@@ -649,15 +652,15 @@ document.addEventListener('click', async e => {
 
 // ---- Transactions rows: what an offer earned on a payment -----------------------------------------------------------------
 function rewardRowTag(x) {
-  const r = x.rewards || [], need = x.needsMapping ? '<em class="act-tag reward need" title="Two or more rewards match. Open the payment and choose which to map.">★ ' + (x.rewardChoices || []).filter(m => !m.shadowed).length + ' rewards to map</em>' : '';
-  if (!r.length && !need) return '';
-  return '<span class="of-txtags">' + need + r.map(e => '<em class="act-tag reward ' + esc(e.status) + (e.kind === 'points' ? ' pts' : '') + '" title="' + esc(e.title || 'Offer') + '">★ ' + esc(ofEarnPill(e)) + '</em>').join('') + '</span>';
+  const r = x.rewards || [];
+  if (!r.length) return '';
+  return '<span class="of-txtags">' + r.map(e => '<em class="act-tag reward ' + esc(e.status) + (e.kind === 'points' ? ' pts' : '') + '" title="' + esc(e.title || 'Offer') + '">★ ' + esc(ofEarnPill(e)) + '</em>').join('') + '</span>';
 }
 // The rewards that could still be mapped to this payment, with a tick box each: map none, one, two or many. Yellow while two or more are waiting.
 function ofMapPanel(x) {
   const c = x.rewardChoices || []; if (!c.length) return '';
   const need = !!x.needsMapping;
-  return '<div class="of-map' + (need ? ' need' : '') + '"><div class="of-map-head">' + (need ? '★ ' + c.filter(m => !m.shadowed).length + ' rewards match — choose which to map' : 'Map another reward') + '</div>'
+  return '<div class="of-map"><div class="of-map-head">' + (need ? c.filter(m => !m.shadowed).length + ' rewards match this payment: choose which to map' : 'Map another reward') + '</div>'
     + c.map(m => '<label class="pd-offer"><input type="checkbox" class="rm-switch" data-tx-map-id="' + esc(m.id) + '" aria-label="Map ' + esc(m.title) + '"><span class="pd-offer-main"><b>' + esc(m.title) + '</b><small>'
       + esc(m.shadowed ? 'Same group as “' + m.shadowed + '”: map it only if you want both' : m.apply === 'ask' ? 'Needs activation: tick only if you used it' : 'Automatic offer') + '</small></span><span class="pd-offer-amt"><b>' + esc(ofEarnText(m)) + '</b></span></label>' + (m.kind === 'cashback' ? '<label class="pd-recv">Received in <select data-tx-map-recv="' + esc(m.id) + '">' + ofRecvOptions(m.receiveAccountId, x.account_id) + '</select></label>' : '')).join('')
     + '<div class="of-map-actions"><button type="button" class="primary" data-tx-map="' + esc(x.id) + '">Map selected</button></div></div>';
@@ -669,7 +672,7 @@ function rewardRowDetail(x) {
   return '<div class="of-txdetail"><div class="of-txdetail-head">Rewards</div>' + r.map(e => '<div class="of-txline"><span><b>' + esc(e.title || 'Offer') + '</b><small>' + esc(ofEarnPill(e)) + '</small>' + (e.kind === 'cashback' ? '<label class="of-recv">Received in <select data-earn-recv="' + esc(e.id) + '">' + ofRecvOptions(e.receive_account_id, x.account_id) + '</select></label>' : '') + '</span><span class="of-txline-btns">'
     + (e.kind !== 'points' && e.status === 'expected' ? '<button type="button" class="link-btn" data-earn-receive="' + esc(e.id) + '">Mark received</button>' : '')
     + (e.status === 'received' ? '<button type="button" class="link-btn" data-earn-reopen="' + esc(e.id) + '">Reopen</button>' : '')
-    + '<button type="button" class="link-btn" data-earn-remove="' + esc(e.id) + '">Remove</button></span></div>').join('') + map + '</div>';
+    + '<button type="button" class="link-btn" data-earn-remove="' + esc(e.id) + '"' + (e.credited_transaction_id ? ' data-earn-posted="1"' : '') + '>Remove</button></span></div>').join('') + map + '</div>';
 }
 
 // Map the ticked rewards to an accepted payment: one, two or many (the owner decides; no group or "best only" rule is applied).

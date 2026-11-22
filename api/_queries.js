@@ -6,7 +6,8 @@ import { earningsForTransactions, choicesForTransactions } from './_offers.js';
 const TX_COLUMNS = `t.id,t.kind,t.category,t.description,t.amount,t.account_id,
   COALESCE(NULLIF(trim(a.account_name || ' ' || COALESCE(a.masked_identifier,'')),''),NULLIF(t.account,''),'Unassigned') AS account,
   to_char(t.occurred_on,'YYYY-MM-DD') AS occurred_on,
-  to_char(t.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_key`;
+  to_char(t.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_key,
+  (t.duplicate_of IS NOT NULL OR t.review_status = 'dismissed') AS inactive`;
 // Dates and the cursor key are formatted by Postgres: no JS Date conversion (time-zone day shifts)
 // and microsecond precision kept (rows created in the same millisecond are not skipped).
 
