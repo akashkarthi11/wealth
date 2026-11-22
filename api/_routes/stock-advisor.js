@@ -54,7 +54,7 @@ function cleanBullBearCases(input){
 function cleanMessages(input){
  if(input==null)return [];
  if(!Array.isArray(input))throw Object.assign(new Error('messages must be an array.'),{status:400});
- if(input.length>500)throw Object.assign(new Error('A run can contain at most 500 messages.'),{status:400});
+ if(input.length>5000)throw Object.assign(new Error('A run can contain at most 5000 messages.'),{status:400});
  return input.map((m,i)=>{
   if(!m||typeof m!=='object'||Array.isArray(m))throw Object.assign(new Error('Each message must be an object.'),{status:400});
   const content=String(m.content??m.text??'').trim();
