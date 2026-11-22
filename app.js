@@ -1,4 +1,4 @@
-const APP_BUILD_ID='20261122-four-round-debate';
+const APP_BUILD_ID='20261122-simple-scheduled-jobs';
 (function promptForUpdatedApp(){
   try {
     const key='wealth-ledger:app-build';
