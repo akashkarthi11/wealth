@@ -114,7 +114,6 @@ function agentArray(v){return Array.isArray(v)?v:[]}
 function agentObject(v){return v&&typeof v==='object'&&!Array.isArray(v)?v:{}}
 async function runFreeModelPilot(req,res){
  const uid=await sessionUser(req);if(!uid)return json(res,401,{error:'Sign in required'});
- const users=await sql.query('SELECT role FROM wealth_users WHERE id=$1',[uid]);if(users[0]?.role!=='admin')return json(res,403,{error:'Owner only'});
  const input=await body(req),ticker=String(input.ticker||'').trim().toUpperCase();
  if(!/^[A-Z0-9&.-]{1,20}$/.test(ticker))return json(res,400,{error:'Choose a valid Indian equity ticker from your holdings.'});
  const holdings=await sql.query("SELECT name,ticker FROM wealth_positions WHERE user_id=$1 AND category='INVESTMENT' AND record_type='EQUITY' AND currency='INR' AND upper(ticker)=upper($2) LIMIT 1",[uid,ticker]);
