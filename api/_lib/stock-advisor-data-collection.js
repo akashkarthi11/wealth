@@ -1,3 +1,5 @@
+import { collectFincruxFinancials } from './stock-advisor-fincrux.js';
+
 const NSE_RSS_INDEX='https://www.nseindia.com/static/rss-feed';
 const NSE_HOSTS=new Set(['www.nseindia.com','nsearchives.nseindia.com','nseindia.com']);
 const timeout=ms=>AbortSignal.timeout(ms);
@@ -112,7 +114,7 @@ async function collectTejHQEquity({instrument,db}){
 
 export async function runStockAdvisorDataCollection(db){
  const [run]=await db.query('INSERT INTO wealth_stock_advisor_data_collection_runs(status) VALUES(\'running\') RETURNING id');
- const summary={instruments:0,nav_updated:0,announcements:0,failed:0,skipped:0,feeds:0,results:[]};
+ const summary={instruments:0,nav_updated:0,market_data_updated:0,financials_unverified:0,announcements:0,failed:0,skipped:0,feeds:0,results:[]};
  try{
   const instruments=await db.query(`SELECT DISTINCT i.id,i.asset_class,i.symbol,i.name,i.price_source_symbol
    FROM wealth_instruments i JOIN wealth_holdings h ON h.instrument_id=i.id
@@ -131,13 +133,39 @@ export async function runStockAdvisorDataCollection(db){
    try{
     const market=await collectTejHQEquity({instrument,db});
     summary.results.push(market);
-    if(market.status==='updated')summary.market_data_updated=(summary.market_data_updated||0)+1;
+    if(market.status==='updated')summary.market_data_updated++;
    }catch(e){summary.failed++;summary.results.push({ticker:instrument.symbol,status:'market_data_failed',provider:'TejHQ',error:String(e?.message||e).slice(0,180)})}
    const rows=await collectEquityNews({instrument,runId:run.id,feeds,db});
    summary.results.push(...rows);summary.announcements+=rows.filter(x=>x.status==='stored_unverified').length;
    if(rows.some(x=>x.status==='feed_error'))summary.failed++;
   }
-  const status=summary.failed?(summary.nav_updated||summary.announcements?'partial':'failed'):'succeeded';
+  if(String(process.env.FINCRUX_API_KEY||'').trim() && equities.length){
+   const [quota]=await db.query(`SELECT count(*)::int AS used
+    FROM wealth_stock_advisor_research_sources
+    WHERE publisher='Fincrux'
+      AND retrieved_at >= (date_trunc('day',now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata')
+      AND retrieved_at < ((date_trunc('day',now() AT TIME ZONE 'Asia/Kolkata') + interval '1 day') AT TIME ZONE 'Asia/Kolkata')`);
+   const remaining=Math.max(0,5-Number(quota?.used||0));
+   if(remaining){
+    const recent=await db.query(`SELECT upper(ticker) AS ticker,max(retrieved_at) AS last_retrieved
+      FROM wealth_stock_advisor_research_sources
+      WHERE publisher='Fincrux' AND source_type='financial_statement'
+      GROUP BY upper(ticker)`);
+    const lastByTicker=new Map(recent.map(row=>[row.ticker,row.last_retrieved?Date.parse(row.last_retrieved):0]));
+    const candidates=[...equities].sort((a,b)=>(lastByTicker.get(String(a.symbol).toUpperCase())||0)-(lastByTicker.get(String(b.symbol).toUpperCase())||0));
+    for(const instrument of candidates.slice(0,remaining)){
+     const financials=await collectFincruxFinancials({instrument,db});
+     summary.results.push(financials);
+     if(financials.status==='stored_unverified')summary.financials_unverified++;
+     else if(financials.status==='failed')summary.failed++;
+     else summary.skipped++;
+    }
+   }else summary.results.push({provider:'Fincrux',status:'skipped',reason:'Five free-tier requests already reserved today (IST).'});
+  }else if(equities.length){
+   summary.results.push({provider:'Fincrux',status:'skipped',reason:'FINCRUX_API_KEY is not configured; no paid or unauthenticated request attempted.'});
+  }
+  const successful=summary.nav_updated+summary.market_data_updated+summary.financials_unverified+summary.announcements;
+  const status=summary.failed?(successful?'partial':'failed'):'succeeded';
   await db.query('UPDATE wealth_stock_advisor_data_collection_runs SET finished_at=now(),status=$2,summary=$3::jsonb WHERE id=$1',[run.id,status,JSON.stringify(summary)]);
   return {run_id:run.id,status,...summary};
  }catch(error){
