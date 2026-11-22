@@ -1650,3 +1650,27 @@ b.pj-medium{color:#f5c26b}
  .dashboard-snapshot-icon{flex-basis:28px;height:28px}
  .dashboard-snapshot-grid b{font-size:11px}
 }
+
+/* Dashboard usability polish: clearer hierarchy, readable labels and comfortable touch targets. */
+.dashboard-section-title p{font-size:12px;line-height:1.55;max-width:560px}
+.dashboard-pulse-card small,.dashboard-snapshot-grid small,.dashboard-insight-card small{font-size:10px;letter-spacing:.35px;line-height:1.45}
+.dashboard-pulse-card span,.dashboard-insight-card em{font-size:11px;line-height:1.5}
+.dashboard-snapshot-grid>article{min-height:66px}
+.dashboard-snapshot-grid b{font-size:14px}
+.dashboard-insight-card{min-height:76px}
+.dashboard-insight-card:focus-visible,.dashboard-history>summary:focus-visible{outline:2px solid #9bcaff;outline-offset:3px}
+.dashboard-history>summary{min-height:68px}
+.dashboard-history>summary b{font-size:14px}
+.dashboard-history>summary small{font-size:11px;line-height:1.45}
+.dashboard-chart-toolbar{overflow-x:auto;padding:4px 0 7px;scrollbar-width:thin}
+.dashboard-chart-toolbar .chart-range-row{min-width:max-content}
+.dashboard-main-chart .chart-head p{font-size:11px;line-height:1.5}
+@media(max-width:700px){
+ .dashboard-section-title p{font-size:11px}
+ .dashboard-pulse-card small,.dashboard-snapshot-grid small,.dashboard-insight-card small{font-size:9px}
+ .dashboard-pulse-card span,.dashboard-insight-card em{font-size:10px}
+ .dashboard-snapshot-grid>article{min-height:64px}
+ .dashboard-snapshot-grid b{font-size:13px}
+ .dashboard-insight-card{min-height:72px}
+ .dashboard-history>summary{min-height:64px}
+}
