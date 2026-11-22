@@ -98,14 +98,14 @@ export function gatedDecision(decision, actionGate) {
 export function rolePrompt(step, prior, evidence, assetType) {
   const current = DEBATE_SEQUENCE[step];
   const own = current.side;
-  const opponent = own === 'bull' ? 'bear' : 'bull';
+  const opponentSide = own === 'bull' ? 'bear' : 'bull';
   const priorText = side => {
     const m = prior.find(x => Number(x.sequence_no) === (side === 'bull' ? 0 : 1));
     return m ? extractMessageText(m.content) : 'No prior argument is available.';
   };
-  const opponentRound1 = priorText(opponent);
+  const opponentRound1 = priorText(opponentSide);
   const ownRound1 = priorText(own);
-  const opponentLatest = [...prior].reverse().find(m => String(m.agent_key || '').startsWith(opponent));
+  const opponentLatest = [...prior].reverse().find(m => String(m.agent_key || '').startsWith(opponentSide));
   const ownLatest = [...prior].reverse().find(m => String(m.agent_key || '').startsWith(own));
   const evidenceText = JSON.stringify(evidence);
   const assetRule = assetType === 'gold_etf' || assetType === 'silver_etf' || assetType === 'other_etf'
@@ -365,6 +365,19 @@ async function handleWorker(req,res) {
   }
 }
 
+async function resumeDebate(req,res) {
+  const uid=await sessionUser(req); if(!uid) return json(res,401,{error:'Sign in required'});
+  const input=await body(req),runId=String(input.run_id||input.runId||'').trim();
+  if(!/^[0-9a-f-]{36}$/i.test(runId)) return json(res,400,{error:'A valid run_id is required.'});
+  const [run]=await sql.query('SELECT id,status,next_step FROM wealth_stock_advisor_runs WHERE id=$1 AND user_id=$2',[runId,uid]);
+  if(!run) return json(res,404,{error:'Debate run not found.'});
+  if(run.status==='completed') return json(res,200,{ok:true,status:'completed'});
+  await sql.query("UPDATE wealth_stock_advisor_run_jobs SET status='pending',step_no=$2,step_attempts=0,available_at=now(),locked_at=NULL,last_error=NULL,updated_at=now() WHERE run_id=$1 AND stage='debate'",[runId,Number(run.next_step||0)]);
+  await sql.query("UPDATE wealth_stock_advisor_runs SET status='running',last_error=NULL,updated_at=now() WHERE id=$1",[runId]);
+  scheduleWorker(req,runId);
+  return json(res,202,{ok:true,resumed:true,run_id:runId,next_step:Number(run.next_step||0)});
+}
+
 async function getProgress(req,res) {
   const uid=await sessionUser(req); if(!uid) return json(res,401,{error:'Sign in required'});
   const url=new URL(req.url,'https://wealth.local'),runId=String(url.searchParams.get('run_id')||'').trim();
@@ -386,6 +399,7 @@ export default async function handler(req,res) {
     if (!sql) return json(res,503,{error:'Database is not configured.'});
     if (req.route==='stock-advisor/debate/start' || req.route==='stock-advisor/free-run') return await startDebate(req,res);
     if (req.route==='stock-advisor/debate/worker' && req.method==='POST') return await handleWorker(req,res);
+    if (req.route==='stock-advisor/debate/resume' && req.method==='POST') return await resumeDebate(req,res);
     if (req.route==='stock-advisor/debate/progress' && req.method==='GET') return await getProgress(req,res);
     return json(res,405,{error:'Method not allowed'});
   } catch(error) {

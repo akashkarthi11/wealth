@@ -112,7 +112,7 @@ test('frontend API query selects summaries and never selects full message conten
   assert.doesNotMatch(route,/SELECT[^;]*content[^;]*FROM wealth_stock_advisor_messages/);
 });
 test('normal debate cards render summary text, not message content',()=>{
-  const fn=app.slice(app.indexOf('function advisorMessageHtml'),app.indexOf('function advisorLegacyMessages'));
+  const fn=app.slice(app.indexOf('function advisorMessageHtml'),app.indexOf('function advisorEvidenceDetails'));
   assert.match(fn,/m\.summary/);
   assert.doesNotMatch(fn,/m\.content|m\.message\?\?|m\.text\?\?/);
 });
@@ -138,6 +138,20 @@ test('CIO summary contains decision, reason, risk, missing evidence and change c
   assert.match(debate,/Biggest risk:/);
   assert.match(debate,/Missing evidence:/);
   assert.match(debate,/This decision changes if:/);
+});
+test('ETF evidence gate uses fund-specific metrics, not operating-company statements',()=>{
+  assert.match(debate,/\['market_price','expense_ratio','tracking_error','liquidity_spread','nav_premium_discount','underlying_exposure','commodity_drivers'\]/);
+  assert.match(debate,/Do NOT discuss operating-company revenue, management, mining operations or company debt/);
+});
+test('manual resume route continues from the saved step',()=>{
+  assert.match(debate,/async function resumeDebate/);
+  assert.match(debate,/step_no=\$2,step_attempts=0,available_at=now\(\)/);
+  assert.match(app,/data-advisor-resume/);
+});
+test('debate UI has expandable round cards and no legacy raw-message renderer',()=>{
+  assert.match(app,/advisor-round-card/);
+  assert.match(app,/advisor-message-summary/);
+  assert.doesNotMatch(app,/advisorStructuredContentHtml|advisorLegacyMessages/);
 });
 test('asset prompts prohibit operating-company analysis for ETFs',()=>{
   assert.match(debate,/Do NOT discuss operating-company revenue, management, mining operations or company debt/);

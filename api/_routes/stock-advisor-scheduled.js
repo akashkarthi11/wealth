@@ -36,10 +36,10 @@ export default async function handler(req,res){
   for(const user of users){
    const selected=Array.isArray(user.selected_tickers)?user.selected_tickers:(typeof user.selected_tickers==='string'?JSON.parse(user.selected_tickers||'[]'):[]);
    const rows=user.mode==='manual'&&selected.length
-    ?await sql.query("SELECT DISTINCT upper(ticker) AS ticker FROM wealth_positions WHERE user_id=$1 AND category='INVESTMENT' AND record_type='EQUITY' AND currency='INR' AND upper(ticker)=ANY($2::text[]) ORDER BY 1",[user.user_id,selected])
+    ?await sql.query("SELECT DISTINCT upper(ticker) AS ticker FROM wealth_positions WHERE user_id=$1 AND category='INVESTMENT' AND record_type IN ('EQUITY','ETF') AND currency='INR' AND upper(ticker)=ANY($2::text[]) ORDER BY 1",[user.user_id,selected])
     :await sql.query("SELECT DISTINCT upper(ticker) AS ticker FROM wealth_positions WHERE user_id=$1 AND category='INVESTMENT' AND record_type IN ('EQUITY','ETF') AND currency='INR' AND ticker IS NOT NULL ORDER BY 1",[user.user_id]);
    const tickers=rows.map(r=>String(r.ticker||'').trim().toUpperCase()).filter(Boolean).slice(0,30);
-   if(!tickers.length){await sql.query("UPDATE wealth_stock_advisor_settings SET last_run_at=now(),next_run_at=$2,last_status='skipped',last_error='No eligible Indian equity holdings were found.',updated_at=now() WHERE user_id=$1",[user.user_id,nextRunAt()]);summaries.push({user_id:user.user_id,status:'skipped',reason:'No eligible Indian equity holdings'});continue;}
+   if(!tickers.length){await sql.query("UPDATE wealth_stock_advisor_settings SET last_run_at=now(),next_run_at=$2,last_status='skipped',last_error='No eligible Indian equity or ETF holdings were found.',updated_at=now() WHERE user_id=$1",[user.user_id,nextRunAt()]);summaries.push({user_id:user.user_id,status:'skipped',reason:'No eligible Indian equity or ETF holdings'});continue;}
    await sql.query("UPDATE wealth_stock_advisor_settings SET last_run_at=now(),next_run_at=$2,last_status='running',last_error=NULL,updated_at=now() WHERE user_id=$1",[user.user_id,nextRunAt()]);
    const results=await mapLimit(tickers,3,ticker=>runTicker(user.user_id,Number(user.session_version||1),ticker));
    const completed=results.filter(r=>r.status==='completed').length,queued=results.filter(r=>r.status==='queued').length,failed=results.filter(r=>r.status==='failed').length;
