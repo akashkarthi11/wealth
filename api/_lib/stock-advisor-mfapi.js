@@ -34,12 +34,12 @@ export async function collectMutualFundEvidence({ticker,name,runId,db,schemeCode
    const nav=Number(row?.nav),parts=String(row?.date||'').split('-');
    const observed=parts.length===3?new Date(Date.UTC(Number(parts[2]),Number(parts[1])-1,Number(parts[0]))):null;
    return {nav,date:observed&&!Number.isNaN(observed.getTime())?observed.toISOString():null};
-  }).filter(x=>Number.isFinite(x.nav)&&x.nav>0&&x.date).sort((a,b)=>Date.parse(b.date)-Date.parse(a.date)).slice(0,5);
+  }).filter(x=>Number.isFinite(x.nav)&&x.nav>0&&x.date).sort((a,b)=>Date.parse(b.date)-Date.parse(a.date)).slice(0,260);
   if(!navRows.length)throw new Error('MFAPI returned no valid dated NAV observations.');
   result.scheme={scheme_code:scheme.schemeCode,scheme_name:clean(payload?.meta?.scheme_name)||scheme.schemeName,fund_house:clean(payload?.meta?.fund_house)||null,scheme_type:clean(payload?.meta?.scheme_type)||null,scheme_category:clean(payload?.meta?.scheme_category)||null,resolved_by:scheme.resolvedBy};
   result.observations=navRows.length;
   const latest=navRows[0];
-  const evidence={provider:'MFAPI.in',scheme_code:scheme.schemeCode,scheme_name:result.scheme.scheme_name,fund_house:result.scheme.fund_house,scheme_type:result.scheme.scheme_type,scheme_category:result.scheme.scheme_category,nav_observations:navRows,currency:'INR',provider_retrieved_at:result.fetched_at,verification_basis:'Valid dated NAV observations returned by MFAPI API; scheme identity resolved by code or name match.'};
+  const evidence={provider:'MFAPI.in',scheme_code:scheme.schemeCode,scheme_name:result.scheme.scheme_name,fund_house:result.scheme.fund_house,scheme_type:result.scheme.scheme_type,scheme_category:result.scheme.scheme_category,nav_observations:navRows.slice(0,5),history_observations:navRows.length,first_date:navRows[navRows.length-1]?.date||null,last_date:latest.date,currency:'INR',provider_retrieved_at:result.fetched_at,verification_basis:'Valid dated NAV observations returned by MFAPI API; scheme identity resolved by code or name match.'};
   const [instrument] = instrumentId
     ? [{id:instrumentId}]
     : await db.query('SELECT id FROM wealth_instruments WHERE upper(symbol)=upper($1) LIMIT 1',[ticker]);
