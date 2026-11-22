@@ -3,6 +3,7 @@ import { waitUntil } from '@vercel/functions';
 import { createHash } from 'node:crypto';
 import { collectMutualFundEvidence } from './stock-advisor-mfapi.js';
 import { collectNseNews } from './stock-advisor-live-evidence.js';
+import { collectTejHqEquityEvidence } from './stock-advisor-tejhq.js';
 
 export const FREE_AI_MODEL = 'nvidia/nemotron-3.5-lightning-free';
 export const DEBATE_SEQUENCE = Object.freeze([
@@ -328,7 +329,10 @@ async function processStep(req, runId) {
     if(step!==0) throw new Error('The shared evidence snapshot is missing; resume from the first research step.');
     const refreshes={};
     if(run.asset_type==='mutual_fund') refreshes.mutual_fund=await collectMutualFundEvidence({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
-    if(run.asset_type==='indian_equity'||run.asset_type==='other_equity') refreshes.nse_news=await collectNseNews({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
+    if(run.asset_type==='indian_equity') {
+       refreshes.tejhq=await collectTejHqEquityEvidence({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
+       refreshes.nse_news=await collectNseNews({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
+     }
     evidence=await loadEvidence(run.user_id,holdingRows[0],run.asset_type,run.id);
     evidence.provider_refreshes=refreshes;
     evidence.captured_at=new Date().toISOString();
