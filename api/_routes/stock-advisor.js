@@ -64,7 +64,8 @@ export default async function handler(req,res){
    if(!reportText&&!Array.isArray(reportJson.recommendations))return json(res,400,{error:'Provide report_text or structured recommendations.'});
    const runAt=input.run_at??input.runAt??null;
    if(runAt&&!Number.isFinite(Date.parse(runAt)))return json(res,400,{error:'run_at must be a valid ISO date.'});
-   const runKey=String(input.run_id??input.runId??randomUUID()).trim().slice(0,160);
+   const suppliedRunKey=String(input.run_id??input.runId??'').trim();
+   const runKey=(suppliedRunKey||randomUUID()).slice(0,160);
    const status=['running','completed','failed'].includes(String(input.status))?String(input.status):'completed';
    const requestedAgents=Number(input.agent_count??input.agentCount??3);
    const agentCount=Number.isInteger(requestedAgents)?Math.max(1,Math.min(12,requestedAgents)):3;
