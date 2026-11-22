@@ -1335,3 +1335,54 @@ b.pj-medium{color:#f5c26b}
  .advisor-chat-cta{width:100%;min-height:58px;flex-wrap:wrap}
  .advisor-reload{width:100%}
 }
+
+
+/* Stock Advisor: WhatsApp-like conversation, clean tabs and date-based archive */
+.advisor-tabs{display:flex;gap:8px;padding:5px;margin:14px 0 12px;border:1px solid #2b4056;border-radius:14px;background:#0c1725}
+.advisor-tabs button{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;min-height:46px;border:0;border-radius:10px;background:transparent;color:#aebed4;font-weight:700}
+.advisor-tabs button.active{background:#24405a;color:#f4f8ff;box-shadow:inset 0 0 0 1px #3d5b76}
+.advisor-tabs button b,.advisor-count{display:inline-flex;align-items:center;justify-content:center;min-width:22px;padding:3px 8px;border-radius:20px;background:#263b50;color:#cfe1f5;font-size:11px}
+.advisor-tab-panel{margin-top:12px}
+.advisor-date-filter{display:flex;flex-direction:column;gap:7px;max-width:280px;margin:14px 0;color:#b9c9dc;font-size:12px}
+.advisor-run-list{display:grid;gap:8px}
+.advisor-run-item{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:left;padding:13px 15px;border:1px solid #2b4056;border-radius:13px;background:#101e2d;color:#edf4ff}
+.advisor-run-item.active{border-color:#66cfae;background:#142d31}
+.advisor-run-copy{display:grid;gap:5px}
+.advisor-run-copy small,.advisor-run-meta small{font-size:11px;letter-spacing:0;color:#91a6bf}
+.advisor-run-meta{display:flex;align-items:center;gap:9px}
+.advisor-chat-date{text-align:center;margin:6px auto 15px;padding:6px 12px;width:max-content;max-width:100%;border-radius:20px;background:#24374a;color:#c1d0e0;font-size:11px}
+.advisor-chat{display:flex;flex-direction:column;gap:10px;padding:14px;max-height:680px;overflow:auto;border:1px solid #263b4f;border-radius:16px;background-color:#0b1b27;background-image:radial-gradient(#38506355 .7px,transparent .7px);background-size:13px 13px}
+.advisor-message{width:min(84%,680px);padding:10px 13px;border:1px solid #2c4656;border-radius:14px;background:#172c3a;box-shadow:0 3px 10px #0002}
+.advisor-message-left{align-self:flex-start;border-top-left-radius:4px}
+.advisor-message-right{align-self:flex-end;background:#174238;border-color:#286653;border-top-right-radius:4px}
+.advisor-message-system{align-self:center;width:min(96%,760px);text-align:center;background:#263344;border-color:#3a4d62;border-radius:12px}
+.advisor-message-head{display:flex;justify-content:space-between;align-items:center;gap:12px;color:#8fe0c0;font-size:11px}
+.advisor-message-right .advisor-message-head{color:#a7e7ce}
+.advisor-message-head span{color:#9aadc0;font-size:10px;white-space:nowrap}
+.advisor-message p{white-space:pre-wrap;overflow-wrap:anywhere;margin:7px 0 4px;color:#edf4fa;line-height:1.55;font-size:13px}
+.advisor-message>small{display:block;text-align:right;color:#8ca5b7;font-size:10px;letter-spacing:0}
+.advisor-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0}
+.advisor-kpi{padding:15px;border:1px solid #2b4056;border-radius:14px;background:#132238}
+.advisor-kpi b{display:block;font-size:30px;margin:6px 0;color:#f3f7ff}
+.advisor-kpi span{font-size:10px;color:#8fa4bd}
+.advisor-case-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.advisor-case{padding:13px;border:1px solid #34475c;border-radius:13px;background:#101d2c}
+.advisor-case-bull{border-left:3px solid #54c89d}
+.advisor-case-bear{border-left:3px solid #e08a8a}
+.advisor-case-side{font-size:10px;font-weight:800;letter-spacing:1px}
+.advisor-case-bull .advisor-case-side{color:#72dfb3}
+.advisor-case-bear .advisor-case-side{color:#ffaaaa}
+.advisor-case p{font-size:12px;line-height:1.55;color:#c6d3e2;white-space:pre-wrap}
+.advisor-empty{padding:14px;border:1px dashed #40546b;border-radius:12px}
+@media(max-width:650px){
+ .advisor-tabs{position:sticky;top:5px;z-index:3}
+ .advisor-chat{padding:9px;max-height:72vh}
+ .advisor-message{width:92%;padding:9px 11px}
+ .advisor-kpis{gap:7px}
+ .advisor-kpi{padding:11px 9px}
+ .advisor-kpi b{font-size:25px}
+ .advisor-kpi span{font-size:9px}
+ .advisor-case-list{grid-template-columns:1fr}
+ .advisor-run-item{padding:12px}
+ .advisor-date-filter{max-width:none}
+}
