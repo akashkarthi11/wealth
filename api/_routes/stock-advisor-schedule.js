@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { sql, schema, json, sessionUser, body } from '../_lib.js';
 import { executeUserResearch } from '../_lib/stock-advisor-schedule-service.js';
 import {
-  SCHEDULE_TIMEZONE, DEFAULT_SCHEDULE_TIME, HOBBY_POLL_WINDOW,
+  SCHEDULE_TIMEZONE, DEFAULT_SCHEDULE_TIME, DAILY_POLL_WINDOW,
   isValidScheduleTime, nextScheduledAt, formatScheduleTime, getLocalDateTime
 } from '../_lib/stock-advisor-schedule-time.js';
 
@@ -19,8 +19,8 @@ async function loadSchedule(uid) {
     last_success_at_ist:settings.last_success_at?formatScheduleTime(new Date(settings.last_success_at),SCHEDULE_TIMEZONE):null,
     scheduler_registered:String(process.env.VERCEL_ENV||'').toLowerCase()==='production',
     scheduler_status:!settings.enabled?'disabled':String(process.env.VERCEL_ENV||'').toLowerCase()==='production'?'active':'preview_only',
-    execution_window:HOBBY_POLL_WINDOW,
-    precision_note:'Vercel Hobby checks once per day. The fixed trigger runs in the 09:48–10:47 IST window; the selected time is a due-time cutoff, not an exact-minute promise.'
+    execution_window:DAILY_POLL_WINDOW,
+    precision_note:'The current fixed Vercel Cron checks once daily in the 09:48–10:47 IST window; the selected time is a due-time cutoff, not an exact-minute promise.'
   };
 }
 async function getSchedule(req,res) {
@@ -34,7 +34,7 @@ async function putSchedule(req,res) {
   const input=await body(req);
   if(typeof input.enabled!=='boolean')return json(res,400,{error:'enabled must be true or false.'});
   const time=String(input.schedule_time??input.time??'').trim();
-  if(!isValidScheduleTime(time))return json(res,400,{error:'Choose a valid IST time no later than 09:48. Hobby Cron checks once daily in the 09:48–10:47 IST window.'});
+  if(!isValidScheduleTime(time))return json(res,400,{error:'Choose a valid IST time no later than 09:48. The current fixed Cron checks once daily in the 09:48–10:47 IST window.'});
   const [coverage]=await sql.query('SELECT mode,selected_tickers FROM wealth_stock_advisor_settings WHERE user_id=$1',[uid]);
   const currentSelected=Array.isArray(coverage?.selected_tickers)?coverage.selected_tickers:(typeof coverage?.selected_tickers==='string'?JSON.parse(coverage.selected_tickers||'[]'):[]);
   if(input.enabled && coverage?.mode==='manual' && !currentSelected.length)return json(res,400,{error:'Select at least one saved investment before enabling the schedule.'});

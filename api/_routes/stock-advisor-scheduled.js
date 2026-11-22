@@ -2,7 +2,7 @@ import { sql, json, safeEqual } from '../_lib.js';
 import { startJob, finishJob } from '../_jobs.js';
 import { runScheduledTick } from '../_lib/stock-advisor-schedule-service.js';
 
-// Fixed Vercel Cron: 04:18 UTC = 09:48 IST. Hobby executes within the scheduled hour.
+// Fixed Vercel Cron: 04:18 UTC = 09:48 IST. the current daily Cron may execute within the scheduled hour.
 // Preview deployments do not receive Vercel Cron events; Run Now remains user-authenticated for Preview testing.
 export default async function handler(req,res) {
   if(req.method!=='GET'&&req.method!=='POST')return json(res,405,{error:'Method not allowed'});
@@ -15,7 +15,7 @@ export default async function handler(req,res) {
     const failed=result.results.filter(x=>x.status==='failed'||x.status==='partial').length;
     const status=failed?(failed===result.results.length?'failed':'partial'):'succeeded';
     await finishJob(job,status,result);
-    return json(res,200,{ok:failed===0,scheduled_window:'09:48–10:47 Asia/Kolkata',timezone:'Asia/Kolkata',...result,limitations:['Vercel Hobby supports one Cron execution per day and timing within the scheduled hour.','The selected schedule time is a due-time cutoff no later than 09:48 IST; it is not an exact-minute execution promise.','Preview deployments do not receive Vercel Cron events.','Research runs are queued through the resumable debate worker; no orders or portfolio records are changed.']});
+    return json(res,200,{ok:failed===0,scheduled_window:'09:48–10:47 Asia/Kolkata',timezone:'Asia/Kolkata',...result,limitations:['The current fixed Vercel Cron is configured once per day and may execute within the scheduled hour.','The selected schedule time is a due-time cutoff no later than 09:48 IST; it is not an exact-minute execution promise.','Preview deployments do not receive Vercel Cron events.','Research runs are queued through the resumable debate worker; no orders or portfolio records are changed.']});
   } catch(error) {
     await finishJob(job,'failed',{error:String(error?.message||error).slice(0,300)});
     console.error('[stock-advisor-scheduled]',error?.message||error);

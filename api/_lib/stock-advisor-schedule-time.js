@@ -1,6 +1,6 @@
 export const DEFAULT_SCHEDULE_TIME = '09:48';
 export const SCHEDULE_TIMEZONE = 'Asia/Kolkata';
-export const HOBBY_POLL_WINDOW = '09:48–10:47 IST';
+export const DAILY_POLL_WINDOW = '09:48–10:47 IST';
 export const MAX_SCHEDULE_TIME = '09:48';
 
 function partsAt(date, timeZone) {
@@ -53,7 +53,7 @@ export function isEligibleScheduleDate(dateKey,frequency='daily') {
   return frequency==='daily' || (frequency==='weekdays' && day>=1 && day<=5);
 }
 export function nextScheduledAt(now=new Date(),scheduleTime=DEFAULT_SCHEDULE_TIME,frequency='daily',timeZone=SCHEDULE_TIMEZONE) {
-  if(!isValidScheduleTime(scheduleTime))throw new Error('Schedule time must be between 00:00 and 09:48 IST on the current Hobby plan.');
+  if(!isValidScheduleTime(scheduleTime))throw new Error('Schedule time must be between 00:00 and 09:48 IST under the current daily Cron configuration.');
   if(!['daily','weekdays'].includes(frequency))throw new Error('Frequency must be daily or weekdays.');
   const local=getLocalDateTime(now,timeZone);
   let date={year:local.year,month:local.month,day:local.day};

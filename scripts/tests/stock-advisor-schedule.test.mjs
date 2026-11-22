@@ -2,17 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  SCHEDULE_TIMEZONE, DEFAULT_SCHEDULE_TIME, HOBBY_POLL_WINDOW,
+  SCHEDULE_TIMEZONE, DEFAULT_SCHEDULE_TIME, DAILY_POLL_WINDOW,
   isValidScheduleTime, nextScheduledAt, zonedDateTimeToUtc,
   getLocalDateTime, dueScheduleDates
 } from '../../api/_lib/stock-advisor-schedule-time.js';
 
-test('schedule defaults to the existing 09:48 IST target and documents the Hobby polling window',()=>{
+test('schedule defaults to the existing 09:48 IST target and documents the daily polling window',()=>{
   assert.equal(DEFAULT_SCHEDULE_TIME,'09:48');
   assert.equal(SCHEDULE_TIMEZONE,'Asia/Kolkata');
-  assert.equal(HOBBY_POLL_WINDOW,'09:48–10:47 IST');
+  assert.equal(DAILY_POLL_WINDOW,'09:48–10:47 IST');
 });
-test('validates time format and enforces the Hobby-supported due-time cutoff',()=>{
+test('validates time format and enforces the daily-Cron-supported due-time cutoff',()=>{
   assert.equal(isValidScheduleTime('09:48'),true);
   assert.equal(isValidScheduleTime('00:00'),true);
   assert.equal(isValidScheduleTime('09:49'),false);
@@ -111,10 +111,10 @@ test('scheduler checks saved frequency and never changes portfolio records',()=>
   assert.match(service,/record_type IN \('EQUITY','ETF'\)/);
   assert.doesNotMatch(service,/UPDATE wealth_positions|DELETE FROM wealth_positions|INSERT INTO wealth_positions/);
 });
-test('Hobby limitation and Preview Cron limitation are explicit in backend and UI',()=>{
+test('daily Cron and Preview limitation are explicit in backend and UI',()=>{
   assert.match(route,/09:48–10:47 IST/);
   assert.match(cron,/Preview deployments do not receive Vercel Cron events/);
-  assert.match(ui,/Hobby plan limitation: one daily check only/);
+  assert.match(ui,/Current Cron configuration: one daily check only/);
   assert.match(ui,/Preview only · Run Now available/);
 });
 test('schedule migration is additive and stores execution history',()=>{
