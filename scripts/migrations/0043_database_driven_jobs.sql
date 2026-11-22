@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS wealth_scheduled_jobs (
   schedule_time time NOT NULL,
   schedule_frequency text NOT NULL DEFAULT 'daily' CHECK (schedule_frequency IN ('daily','weekdays')),
   timezone text NOT NULL DEFAULT 'Asia/Kolkata',
-  next_run_at timestamptz NOT NULL,
+  next_run_at timestamptz,
   last_run_at timestamptz,
   last_status text NOT NULL DEFAULT 'not_run',
   last_error text,
