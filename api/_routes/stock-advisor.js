@@ -4,7 +4,7 @@ import {startJob,finishJob} from '../_jobs.js';
 
 // The agents' shared WEALTH_INGEST_SECRET (Plan 3) or the older advisor-only secret.
 function validIngestSecret(req){
- const supplied=String(req.headers.authorization||'').replace(/^Bearer\\s+/i,'');
+ const supplied=String(req.headers.authorization||'').replace(/^Bearer\s+/i,'');
  return [process.env.WEALTH_INGEST_SECRET,process.env.WEALTH_ADVISOR_INGEST_SECRET].some(v=>{
   const expected=String(v||'').trim();
   if(expected.length<32||supplied.length!==expected.length)return false;
