@@ -263,11 +263,13 @@ async function processStep(req, runId) {
   const runs=await sql.query('SELECT id,user_id,ticker,stock_name,asset_type,status,progress_json FROM wealth_stock_advisor_runs WHERE id=$1',[runId]);
   if(!runs.length) throw new Error('Debate run no longer exists.');
   const run=runs[0];
+  let evidence=run.progress_json&&typeof run.progress_json==='object'?run.progress_json.evidence_package:null;
   const prior=await sql.query('SELECT id,sequence_no,round_no,speaker,agent_key,message_type,content,summary,metadata,evidence_refs FROM wealth_stock_advisor_messages WHERE run_id=$1 ORDER BY sequence_no',[runId]);
   const existing=prior.find(m=>String(m.metadata?.idempotency_key||'')==='debate:'+runId+':'+step);
   if(existing) {
     if(step===8) {
       const savedEnvelope=parseModelEnvelope(existing.content);
+      if(!evidence) throw new Error('The shared evidence snapshot is missing; resume from the first research step.');
       const savedDecision=gatedDecision(savedEnvelope.parsed?.decision,evidence.action_gate);
       await advanceStep(job.id,runId,step,plan,existing,{decision:savedDecision,summary:existing.summary,parsed:savedEnvelope.parsed||{},evidenceGate:evidence.action_gate});
     } else await advanceStep(job.id,runId,step,plan,existing);
@@ -275,7 +277,6 @@ async function processStep(req, runId) {
   }
   const [holdingRows]=await Promise.all([sql.query("SELECT name,ticker,record_type,currency,quantity,current_value,balance_as_of FROM wealth_positions WHERE user_id=$1 AND upper(ticker)=upper($2) AND category='INVESTMENT' LIMIT 1",[run.user_id,run.ticker])]);
   if(!holdingRows.length) throw new Error('Saved investment disappeared; refusing to research an unknown asset.');
-  let evidence=run.progress_json&&typeof run.progress_json==='object'?run.progress_json.evidence_package:null;
   if(!evidence){
     if(step!==0) throw new Error('The shared evidence snapshot is missing; resume from the first research step.');
     const newsRefresh=await collectNseNews({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
