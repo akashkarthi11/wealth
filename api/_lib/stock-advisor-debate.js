@@ -3,6 +3,7 @@ import { waitUntil } from '@vercel/functions';
 import { createHash } from 'node:crypto';
 import { collectMutualFundEvidence } from './stock-advisor-mfapi.js';
 import { collectNseNews } from './stock-advisor-live-evidence.js';
+import { collectTejHqEquityEvidence } from './stock-advisor-tejhq.js';
 
 export const FREE_AI_MODEL = 'nvidia/nemotron-3.5-lightning-free';
 export const DEBATE_SEQUENCE = Object.freeze([
@@ -212,7 +213,7 @@ async function loadEvidence(uid, holding, assetType, runId) {
   const ticker = String(holding.ticker || '').toUpperCase();
   const [instrumentRows, sourceRows, portfolioRows] = await Promise.all([
     sql.query('SELECT i.id AS instrument_id,i.symbol,i.name,i.currency,p.price,p.as_of,p.source,p.fetched_at,p.fx_to_inr FROM wealth_instruments i LEFT JOIN LATERAL (SELECT price,as_of,source,fetched_at,fx_to_inr FROM wealth_instrument_prices WHERE instrument_id=i.id ORDER BY as_of DESC LIMIT 5) p ON true WHERE upper(i.symbol)=upper($1)',[ticker]),
-    sql.query('SELECT id,source_type,title,url,publisher,published_at,retrieved_at,excerpt,evidence,verification_status FROM wealth_stock_advisor_research_sources WHERE run_id=$1 AND upper(ticker)=upper($2) ORDER BY retrieved_at DESC LIMIT 30',[runId,ticker]),
+    sql.query('SELECT id,source_type,title,url,publisher,published_at,retrieved_at,excerpt,evidence,verification_status FROM wealth_stock_advisor_research_sources WHERE (run_id=$1 OR run_id IS NULL) AND upper(ticker)=upper($2) ORDER BY (run_id=$1) DESC,retrieved_at DESC LIMIT 40',[runId,ticker]),
     sql.query("SELECT record_type,currency,count(*)::int AS holdings,sum(coalesce(current_value,0))::numeric AS value FROM wealth_positions WHERE user_id=$1 AND category='INVESTMENT' GROUP BY record_type,currency ORDER BY value DESC",[uid])
   ]);
   const now = Date.now(), evidenceRefs = [], prices = [];
@@ -224,7 +225,7 @@ async function loadEvidence(uid, holding, assetType, runId) {
   const sources = sourceRows.map(s => {
     const freshnessTimestamp = s.source_type === 'fund_nav' ? (s.published_at || s.retrieved_at) : s.retrieved_at;
     const age = (now - Date.parse(freshnessTimestamp)) / 3600000;
-    const maxAgeHours = s.source_type === 'fund_nav' ? 24 * 7 : 24 * 45;
+    const maxAgeHours = s.source_type === 'fund_nav' ? 24 * 7 : (s.source_type === 'market_price' || s.source_type === 'technical_indicator') ? 36 : 24 * 45;
     const fresh = s.verification_status === 'verified' && age >= 0 && age <= maxAgeHours;
     evidenceRefs.push({type:s.source_type,id:s.id,title:s.title,url:s.url,status:fresh?'verified':s.verification_status,as_of:s.published_at || s.retrieved_at});
     return {...s, verification_status:fresh?'verified':(age>24*45?'stale':s.verification_status)};
@@ -327,9 +328,28 @@ async function processStep(req, runId) {
   if(!evidence){
     if(step!==0) throw new Error('The shared evidence snapshot is missing; resume from the first research step.');
     const refreshes={};
-    if(run.asset_type==='mutual_fund') refreshes.mutual_fund=await collectMutualFundEvidence({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
-    if(run.asset_type==='indian_equity'||run.asset_type==='other_equity') refreshes.nse_news=await collectNseNews({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
+    // First trust reusable, fresh verified DB evidence. Only call free providers
+    // when the required evidence is absent or stale in the existing tables.
     evidence=await loadEvidence(run.user_id,holdingRows[0],run.asset_type,run.id);
+    if(run.asset_type==='mutual_fund' && evidence.missing_evidence_types.includes('market_price')) {
+      refreshes.mutual_fund=await collectMutualFundEvidence({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
+      evidence=await loadEvidence(run.user_id,holdingRows[0],run.asset_type,run.id);
+    }
+    if(run.asset_type==='indian_equity') {
+      const needsMarket=evidence.missing_evidence_types.includes('market_price');
+      const needsTechnical=evidence.missing_evidence_types.includes('technical_indicator');
+      if(needsMarket || needsTechnical) {
+        refreshes.tejhq=await collectTejHqEquityEvidence({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
+        // Re-read after persistence so the debate consumes the stored, verified rows,
+        // not an in-memory provider response.
+        evidence=await loadEvidence(run.user_id,holdingRows[0],run.asset_type,run.id);
+      } else {
+        refreshes.tejhq={status:'skipped',reason:'Fresh verified market price and technical evidence already exist in the database.'};
+      }
+      // NSE announcement discovery remains an independent, low-cost refresh.
+      refreshes.nse_news=await collectNseNews({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
+      evidence=await loadEvidence(run.user_id,holdingRows[0],run.asset_type,run.id);
+    }
     evidence.provider_refreshes=refreshes;
     evidence.captured_at=new Date().toISOString();
     evidence.package_hash=createHash('sha256').update(JSON.stringify(evidence)).digest('hex');
@@ -415,16 +435,12 @@ async function handleWorker(req,res) {
   try {
     const result=await processStep(req,runId);
     const [job]=await sql.query("SELECT status,step_no,step_attempts,last_error,available_at FROM wealth_stock_advisor_run_jobs WHERE run_id=$1 AND stage='debate'",[runId]);
-    // Keep the queue moving in the background. Each step is a separate
-    // waitUntil task, and the database's available_at/provider limiter controls
-    // pacing. This means the user does not need to keep the dashboard open.
-    if (job?.status === 'pending' && Number(job.step_no) < 9) {
-      const waitMs = Math.max(0, Math.min(30000, Date.parse(job.available_at || '') - Date.now() || 0));
-      scheduleWorker(req, runId, waitMs);
-    }
+    // The progress endpoint is the poll-driven continuation trigger. Do not chain
+    // another worker invocation from this background task; that would outlive the
+    // current UI polling cycle and can exceed the Hobby function duration.
     return json(res,202,{ok:true,status:job?.status||owned.status,step:job?.step_no||0,result});
   } catch(error) {
-    const [job]=await sql.query("SELECT id,step_no,step_attempts,max_attempts,available_at FROM wealth_stock_advisor_run_jobs WHERE run_id=$1 AND stage='debate'",[runId]);
+    const [job]=await sql.query("SELECT id,step_no,step_attempts,max_attempts FROM wealth_stock_advisor_run_jobs WHERE run_id=$1 AND stage='debate'",[runId]);
     const deferred=error?.code==='AI_DEFERRED';
     const exhausted=!deferred && job && Number(job.step_attempts)>=Number(job.max_attempts);
     const [savedCount]=await sql.query('SELECT count(*)::int AS count FROM wealth_stock_advisor_messages WHERE run_id=$1',[runId]);
@@ -435,10 +451,6 @@ async function handleWorker(req,res) {
     await sql.query("UPDATE wealth_stock_advisor_run_jobs SET status=$2,step_attempts=CASE WHEN $5 THEN GREATEST(step_attempts-1,0) ELSE step_attempts END,locked_at=NULL,available_at=now()+($3::text||' milliseconds')::interval,last_error=$4,updated_at=now() WHERE run_id=$1 AND stage='debate'",[runId,exhausted?'failed':'pending',delay,deferred?null:String(error?.message||error).slice(0,1000),deferred]);
     await sql.query("UPDATE wealth_stock_advisor_runs SET status=$2,last_error=$3,updated_at=now() WHERE id=$1",[runId,exhausted?finalStatus:'running',deferred?null:String(error?.message||error).slice(0,1000)]);
     console.error('[stock-advisor-debate:step]',runId,job?.step_no,error?.message||error);
-    if (!exhausted) {
-      const waitMs = Math.max(1000, Math.min(30000, Date.parse(job?.available_at || '') - Date.now() || 3000));
-      scheduleWorker(req, runId, waitMs);
-    }
     return json(res,202,{ok:false,status:exhausted?finalStatus:deferred?'queued':'retrying',step:job?.step_no||0,error:exhausted?'A debate step failed after its retry limit.':deferred?'Waiting for the shared AI provider slot.':'A transient error occurred; the step will be retried.'});
   }
 }

@@ -1,4 +1,4 @@
-const APP_BUILD_ID='20261122-dashboard-refresh';
+const APP_BUILD_ID='20261122-dashboard-friendly';
 (function promptForUpdatedApp(){
   try {
     const key='wealth-ledger:app-build';
@@ -340,25 +340,25 @@ function analyticsHtml(banks=[],other=[]){
  const stats=monthlySpendStats(),daily=dailySpendStats(),cash=monthlyCashSeries(),yearly=yearlyAverageSpendSeries(),balances=historicalCashBalances();
  const month=currentMonthKey(),income=sumTotals(spendOf('income',m=>m===month)),spend=daily.monthTotal;
  const bank=modelV2?Number(modelV2.totals.casa||0):wealthPosition().casa; const liabilities=modelV2?Number(modelV2.totals.liabilities||0):wealthPosition().liabilities;
- const summary='<section class="dashboard-pulse"><div class="dashboard-section-title"><div><span class="eyebrow">YOUR MONEY · THIS MONTH</span><h3>Financial pulse</h3><p>'+esc(daily.monthLabel)+' · a quick read of your cash flow</p></div><span class="dashboard-live-mark">● Live ledger</span></div>'+
+ const summary='<section class="dashboard-pulse"><div class="dashboard-section-title"><div><span class="eyebrow">YOUR MONEY</span><h3>This month at a glance</h3><p>'+esc(daily.monthLabel)+' · see what came in and what went out</p></div><span class="dashboard-live-mark">✓ From your ledger</span></div>'+
   '<div class="dashboard-pulse-grid"><article class="dashboard-pulse-card spend"><small>SPENT THIS MONTH</small><strong>'+money(spend)+'</strong><span>'+money(daily.monthAverage)+' daily average</span></article>'+
   '<article class="dashboard-pulse-card income"><small>INCOME THIS MONTH</small><strong>'+money(income)+'</strong><span>Recorded money in</span></article>'+
   '<article class="dashboard-pulse-card"><small>MONTHLY SPEND AVERAGE</small><strong>'+money(stats.average)+'</strong><span>'+stats.months+' recorded calendar month(s)</span></article>'+
   '<article class="dashboard-pulse-card"><small>SPENDING THIS YEAR</small><strong>'+money(daily.yearTotal)+'</strong><span>'+daily.yearLabel+' year to date</span></article></div></section>';
- const secondary='<section class="dashboard-secondary"><div class="dashboard-section-title"><div><span class="eyebrow">QUICK OVERVIEW</span><h3>Money snapshot</h3></div></div><div class="dashboard-snapshot-grid">'+
-  '<article><span class="dashboard-snapshot-icon">▣</span><div><small>BANK CASH</small><b>'+money(bank)+'</b></div></article>'+
-  '<article><span class="dashboard-snapshot-icon">↗</span><div><small>LIABILITIES</small><b>'+money(liabilities)+'</b></div></article>'+
-  '<article><span class="dashboard-snapshot-icon">⌂</span><div><small>BANK ACCOUNTS</small><b>'+banks.length+'</b></div></article>'+
-  '<article><span class="dashboard-snapshot-icon">≡</span><div><small>TRANSACTIONS</small><b>'+transactionTotalCount()+'</b></div></article></div></section>';
- const cashCard='<section class="chart-card dashboard-main-chart"><div class="chart-head"><div><span class="eyebrow">CASH FLOW</span><h4>Income vs spending</h4><p>Monthly movement · tap a month to inspect values</p></div></div>'+svgLineChart(cash,['income','spend'],['Money in','Spending'],v=>money(v))+'</section>';
+ const secondary='<section class="dashboard-secondary"><div class="dashboard-section-title"><div><span class="eyebrow">YOUR ACCOUNTS</span><h3>What you have and what you owe</h3></div></div><div class="dashboard-snapshot-grid">'+
+  '<article><span class="dashboard-snapshot-icon">▣</span><div><small>Cash in bank accounts</small><b>'+money(bank)+'</b></div></article>'+
+  '<article><span class="dashboard-snapshot-icon">↗</span><div><small>Amounts you owe</small><b>'+money(liabilities)+'</b></div></article>'+
+  '<article><span class="dashboard-snapshot-icon">⌂</span><div><small>Accounts</small><b>'+banks.length+'</b></div></article>'+
+  '<article><span class="dashboard-snapshot-icon">≡</span><div><small>Recorded entries</small><b>'+transactionTotalCount()+'</b></div></article></div></section>';
+ const cashCard='<section class="chart-card dashboard-main-chart"><div class="chart-head"><div><span class="eyebrow">MONEY IN & OUT</span><h4>Income compared with spending</h4><p>Month by month · tap any point to see the amount</p></div></div>'+svgLineChart(cash,['income','spend'],['Money in','Spending'],v=>money(v))+'</section>';
  const interest=interestChartHtml();
- const history='<details class="dashboard-history"><summary><span><b>Long-term trends</b><small>Yearly spending and historical bank balances</small></span><i>＋</i></summary><div class="dashboard-history-content">'+
-  '<section class="chart-card"><div class="chart-head"><div><h4>Average monthly spend by year</h4><p>Expenses only · months with recorded spending</p></div></div>'+svgLineChart(yearly,['average'],['Average monthly spend'],v=>money(v))+(yearly.length?'<p class="chart-foot">'+yearly.map(x=>esc(x.month)+': '+money(x.average)+' / month').join(' &nbsp; | &nbsp; ')+'</p>':'')+'</section>'+
-  '<section class="chart-card"><div class="chart-head"><div><h4>Bank balance history</h4><p>Saved account snapshots over time</p></div></div>'+svgLineChart(balances.map(d=>({date:d.date,total:d.total})),['total'],['Total bank cash'],v=>money(v))+(balances.length?'<p class="chart-foot">Latest recorded balance: '+money(balances[balances.length-1].total)+' · '+balances[balances.length-1].date+'</p>':'')+'</section></div></details>';
+ const history='<details class="dashboard-history"><summary><span><b>Explore past trends</b><small>See how your spending and bank balances have changed</small></span><i>＋</i></summary><div class="dashboard-history-content">'+
+  '<section class="chart-card"><div class="chart-head"><div><h4>Average monthly spending each year</h4><p>Expenses only · months with recorded spending</p></div></div>'+svgLineChart(yearly,['average'],['Average monthly spend'],v=>money(v))+(yearly.length?'<p class="chart-foot">'+yearly.map(x=>esc(x.month)+': '+money(x.average)+' / month').join(' &nbsp; | &nbsp; ')+'</p>':'')+'</section>'+
+  '<section class="chart-card"><div class="chart-head"><div><h4>How your bank balance changed</h4><p>Saved account snapshots over time</p></div></div>'+svgLineChart(balances.map(d=>({date:d.date,total:d.total})),['total'],['Total bank cash'],v=>money(v))+(balances.length?'<p class="chart-foot">Latest recorded balance: '+money(balances[balances.length-1].total)+' · '+balances[balances.length-1].date+'</p>':'')+'</section></div></details>';
  return '<div class="dashboard-home">'+summary+secondary+
-  '<section class="dashboard-spend-tools"><div class="dashboard-section-title"><div><span class="eyebrow">SPENDING INSIGHTS</span><h3>Understand your spending</h3></div></div>'+
-  '<div class="dashboard-insight-grid"><button type="button" class="dashboard-insight-card spend-click-card" data-month-spend-breakdown aria-expanded="'+(showMonthSpend?'true':'false')+'"><span class="dashboard-insight-icon">◷</span><span><small>DAILY AVERAGE · THIS MONTH</small><b>'+money(daily.monthAverage)+'</b><em>'+money(daily.monthTotal)+' spent · '+daily.monthDays+' days</em></span><i>›</i></button>'+
-  '<button type="button" class="dashboard-insight-card spend-click-card" data-spend-breakdown aria-expanded="'+(showCategorySpend?'true':'false')+'"><span class="dashboard-insight-icon">▥</span><span><small>AVERAGE MONTHLY SPEND</small><b>'+money(stats.average)+'</b><em>View category breakdown</em></span><i>›</i></button></div>'+
+  '<section class="dashboard-spend-tools"><div class="dashboard-section-title"><div><span class="eyebrow">SPENDING</span><h3>Where your money goes</h3><p>Tap a card to see the details behind the number</p></div></div>'+
+  '<div class="dashboard-insight-grid"><button type="button" class="dashboard-insight-card spend-click-card" data-month-spend-breakdown aria-expanded="'+(showMonthSpend?'true':'false')+'"><span class="dashboard-insight-icon">◷</span><span><small>AVERAGE PER DAY · THIS MONTH</small><b>'+money(daily.monthAverage)+'</b><em>'+money(daily.monthTotal)+' spent across '+daily.monthDays+' days · tap for details</em></span><i>›</i></button>'+
+  '<button type="button" class="dashboard-insight-card spend-click-card" data-spend-breakdown aria-expanded="'+(showCategorySpend?'true':'false')+'"><span class="dashboard-insight-icon">▥</span><span><small>AVERAGE PER MONTH</small><b>'+money(stats.average)+'</b><em>Tap to see your category breakdown</em></span><i>›</i></button></div>'+
   (showMonthSpend?monthCategorySpendHtml():'')+(showCategorySpend?categorySpendHtml():'')+'</section>'+
   '<div class="dashboard-chart-toolbar">'+chartRangeRowHtml()+'</div>'+cashCard+interest+history+
   '<div class="dashboard-legacy-counts" hidden>'+other.length+'</div>'+rewardsTileHtml()+'</div>';
@@ -488,13 +488,85 @@ function scheduledJobsHtml(data){
  (jobs.length?'<div class="jobs-list">'+cards+'</div>':'<div class="jobs-empty">No scheduled jobs are configured yet.</div>')+
  '<p class="jobs-footnote">Times are shown in India Standard Time. Automatic runs are processed by the central dispatcher; the saved time is a due-time cutoff.</p></section>';
 }
+function stockResearchScheduleCard(settings,schedule,data){
+ const holdings=Array.isArray(data?.holdings)?data.holdings:[];
+ const selected=Array.isArray(settings?.selected_tickers)?settings.selected_tickers:[];
+ const mode=settings?.mode==='manual'?'manual':'all';
+ const enabled=!!settings?.enabled;
+ const time=String(schedule?.schedule_time||settings?.schedule_time||'09:48').slice(0,5);
+ const frequency=schedule?.schedule_frequency||settings?.schedule_frequency||'daily';
+ const options=holdings.filter(h=>h.ticker).map(h=>'<label class="advisor-auto-stock"><input type="checkbox" data-research-stock value="'+esc(h.ticker)+'"'+(selected.includes(h.ticker)?' checked':'')+'><span><b>'+esc(h.name||h.ticker)+'</b><small>'+esc(h.ticker)+'</small></span></label>').join('');
+ const next=schedule?.next_run_at_ist||schedule?.next_run_at;
+ const last=schedule?.last_execution?.finished_at||schedule?.last_run_at;
+ return '<article class="jobs-card research-schedule-card" data-research-schedule-card>'+
+  '<div class="jobs-card-head"><div class="jobs-job-title"><span class="jobs-job-icon">✦</span><div><h4>Free AI Auto Research</h4><p>Automatically research your saved Indian equity portfolio. No trades or portfolio changes.</p></div></div>'+
+  '<label class="jobs-switch" title="'+(enabled?'Pause research':'Enable research')+'"><input type="checkbox" data-research-enabled'+(enabled?' checked':'')+' aria-label="Enable Free AI Auto Research"><span></span></label></div>'+
+  '<div class="jobs-edit-panel" style="display:block;margin-top:12px"><div class="jobs-edit-title">Research settings</div>'+
+  '<div class="jobs-edit-fields"><label>Research coverage<select data-research-mode><option value="all"'+(mode==='all'?' selected':'')+'>All saved eligible Indian equities and ETFs</option><option value="manual"'+(mode==='manual'?' selected':'')+'>Selected holdings only</option></select></label>'+
+  '<label>Run by (IST)<input type="time" max="09:48" data-research-time value="'+esc(time)+'"></label>'+
+  '<label>Repeat<select data-research-frequency><option value="daily"'+(frequency==='daily'?' selected':'')+'>Every day</option><option value="weekdays"'+(frequency==='weekdays'?' selected':'')+'>Monday–Friday</option></select></label></div>'+
+  '<div data-research-manual-stocks'+(mode==='manual'?'':' hidden')+'><p class="muted">Choose the holdings to include in each run.</p><div class="advisor-auto-stock-list">'+(options||'<p class="muted">No eligible Indian equity or ETF holdings found.</p>')+'</div></div>'+
+  '<div class="jobs-card-actions"><button type="button" class="primary" data-research-save>Save research schedule</button><button type="button" class="ghost" data-research-run>Run now</button></div>'+
+  '<p class="muted">Free model only · Central dispatcher: 18:45 IST · Your selected time is a due-time cutoff (maximum 09:48 IST), not an exact-minute guarantee.</p>'+
+  '<p class="jobs-next">Next scheduled run: <b>'+(enabled?esc(next||'Waiting for dispatcher'):'Paused')+'</b></p>'+
+  (last?'<p class="jobs-next">Last run: <b>'+esc(fmtJobDate(last))+'</b></p>':'')+
+  '</div><p class="jobs-error" data-research-error hidden></p><p class="muted" data-research-status></p></article>';
+}
+function fmtJobDate(value){return value?new Date(value).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Kolkata'}):'Not yet'}
 async function loadJobs(){
  const box=document.getElementById('jobsBox');if(!box)return;
- try{box.innerHTML=scheduledJobsHtml(await api('/api/jobs'))}
- catch(e){box.innerHTML='<section class="chart-card"><h4>Scheduled jobs unavailable</h4><p class="error">'+esc(e.message)+'</p></section>'}
+ try{
+  const [jobs,settings,schedule,data]=await Promise.all([
+   api('/api/jobs'),api('/api/stock-advisor/settings'),api('/api/stock-advisor/schedule'),api('/api/stock-advisor')
+  ]);
+  box.innerHTML=scheduledJobsHtml(jobs);
+  const list=box.querySelector('.jobs-list');
+  const card=stockResearchScheduleCard(settings,schedule,data);
+  if(list)list.insertAdjacentHTML('afterbegin',card);
+  else{
+   const page=box.querySelector('.jobs-page');
+   if(page){const empty=page.querySelector('.jobs-empty');if(empty)empty.remove();page.insertAdjacentHTML('beforeend','<div class="jobs-list">'+card+'</div>')}
+  }
+ }catch(e){box.innerHTML='<section class="chart-card"><h4>Scheduled jobs unavailable</h4><p class="error">'+esc(e.message)+'</p></section>'}
 }
+
+document.addEventListener('change',e=>{
+ const mode=e.target.closest('[data-research-mode]');
+ if(mode){const panel=mode.closest('[data-research-schedule-card]')?.querySelector('[data-research-manual-stocks]');if(panel)panel.hidden=mode.value!=='manual'}
+});
 document.addEventListener('click',async e=>{
+ const researchSave=e.target.closest('[data-research-save]'),researchRun=e.target.closest('[data-research-run]');
+ if(researchSave||researchRun){
+  const card=e.target.closest('[data-research-schedule-card]');if(!card)return;
+  const status=card.querySelector('[data-research-status]'),error=card.querySelector('[data-research-error]');
+  const showResearchError=message=>{if(error){error.hidden=false;error.textContent=message||'Could not complete the request.'}};
+  if(error){error.hidden=true;error.textContent=''}
+  if(researchRun){
+   researchRun.disabled=true;researchRun.textContent='Starting…';
+   try{const result=await api('/api/stock-advisor/schedule/run-now',{method:'POST',body:JSON.stringify({})});if(status)status.textContent=result.message||'Research run started.';await loadJobs()}
+   catch(err){showResearchError(err.message)}
+   finally{researchRun.disabled=false;researchRun.textContent='Run now'}
+   return;
+  }
+  const enabled=!!card.querySelector('[data-research-enabled]')?.checked;
+  const mode=card.querySelector('[data-research-mode]')?.value||'all';
+  const selected_tickers=[...card.querySelectorAll('[data-research-stock]:checked')].map(x=>x.value);
+  const schedule_time=card.querySelector('[data-research-time]')?.value||'09:48';
+  const schedule_frequency=card.querySelector('[data-research-frequency]')?.value||'daily';
+  if(schedule_time>'09:48'){showResearchError('Choose a time no later than 09:48 IST.');return}
+  if(mode==='manual'&&!selected_tickers.length){showResearchError('Select at least one holding for manual research.');return}
+  researchSave.disabled=true;researchSave.textContent='Saving…';if(status)status.textContent='Saving your research settings…';
+  try{
+   await api('/api/stock-advisor/settings',{method:'POST',body:JSON.stringify({enabled,mode,selected_tickers})});
+   await api('/api/stock-advisor/schedule',{method:'PUT',body:JSON.stringify({enabled,schedule_time,schedule_frequency,timezone:'Asia/Kolkata'})});
+   if(status)status.textContent='Research schedule saved.';
+   await loadJobs();
+  }catch(err){showResearchError(err.message);if(status)status.textContent=''}
+  finally{researchSave.disabled=false;researchSave.textContent='Save research schedule'}
+  return;
+ }
  const refresh=e.target.closest('[data-jobs-refresh]'),save=e.target.closest('[data-job-save]'),run=e.target.closest('[data-job-run]'),edit=e.target.closest('[data-job-edit-toggle]');
+
  if(refresh){loadJobs();return}
  if(edit){const card=edit.closest('[data-job-card]'),panel=card?.querySelector('[data-job-edit]');if(panel){panel.hidden=!panel.hidden;edit.textContent=panel.hidden?'Edit schedule':'Close editor'}return}
  if(!save&&!run)return;
@@ -774,21 +846,6 @@ function bankCards(sections){const seen=new Set();const cards=[];sections.forEac
 function angelOneHtml(){return '<section class="chart-card"><div class="chart-head"><div><h4>Angel One · SmartAPI</h4><p>Secure, read-only sync of holdings, funds and positions</p></div><span class="pill">READ ONLY</span></div><p class="muted">Broker credentials stay on the server in Vercel environment variables. They are never stored in browser code or displayed here.</p><button type="button" class="primary" data-angel-refresh>Connect / Refresh Angel One</button><div id="angelResult" class="muted" style="margin-top:14px">Tap Connect to check the SmartAPI connection.</div></section>'}
 async function loadAngelOne(){const box=$('angelResult');if(!box)return;box.textContent='Connecting securely to Angel One…';try{const d=await api('/api/angel');if(!d.connected){box.innerHTML=d.setupRequired?'<b>Setup required</b><p>Configure these Vercel environment variables: '+(d.missing||[]).map(esc).join(', ')+'</p><p class="muted">Then redeploy and try again. Do not share your PIN, TOTP seed or API key in chat.</p>':'<p class="error">'+esc(d.error||'Connection unavailable')+'</p>';return}const rows=Array.isArray(d.holdings)?d.holdings:[];const fmt=v=>v==null?'—':esc(String(v));const keys=rows.length?Object.keys(rows[0]):[];box.innerHTML='<div class="analytics-grid"><article class="mini-card"><small>HOLDINGS</small><strong>'+rows.length+'</strong></article><article class="mini-card"><small>POSITIONS</small><strong>'+(Array.isArray(d.positions)?d.positions.length:0)+'</strong></article><article class="mini-card"><small>SYNCED</small><strong>'+esc(new Date(d.fetchedAt).toLocaleTimeString())+'</strong></article></div>'+(rows.length?'<div class="table-wrap"><table><thead><tr>'+keys.map(k=>'<th>'+esc(k)+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+keys.map(k=>'<td>'+fmt(r[k])+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>':'<p class="muted">No holdings returned by Angel One.</p>')+'<details><summary>Funds / RMS and positions (raw response)</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">'+esc(JSON.stringify({rms:d.rms,positions:d.positions},null,2))+'</pre></details>'}catch(e){box.innerHTML='<p class="error">'+esc(e.message)+'</p>'}}
 let advisorActiveTab='overview',advisorRunsCache=[],advisorSelectedRunId=null;
-function overviewAutoResearchPanel(settings,holdings){
- const tickers=Array.isArray(settings.selected_tickers)?settings.selected_tickers:[];
- const schedulerText=!settings.enabled?'Auto Research is off.':(settings.scheduler_registered?'Central daily dispatcher is active (18:45 IST).':'Preview only: automatic Vercel Cron is not invoked on Preview deployments.');
- const choices=(holdings||[]).filter(h=>h.ticker).map(h=>'<label class="advisor-auto-stock"><input type="checkbox" data-overview-auto-stock value="'+esc(h.ticker)+'"'+(tickers.includes(h.ticker)?' checked':'')+'><span><b>'+esc(h.name||h.ticker)+'</b><small>'+esc(h.ticker)+'</small></span></label>').join('');
- return '<section class="advisor-panel"><div class="advisor-section-head"><div><small class="eyebrow">ACCOUNT AUTOMATION</small><h4>Free AI Auto Research</h4></div><span class="pill">'+(settings.enabled?'ON':'OFF')+'</span></div><label class="advisor-auto-toggle"><input id="overviewAdvisorAutoEnabled" type="checkbox"'+(settings.enabled?' checked':'')+'><span><b>Enable automatic research</b><small>Only this account · no trades or portfolio changes</small></span></label><label class="advisor-auto-label" for="overviewAdvisorAutoMode">Research coverage</label><select id="overviewAdvisorAutoMode"><option value="all"'+(settings.mode==='all'?' selected':'')+'>All saved eligible Indian equities and ETFs</option><option value="manual"'+(settings.mode==='manual'?' selected':'')+'>Manually selected stocks</option></select><div id="overviewAdvisorAutoManualStocks"'+(settings.mode==='manual'?'':' hidden')+'><p class="muted">Choose holdings to include in each scheduled run.</p><div class="advisor-auto-stock-list">'+(choices||'<p class="muted">No saved equity holdings.</p>')+'</div></div><p class="muted">Research Schedule: '+esc(settings.schedule_time||'09:48')+' IST · '+(settings.schedule_frequency==='weekdays'?'Monday–Friday':'Every day')+'. Central dispatcher: daily at 18:45 IST; the preferred time is a due-time cutoff up to 09:48, not an exact-minute promise. '+schedulerText+'</p><div class="advisor-intro-actions"><button type="button" class="primary" data-overview-save-auto-research>Save Auto Research settings</button><span id="overviewAdvisorAutoStatus" class="muted"></span></div></section>';
-}
-async function loadAutoResearchOverview(){
- const box=document.getElementById('overviewAutoResearch');if(!box)return;
- box.innerHTML='<p class="muted">Loading Auto Research settings…</p>';
- try{
-  const [settings,data]=await Promise.all([api('/api/stock-advisor/settings'),api('/api/stock-advisor')]);
-  if(activeView!=='overview'||!document.getElementById('overviewAutoResearch'))return;
-  box.innerHTML=overviewAutoResearchPanel(settings,Array.isArray(data.holdings)?data.holdings:[]);
- }catch(e){box.innerHTML='<section class="advisor-panel"><h4>Free AI Auto Research</h4><p class="error">'+esc(e.message||'Could not load Auto Research settings.')+'</p></section>'}
-}
 function stockAdvisorHtml(){return '<section class="stock-advisor-intro"><div class="stock-advisor-heading"><div><div class="eyebrow">INDIAN EQUITY RESEARCH</div><h3>Stock Advisor</h3><p>One clear view of your saved decisions, next review and portfolio risk.</p></div><button type="button" class="ghost advisor-refresh" data-stock-advisor-refresh aria-label="Refresh saved research">↻ Refresh</button></div><span id="stockAdvisorUpdated" class="muted"></span></section><div id="stockAdvisorContent"><p class="muted">Loading your latest research…</p></div>'}
 function advisorMessageHtml(m,i){
  const speaker=String(m.speaker||m.agent_key||'Analyst').trim(),kind=String(m.message_type||'message').toLowerCase();
@@ -893,8 +950,6 @@ async function loadStockAdvisor(runId=null){
   if(stamp)stamp.textContent=run?' · '+reportDate:' · Waiting for first saved run';
  }catch(e){box.innerHTML='<section class="advisor-panel"><h4>Stock Advisor unavailable</h4><p class="error">'+esc(e.message||'Unable to load advisor data.')+'</p></section>'}
 }
-$('viewContent').addEventListener('change',e=>{if(e.target?.id==='overviewAdvisorAutoMode'){const box=document.getElementById('overviewAdvisorAutoManualStocks');if(box)box.hidden=e.target.value!=='manual'}});
-$('viewContent').addEventListener('click',async e=>{const button=e.target.closest('[data-overview-save-auto-research]');if(!button)return;const status=document.getElementById('overviewAdvisorAutoStatus'),mode=document.getElementById('overviewAdvisorAutoMode')?.value||'all',enabled=!!document.getElementById('overviewAdvisorAutoEnabled')?.checked,selected_tickers=[...document.querySelectorAll('[data-overview-auto-stock]:checked')].map(x=>x.value);button.disabled=true;if(status)status.textContent='Saving…';try{const result=await api('/api/stock-advisor/settings',{method:'POST',body:JSON.stringify({enabled,mode,selected_tickers})});if(status)status.textContent=result.message||'Settings saved.';await loadAutoResearchOverview()}catch(err){if(status)status.textContent=err.message||'Could not save settings.'}finally{button.disabled=false}});
 $('viewContent').addEventListener('change',e=>{if(e.target?.id==='advisorAutoMode'){const box=document.getElementById('advisorAutoManualStocks');if(box)box.hidden=e.target.value!=='manual'}});
 $('viewContent').addEventListener('click',async e=>{
  const button=e.target.closest('[data-save-auto-research]');if(!button)return;
@@ -1410,7 +1465,7 @@ function activitiesHtml(){
   +'<div id="activityActiveFilters" class="activity-active-filters"></div><button type="button" id="activityClearAll" class="activity-clear-all" hidden>Clear all filters</button>'
   +'<div id="activitySummary" class="act-summary" aria-live="polite"></div><div id="activityRows" class="activity-list"></div></section>';
 }
-function renderView(view){view=guardView(view);activeView=view;document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));updateNav(view);$('sourceNav').classList.remove('more-open');const target=$('viewContent');if(!target)return;const banks=sourceSections.filter(isBankBalanceSection);const other=sourceSections.filter(s=>!isBankBalanceSection(s)&&!isInvestmentRecord(s));$('viewTitle').textContent=(views.find(v=>v[0]===view)||views[0])[1];const viewEyebrow=$('viewTitle').previousElementSibling;if(viewEyebrow)viewEyebrow.textContent=VIEW_GROUPS[view]||'YOUR MONEY';if(view==='more'){target.innerHTML=moreHubHtml()}else if(view==='rewards'){target.innerHTML='<div id="rewardsBox">'+rewardsPageHtml(rewardsData)+'</div>';loadRewards()}else if(view==='lending'){target.innerHTML='<div id="lendingBox">'+lendingPageHtml(lendingData)+'</div>';loadLending()}else if(view==='interest'){target.innerHTML=(!!user?ofCall('inToolbarHtml'):'')+interestViewHtml()+(!!user?'<div id="interestSources"></div>':'');loadInterestSources()}else if(view==='alerts'){target.innerHTML=alertsHtml()}else if(view==='subscriptions'){target.innerHTML=subscriptionsHtml()}else if(view==='stock-advisor'){target.innerHTML=stockAdvisorHtml();loadStockAdvisor()}else if(view==='offers'){target.innerHTML='<div id="offersBox">'+ofCall('offersPageHtml')+'</div>';ofCall('loadOffers')}else if(view==='upload'){target.innerHTML='<div id="uploadBox">'+uploadPageHtml()+'</div>';loadUploads()}else if(view==='settings'){target.innerHTML='<div id="rolesBox">'+rolesPageHtml()+'</div>';loadRoles()}else if(view==='data-quality'){target.innerHTML='<div id="dataQuality"><p class="muted">Checking data quality…</p></div>';loadDataQuality()}else if(view==='jobs'){target.innerHTML='<div id="jobsBox"><p class="muted">Loading scheduled jobs…</p></div>';loadJobs()}else if(view==='angel-one'){target.innerHTML=angelOneHtml()}else if(view==='bank-detail'){target.innerHTML='<button type="button" class="ghost" id="backToBanks">← Back to accounts</button><h3 class="group-title">'+esc(activeBank)+' · Account details</h3><div id="bankDetail"><p class="muted">Loading account details…</p></div>';loadBankDetail(activeBank)}else if(view==='overview'){target.innerHTML=alertsBannerHtml()+analyticsHtml(banks,other)+'<div id="overviewAutoResearch"></div>'}else if(view==='banks'){target.innerHTML=liveBankCardsHtml()||(banks.length?bankCards(banks):'<p class="muted">No bank balance records found.</p>')}else if(view==='other'){target.innerHTML=recordsPageHtml()}else if(view==='investments'){target.innerHTML=investmentsPageHtml()}else if(view==='bank-detail'){const key=activeBank||'Bank';$('viewTitle').textContent=key;target.innerHTML='<button type="button" class="back-button" id="backToBanks">← All accounts</button><h3 class="group-title">'+esc(key)+' account details</h3>'+accountRecords(key).map(sectionHtml).join('')}else if(view==='transactions'){target.innerHTML='<div id="pendingTx"></div>'+activitiesHtml();activityRowsHtml();loadPendingTx()}const bindSpendCard=(selector,isMonth)=>{const card=target.querySelector(selector);if(card){const toggle=()=>{if(isMonth)showMonthSpend=!showMonthSpend;else showCategorySpend=!showCategorySpend;renderView('overview')};card.addEventListener('click',toggle);card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle()}})}};if(view==='overview')loadAutoResearchOverview();bindSpendCard('[data-spend-breakdown]',false);bindSpendCard('[data-month-spend-breakdown]',true)}
+function renderView(view){view=guardView(view);activeView=view;document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));updateNav(view);$('sourceNav').classList.remove('more-open');const target=$('viewContent');if(!target)return;const banks=sourceSections.filter(isBankBalanceSection);const other=sourceSections.filter(s=>!isBankBalanceSection(s)&&!isInvestmentRecord(s));$('viewTitle').textContent=(views.find(v=>v[0]===view)||views[0])[1];const viewEyebrow=$('viewTitle').previousElementSibling;if(viewEyebrow)viewEyebrow.textContent=VIEW_GROUPS[view]||'YOUR MONEY';if(view==='more'){target.innerHTML=moreHubHtml()}else if(view==='rewards'){target.innerHTML='<div id="rewardsBox">'+rewardsPageHtml(rewardsData)+'</div>';loadRewards()}else if(view==='lending'){target.innerHTML='<div id="lendingBox">'+lendingPageHtml(lendingData)+'</div>';loadLending()}else if(view==='interest'){target.innerHTML=(!!user?ofCall('inToolbarHtml'):'')+interestViewHtml()+(!!user?'<div id="interestSources"></div>':'');loadInterestSources()}else if(view==='alerts'){target.innerHTML=alertsHtml()}else if(view==='subscriptions'){target.innerHTML=subscriptionsHtml()}else if(view==='stock-advisor'){target.innerHTML=stockAdvisorHtml();loadStockAdvisor()}else if(view==='offers'){target.innerHTML='<div id="offersBox">'+ofCall('offersPageHtml')+'</div>';ofCall('loadOffers')}else if(view==='upload'){target.innerHTML='<div id="uploadBox">'+uploadPageHtml()+'</div>';loadUploads()}else if(view==='settings'){target.innerHTML='<div id="rolesBox">'+rolesPageHtml()+'</div>';loadRoles()}else if(view==='data-quality'){target.innerHTML='<div id="dataQuality"><p class="muted">Checking data quality…</p></div>';loadDataQuality()}else if(view==='jobs'){target.innerHTML='<div id="jobsBox"><p class="muted">Loading scheduled jobs…</p></div>';loadJobs()}else if(view==='angel-one'){target.innerHTML=angelOneHtml()}else if(view==='bank-detail'){target.innerHTML='<button type="button" class="ghost" id="backToBanks">← Back to accounts</button><h3 class="group-title">'+esc(activeBank)+' · Account details</h3><div id="bankDetail"><p class="muted">Loading account details…</p></div>';loadBankDetail(activeBank)}else if(view==='overview'){target.innerHTML=alertsBannerHtml()+analyticsHtml(banks,other)}else if(view==='banks'){target.innerHTML=liveBankCardsHtml()||(banks.length?bankCards(banks):'<p class="muted">No bank balance records found.</p>')}else if(view==='other'){target.innerHTML=recordsPageHtml()}else if(view==='investments'){target.innerHTML=investmentsPageHtml()}else if(view==='bank-detail'){const key=activeBank||'Bank';$('viewTitle').textContent=key;target.innerHTML='<button type="button" class="back-button" id="backToBanks">← All accounts</button><h3 class="group-title">'+esc(key)+' account details</h3>'+accountRecords(key).map(sectionHtml).join('')}else if(view==='transactions'){target.innerHTML='<div id="pendingTx"></div>'+activitiesHtml();activityRowsHtml();loadPendingTx()}const bindSpendCard=(selector,isMonth)=>{const card=target.querySelector(selector);if(card){const toggle=()=>{if(isMonth)showMonthSpend=!showMonthSpend;else showCategorySpend=!showCategorySpend;renderView('overview')};card.addEventListener('click',toggle);card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle()}})}};bindSpendCard('[data-spend-breakdown]',false);bindSpendCard('[data-month-spend-breakdown]',true)}
 document.addEventListener('click',e=>{const alertButton=e.target.closest('.dashboard-alert-banner[data-view]');if(!alertButton)return;e.preventDefault();e.stopImmediatePropagation();renderView(alertButton.dataset.view)},true);
 $('viewContent').addEventListener('click',e=>{const b=e.target.closest('button[data-view]');if(b&&$('viewContent').contains(b)){renderView(b.dataset.view)}});
 $('viewContent').addEventListener('click',e=>{const full=e.target.closest('[data-advisor-full-report]');if(full){const details=document.querySelector('#stockAdvisorContent .advisor-full-report');if(details){details.open=true;details.scrollIntoView({behavior:'smooth',block:'start'})}return}const tab=e.target.closest('[data-advisor-tab]');if(tab){advisorActiveTab=tab.dataset.advisorTab;loadStockAdvisor(advisorSelectedRunId);return}const chat=e.target.closest('[data-advisor-open-chat]');if(chat){advisorActiveTab='chat';loadStockAdvisor(advisorSelectedRunId);return}const refresh=e.target.closest('[data-stock-advisor-refresh]');if(refresh){loadStockAdvisor();return}const run=e.target.closest('[data-advisor-run]');if(run){advisorActiveTab='overview';loadStockAdvisor(run.dataset.advisorRun);return}});
