@@ -171,29 +171,65 @@ async function reserveFreeModelSlot() {
   });
 }
 
-async function callFreeModel(messages, maxTokens=2200) {
-  const key = String(process.env.AI_GATEWAY_API_KEY || '').trim();
-  if (!key) throw new Error('AI Gateway is not configured in this Development Preview.');
-  await reserveFreeModelSlot();
-  const response = await fetch('https://ai-gateway.vercel.sh/v1/chat/completions', {
+async function callGroqFreeModel(messages,maxTokens=2200) {
+  const key=String(process.env.GROQ_API_KEY||'').trim();
+  const zeroRetention=String(process.env.GROQ_ZERO_DATA_RETENTION_CONFIRMED||'').trim().toLowerCase()==='true';
+  if(!key||!zeroRetention)return null;
+  const model='openai/gpt-oss-20b';
+  const response=await fetch('https://api.groq.com/openai/v1/chat/completions',{
     method:'POST',
-    headers:{ Authorization:'Bearer ' + key, 'Content-Type':'application/json' },
-    body:JSON.stringify({ model:FREE_AI_MODEL, messages, temperature:0.2, max_tokens:maxTokens, reasoning:{effort:'none'}, response_format:{type:'json_object'} })
+    headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},
+    body:JSON.stringify({model,messages,temperature:0.2,max_completion_tokens:maxTokens,response_format:{type:'json_object'}}),
+    signal:AbortSignal.timeout(30000)
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const retryHeader=String(response.headers.get('retry-after')||'').trim();
-    const retryMs=retryHeader
-      ? (Number.isFinite(Number(retryHeader)) ? Number(retryHeader)*1000 : Math.max(1000,Date.parse(retryHeader)-Date.now()))
-      : (response.status===429?30000:0);
-    throw Object.assign(new Error('Free Nemotron Gateway error ' + response.status + ': ' + String(payload?.error?.message || payload?.message || 'provider unavailable').slice(0,180)), {
-      code:response.status===429?'AI_PROVIDER_RATE_LIMIT':'AI_GATEWAY_ERROR',
-      retryAfterMs:Math.max(1000,retryMs||30000)
-    });
+  const payload=await response.json().catch(()=>({}));
+  if(!response.ok)throw new Error('Groq free-tier error '+response.status+': '+String(payload?.error?.message||payload?.message||'provider unavailable').slice(0,180));
+  const choice=payload?.choices?.[0],raw=choice?.message?.content;
+  if(typeof raw!=='string'||!raw.trim())throw new Error('Groq returned an empty completion.');
+  return {raw,usage:payload?.usage||{},finish_reason:choice?.finish_reason||null,provider:'Groq',provider_key:'groq-free',model,provider_label:'Groq Free'};
+}
+
+async function callFreeModel(messages,maxTokens=2200) {
+  const key=String(process.env.AI_GATEWAY_API_KEY||'').trim();
+  let primaryError=null;
+  if(key) {
+    try {
+      await reserveFreeModelSlot();
+      const response=await fetch('https://ai-gateway.vercel.sh/v1/chat/completions',{
+        method:'POST',
+        headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},
+        body:JSON.stringify({model:FREE_AI_MODEL,messages,temperature:0.2,max_tokens:maxTokens,reasoning:{effort:'none'},response_format:{type:'json_object'}}),
+        signal:AbortSignal.timeout(30000)
+      });
+      const payload=await response.json().catch(()=>({}));
+      if(!response.ok) {
+        const retryHeader=String(response.headers.get('retry-after')||'').trim();
+        const retryMs=retryHeader
+          ?(Number.isFinite(Number(retryHeader))?Number(retryHeader)*1000:Math.max(1000,Date.parse(retryHeader)-Date.now()))
+          :(response.status===429?30000:0);
+        throw Object.assign(new Error('Free Nemotron Gateway error '+response.status+': '+String(payload?.error?.message||payload?.message||'provider unavailable').slice(0,180)),{
+          code:response.status===429?'AI_PROVIDER_RATE_LIMIT':'AI_GATEWAY_ERROR',
+          retryAfterMs:Math.max(1000,retryMs||30000)
+        });
+      }
+      const choice=payload?.choices?.[0],raw=choice?.message?.content;
+      if(typeof raw!=='string'||!raw.trim())throw new Error('Empty Nemotron response; finish='+String(choice?.finish_reason||'unknown')+', completion_tokens='+Number(payload?.usage?.completion_tokens||0));
+      return {raw,usage:payload?.usage||{},finish_reason:choice?.finish_reason||null,provider:'Vercel AI Gateway',provider_key:'nemotron-free',model:FREE_AI_MODEL,provider_label:'Nemotron Free'};
+    } catch(error) {
+      primaryError=error;
+      console.warn('[stock-advisor-debate:primary-ai]',error?.message||error);
+    }
   }
-  const choice = payload?.choices?.[0], raw = choice?.message?.content;
-  if (typeof raw !== 'string' || !raw.trim()) throw new Error('Empty Nemotron response; finish=' + String(choice?.finish_reason || 'unknown') + ', completion_tokens=' + Number(payload?.usage?.completion_tokens || 0));
-  return { raw, usage:payload?.usage || {}, finish_reason:choice?.finish_reason || null };
+  try {
+    const fallback=await callGroqFreeModel(messages,maxTokens);
+    if(fallback)return fallback;
+  } catch(error) {
+    console.warn('[stock-advisor-debate:groq-fallback]',error?.message||error);
+    if(primaryError)throw primaryError;
+    throw error;
+  }
+  if(primaryError)throw primaryError;
+  throw new Error('No free AI provider is configured. Configure AI_GATEWAY_API_KEY or configure Groq with GROQ_API_KEY and verified Zero Data Retention.');
 }
 
 async function retrySummary(messageText) {
@@ -371,7 +407,7 @@ async function processStep(req, runId) {
   const model=await callFreeModel([{role:'system',content:prompt.system},{role:'user',content:prompt.user}]);
   const envelope=parseModelEnvelope(model.raw);
   const parsed=envelope.parsed||{};
-  const speaker=plan.speaker + ' · Nemotron Free';
+  const speaker=plan.speaker + ' · ' + model.provider_label;
   const decision=step===8?gatedDecision(parsed.decision,evidence.action_gate):null;
   const cioSummary=step===8?[
     'Decision: '+decision+'. Main reason: '+String(parsed.main_reason||'Available evidence is insufficient for a stronger action.').slice(0,140),
@@ -384,7 +420,7 @@ async function processStep(req, runId) {
   const summaryUsage=summaryRetry.usage||{};
   const messageType=plan.type;
   const meta={
-    model:FREE_AI_MODEL,provider:'Vercel AI Gateway',finish_reason:model.finish_reason,usage:{prompt_tokens:Number(model.usage?.prompt_tokens||0)+Number(summaryUsage.prompt_tokens||0),completion_tokens:Number(model.usage?.completion_tokens||0)+Number(summaryUsage.completion_tokens||0),total_tokens:Number(model.usage?.total_tokens||0)+Number(summaryUsage.total_tokens||0)},
+    model:model.model,provider:model.provider,finish_reason:model.finish_reason,usage:{prompt_tokens:Number(model.usage?.prompt_tokens||0)+Number(summaryUsage.prompt_tokens||0),completion_tokens:Number(model.usage?.completion_tokens||0)+Number(summaryUsage.completion_tokens||0),total_tokens:Number(model.usage?.total_tokens||0)+Number(summaryUsage.total_tokens||0)},
     parse_valid:envelope.parseValid,summary_retry_used:step<8&&!envelope.parseValid,summary_fallback:step===8?!Boolean(parsed.summary):summaryRetry.fallback,
     key_evidence:Array.isArray(parsed.key_evidence)?parsed.key_evidence.filter(x=>evidence.evidence_refs.some(r=>r.id===x)).slice(0,12):[],
     main_risk:String(parsed.main_risk||parsed.biggest_risk||'Not separately stated in the model response.').slice(0,700),
@@ -397,12 +433,12 @@ async function processStep(req, runId) {
   };
   if(envelope.full.length>30000) throw new Error('Model response exceeded the safe message storage limit; retrying with a shorter response.');
   const full = envelope.full;
-  const saved=await sql.query("INSERT INTO wealth_stock_advisor_messages (run_id,sequence_no,round_no,speaker,agent_key,message_type,content,summary,metadata,ticker,asset_type,evidence_refs,idempotency_key,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12::jsonb,$13,now()) ON CONFLICT DO NOTHING RETURNING id",[runId,step,plan.round,speaker,plan.side==='cio'?'cio-nemotron-free':plan.side+'-nemotron-free',messageType,full,summaryForStorage,JSON.stringify(meta),run.ticker,run.asset_type,JSON.stringify(evidence.evidence_refs),'debate:'+runId+':'+step]);
+  const saved=await sql.query("INSERT INTO wealth_stock_advisor_messages (run_id,sequence_no,round_no,speaker,agent_key,message_type,content,summary,metadata,ticker,asset_type,evidence_refs,idempotency_key,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12::jsonb,$13,now()) ON CONFLICT DO NOTHING RETURNING id",[runId,step,plan.round,speaker,plan.side+'-'+model.provider_key,messageType,full,summaryForStorage,JSON.stringify(meta),run.ticker,run.asset_type,JSON.stringify(evidence.evidence_refs),'debate:'+runId+':'+step]);
   if(!saved.length) {
     const [found]=await sql.query('SELECT id FROM wealth_stock_advisor_messages WHERE run_id=$1 AND sequence_no=$2',[runId,step]);
     if(!found) throw new Error('Message persistence conflict; no saved message found.');
   }
-  await sql.query("INSERT INTO wealth_stock_advisor_agent_outputs (run_id,ticker,agent_key,stage,round_no,provider,model,status,output,input_hash,prompt_tokens,completion_tokens,started_at,completed_at) VALUES ($1,$2,$3,$4,$5,'Vercel AI Gateway',$6,'completed',$7::jsonb,$8,$9,$10,now(),now())",[runId,run.ticker,plan.side+'-nemotron-free',messageType,plan.round,FREE_AI_MODEL,JSON.stringify({summary:summaryForStorage,metadata:meta}),String(step)+':'+run.ticker,Number(model.usage?.prompt_tokens||0),Number(model.usage?.completion_tokens||0)]);
+  await sql.query("INSERT INTO wealth_stock_advisor_agent_outputs (run_id,ticker,agent_key,stage,round_no,provider,model,status,output,input_hash,prompt_tokens,completion_tokens,started_at,completed_at) VALUES ($1,$2,$3,$4,$5,$6,$7,'completed',$7::jsonb,$8,$9,$10,now(),now())",[runId,run.ticker,plan.side+'-nemotron-free',messageType,plan.round,FREE_AI_MODEL,JSON.stringify({summary:summaryForStorage,metadata:meta}),String(step)+':'+run.ticker,Number(model.usage?.prompt_tokens||0),Number(model.usage?.completion_tokens||0)]);
   const [message]=await sql.query('SELECT id,sequence_no,round_no,speaker,agent_key,message_type,summary,metadata,evidence_refs,created_at FROM wealth_stock_advisor_messages WHERE run_id=$1 AND sequence_no=$2',[runId,step]);
   await advanceStep(job.id,runId,step,plan,message,step===8?{decision,summary:summaryForStorage,parsed,evidenceGate:evidence.action_gate}:null);
   return {advanced:true,step,decision};
