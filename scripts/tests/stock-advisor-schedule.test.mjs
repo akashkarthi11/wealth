@@ -7,10 +7,10 @@ import {
   getLocalDateTime, dueScheduleDates
 } from '../../api/_lib/stock-advisor-schedule-time.js';
 
-test('schedule defaults to the existing 09:48 IST target and documents the daily polling window',()=>{
+test('schedule defaults to the existing 09:48 IST due-time cutoff and documents the central dispatcher',()=>{
   assert.equal(DEFAULT_SCHEDULE_TIME,'09:48');
   assert.equal(SCHEDULE_TIMEZONE,'Asia/Kolkata');
-  assert.equal(DAILY_POLL_WINDOW,'09:48–10:47 IST');
+  assert.equal(DAILY_POLL_WINDOW,'18:45 IST central dispatcher');
 });
 test('validates time format and enforces the daily-Cron-supported due-time cutoff',()=>{
   assert.equal(isValidScheduleTime('09:48'),true);
@@ -71,7 +71,7 @@ const vercel=JSON.parse(readFileSync(new URL('../../vercel.json',import.meta.url
 test('authenticated GET, PUT and Run Now endpoints are registered',()=>{
   assert.match(router,/'stock-advisor\/schedule':/);
   assert.match(router,/'stock-advisor\/schedule\/run-now':/);
-  assert.match(route,/req\.method==='GET'/);
+  assert.match(route,/req.method!=='GET'/);
   assert.match(route,/req\.method==='PUT'/);
   assert.match(route,/req\.method==='POST'/);
   assert.match(route,/sessionUser\(req\)/);
@@ -112,9 +112,9 @@ test('scheduler checks saved frequency and never changes portfolio records',()=>
   assert.doesNotMatch(service,/UPDATE wealth_positions|DELETE FROM wealth_positions|INSERT INTO wealth_positions/);
 });
 test('daily Cron and Preview limitation are explicit in backend and UI',()=>{
-  assert.match(route,/09:48–10:47 IST/);
+  assert.match(route,/18:45 Asia\/Kolkata/);
   assert.match(cron,/Preview deployments do not receive Vercel Cron events/);
-  assert.match(ui,/Current Cron configuration: one daily check only/);
+  assert.match(ui,/central dispatcher runs once daily at 18:45 IST/);
   assert.match(ui,/Preview only · Run Now available/);
 });
 test('schedule migration is additive and stores execution history',()=>{
@@ -123,9 +123,8 @@ test('schedule migration is additive and stores execution history',()=>{
   assert.match(migration,/UNIQUE\(user_id,execution_key\)/);
   assert.doesNotMatch(migration,/DROP TABLE|DELETE FROM|TRUNCATE/);
 });
-test('one fixed Stock Advisor Vercel Cron remains daily and unchanged',()=>{
-  const cronEntry=vercel.crons.find(x=>x.path==='/api/stock-advisor/scheduled-run');
-  assert.deepEqual(cronEntry,{path:'/api/stock-advisor/scheduled-run',schedule:'18 4 * * *'});
+test('one central Vercel Cron dispatches the database-driven jobs once daily',()=>{
+  assert.deepEqual(vercel.crons,[{path:'/api/jobs/dispatch',schedule:'15 13 * * *'}]);
 });
 test('frontend saves preferences via PUT and Run Now via POST',()=>{
   assert.match(ui,/api\('\/api\/stock-advisor\/schedule',\{method:'PUT'/);

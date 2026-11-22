@@ -97,7 +97,7 @@ async function refreshLegacy(price){
      ON CONFLICT(asset_id) DO UPDATE SET unit_price=EXCLUDED.unit_price,currency=EXCLUDED.currency,source=EXCLUDED.source,
      source_timestamp=EXCLUDED.source_timestamp,fetched_at=now(),status='fresh',metadata=EXCLUDED.metadata`,
      [a.id,a.user_id,q.unitPrice,q.currency,q.asOf.toISOString(),JSON.stringify(meta),q.source]);
-   // (No wealth_price_history row: nothing reads it; v2 wealth_instrument_prices keeps one row per new quote.)
+   // The database archives the previous latest legacy quote in wealth_price_history before this upsert replaces it.
    await sql.query("UPDATE wealth_investment_assets SET pricing_status='active',updated_at=now() WHERE id=$1",[a.id]);
    users.add(a.user_id);
    return {asset_id:a.id,status:'updated',unit_price:q.unitPrice,currency:q.currency};

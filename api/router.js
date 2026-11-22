@@ -23,6 +23,9 @@ export const ROUTES = {
   'providers': () => import('./_routes/providers.js'),
   'reconcile': () => import('./_routes/reconcile.js'),
   'refresh-market-prices': () => import('./_routes/refresh-market-prices.js'),
+  'jobs': () => import('./_routes/jobs.js'),
+  'jobs/run-now': () => import('./_routes/jobs-run-now.js'),
+  'jobs/dispatch': () => import('./_routes/jobs-dispatch.js'),
   'snapshot': () => import('./_routes/snapshot.js'),
   'stock-advisor': () => import('./_routes/stock-advisor.js'),
   'stock-advisor/free-run': () => import('./_lib/stock-advisor-debate.js'),
@@ -34,6 +37,7 @@ export const ROUTES = {
   'stock-advisor/schedule': () => import('./_routes/stock-advisor-schedule.js'),
   'stock-advisor/schedule/run-now': () => import('./_routes/stock-advisor-schedule.js'),
   'stock-advisor/scheduled-run': () => import('./_routes/stock-advisor-scheduled.js'),
+  'stock-advisor/data-collection': () => import('./_routes/stock-advisor-data-collection.js'),
   // TSD Claude Plan 3
   'prices': () => import('./_routes/prices.js'),
   'email-imports': () => import('./_routes/email-imports.js'),
@@ -50,6 +54,8 @@ export const ROUTES = {
   'interest/accounts': () => import('./_routes/interest.js'),
   'obligations': () => import('./_routes/obligations.js'),
   'nightly': () => import('./_routes/nightly.js'),
+  'interest-accrual': () => import('./_routes/interest-accrual.js'),
+  'backup': () => import('./_routes/backup.js'),
   // TSD Claude Plan 4, Part A
   'rewards': () => import('./_routes/rewards.js'),
   'rewards/balances': () => import('./_routes/rewards.js'),
