@@ -33,7 +33,15 @@ CREATE TABLE IF NOT EXISTS wealth_stock_advisor_messages (
 CREATE INDEX IF NOT EXISTS wealth_stock_advisor_messages_run_order_idx
   ON wealth_stock_advisor_messages(run_id, sequence_no);
 
-ALTER TABLE wealth_stock_advisor_reports
+CREATE TABLE IF NOT EXISTS wealth_stock_advisor_reports (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES wealth_users(id) ON DELETE CASCADE,
+  run_at timestamptz NOT NULL DEFAULT now(),
+  report_text text NOT NULL DEFAULT '',
+  report_json jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+\nALTER TABLE wealth_stock_advisor_reports
   ADD COLUMN IF NOT EXISTS run_id uuid REFERENCES wealth_stock_advisor_runs(id) ON DELETE SET NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS wealth_stock_advisor_reports_run_id_uidx
   ON wealth_stock_advisor_reports(run_id) WHERE run_id IS NOT NULL;
