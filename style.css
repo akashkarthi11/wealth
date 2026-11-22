@@ -1391,3 +1391,39 @@ b.pj-medium{color:#f5c26b}
 .advisor-plan-field b{font-size:13px;overflow-wrap:anywhere;color:#e8f1fc}
 .advisor-stock-card>p{white-space:pre-wrap;overflow-wrap:anywhere}
 @media(max-width:520px){.advisor-chat-filters{grid-template-columns:1fr 1fr;gap:7px}.advisor-plan-grid{gap:6px}.advisor-plan-field{padding:8px}.advisor-plan-field b{font-size:12px}}
+
+
+/* Stock Advisor history: compact same-screen run summaries with progressive disclosure */
+.advisor-history-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}
+.advisor-history-top h4{margin:5px 0;font-size:16px}
+.advisor-history-top p{margin:0;font-size:11px}
+.advisor-history-total,.advisor-pilot-tag{white-space:nowrap;padding:6px 9px;border:1px solid #34516c;border-radius:20px;color:#b9d2e8;font-size:10px}
+.advisor-history-list{display:grid;gap:8px}
+.advisor-history-item{border:1px solid #2b3e56;border-radius:13px;background:#101d2d;overflow:hidden}
+.advisor-history-item>summary{display:grid;grid-template-columns:minmax(110px,1fr) auto auto 18px;align-items:center;gap:12px;padding:12px;cursor:pointer;list-style:none}
+.advisor-history-item>summary::-webkit-details-marker{display:none}
+.advisor-history-date b,.advisor-history-date small{display:block}
+.advisor-history-date b{font-size:12px}.advisor-history-date small{margin-top:3px;color:#91a4bd;font-size:10px}
+.advisor-history-agents{color:#b8c9db;font-size:10px;white-space:nowrap}
+.advisor-history-counts{display:flex;gap:5px}
+.advisor-history-counts i{font-style:normal;font-size:10px;font-weight:800;padding:4px 6px;border-radius:6px;background:#1b2b3e}
+.advisor-history-counts .buy{color:#75dfb5}.advisor-history-counts .hold{color:#edc47b}.advisor-history-counts .sell{color:#f08c91}
+.advisor-history-expand{color:#77dcb6;text-align:center}
+.advisor-history-item[open] .advisor-history-expand{transform:rotate(45deg)}
+.advisor-history-expanded{padding:12px;border-top:1px solid #293d55;background:#0d1928}
+.advisor-history-detail-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-bottom:12px}
+.advisor-history-detail-grid span{padding:8px;border-radius:8px;background:#14243a;min-width:0}
+.advisor-history-detail-grid small,.advisor-history-detail-grid b{display:block}
+.advisor-history-detail-grid small{font-size:8px;color:#91a4bd;letter-spacing:.7px}
+.advisor-history-detail-grid b{font-size:13px;margin-top:4px}
+.advisor-pilot{padding:16px;border:1px solid #2b4b40;border-radius:16px;background:linear-gradient(145deg,#142b2a,#101b2a)}
+.advisor-pilot-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px}
+.advisor-pilot-head h4{font-size:17px;margin:5px 0}.advisor-pilot-head p{font-size:12px;color:#a7b9ca;margin:0;max-width:650px}
+.advisor-pilot-agents{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:14px 0}
+.advisor-pilot-agents article{padding:12px;border:1px solid #30485a;border-radius:11px;background:#101e2b}
+.advisor-pilot-agents b,.advisor-pilot-agents small{display:block}
+.advisor-pilot-agents b{font-size:12px}.advisor-pilot-agents small{font-size:10px;color:#91a4bd;margin-top:5px;line-height:1.45}
+.advisor-pilot-guard{padding:12px;border:1px solid #355846;border-radius:10px;background:#10241f;margin:12px 0}
+.advisor-pilot-guard b{font-size:12px;color:#83e2b8}.advisor-pilot-guard p{font-size:11px;color:#a9bdc8;margin:4px 0 0}
+.advisor-pilot-preview{display:grid;gap:8px;margin-top:14px}
+@media(max-width:600px){.advisor-history-item>summary{grid-template-columns:minmax(100px,1fr) auto 18px;gap:7px}.advisor-history-counts{grid-column:1/3;grid-row:2}.advisor-history-agents{grid-column:2;grid-row:1}.advisor-history-detail-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.advisor-pilot-agents{grid-template-columns:1fr}}
