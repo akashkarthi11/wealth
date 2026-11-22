@@ -14,7 +14,7 @@ const clean = value => String(value || '')
   .replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'")
   .replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/\s+/g,' ').trim();
 const tag = (block,name) => {
-  const match = String(block || '').match(new RegExp('<'+name+'[^>]*>([\s\S]*?)</'+name+'>','i'));
+  const match = String(block || '').match(new RegExp('<'+name+'[^>]*>([\\s\\S]*?)</'+name+'>','i'));
   return match ? clean(match[1]) : '';
 };
 const hostAllowed = url => {
