@@ -92,7 +92,7 @@ export async function collectNseNewsBatch({instruments=[],runId=null,db}={}) {
     }
   }
   batch.results=[...results.values()];
-  batch.status=batch.stored?'ok':batch.errors.length?'unavailable':'no_results';
+  batch.status=batch.stored?(batch.errors.length?'partial':'ok'):batch.errors.length?'unavailable':'no_results';
   return batch;
 }
 
