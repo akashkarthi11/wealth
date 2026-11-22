@@ -13,6 +13,7 @@ export const MENUS = [
   { key: 'alerts', label: 'Alerts', group: 'Activity' },
   { key: 'subscriptions', label: 'Subscriptions', group: 'Activity' },
   { key: 'upload', label: 'Upload', group: 'Activity' },
+  { key: 'stock-advisor', label: 'Stock Advisor', group: 'Tools' },
   { key: 'offers', label: 'Account offers', group: 'Money' },
 ];
 const KEYS = MENUS.map(m => m.key);
@@ -68,6 +69,7 @@ export const ROUTE_MENUS = {
   'transaction-accept': ['transactions', 'overview'],
   'account-offers': ['offers', 'rewards'],
   'offer-earnings': ['rewards', 'transactions', 'offers', 'overview'],
+  'stock-advisor': ['stock-advisor'],
 };
 // menus = null means every menu.
 export function routeAllowed(route, menus) {
@@ -79,6 +81,6 @@ export const guardedRoute = route => Object.prototype.hasOwnProperty.call(ROUTE_
 
 // Tools (Stock Advisor, Angel One, Records) and Settings / Data quality are for the admin only (2026-11-14).
 // Scheduled agents that post with their own token are not affected: this applies to signed-in non-admin users.
-export const ADMIN_ONLY_VIEWS = ['stock-advisor', 'angel-one', 'other', 'data-quality', 'settings'];
-export const ADMIN_ONLY_ROUTES = ['stock-advisor', 'angel'];
+export const ADMIN_ONLY_VIEWS = ['angel-one', 'other', 'data-quality', 'settings'];
+export const ADMIN_ONLY_ROUTES = ['angel'];
 export const adminOnlyRoute = route => ADMIN_ONLY_ROUTES.includes(String(route || '').split('/')[0]);
