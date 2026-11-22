@@ -1,4 +1,4 @@
-import { sql, json, sessionUser, body } from '../_lib.js';
+import { sql, json, sessionUser, body, safeEqual } from '../_lib.js';
 import { waitUntil } from '@vercel/functions';
 import { createHash } from 'node:crypto';
 import { collectMutualFundEvidence } from './stock-advisor-mfapi.js';
@@ -151,16 +151,44 @@ export function cioPrompt(prior, evidence, assetType) {
       '\nIf essential evidence is missing, the decision MUST be DATA REQUIRED. BUY is prohibited unless evidence gate is EVIDENCE_READY and the thesis is supported. Include portfolio concentration only where data exists; MTF only if verified broker evidence exists. ' };
 }
 
+async function reserveFreeModelSlot() {
+  // NVIDIA's free Nemotron route is limited to five requests/minute per region.
+  // Reserve one shared slot in Postgres so parallel runs cannot all hit the provider together.
+  await sql.query("CREATE TABLE IF NOT EXISTS wealth_stock_advisor_ai_rate_limit (id smallint PRIMARY KEY CHECK (id=1), next_allowed_at timestamptz NOT NULL)");
+  const acquired = await sql.query(`
+    INSERT INTO wealth_stock_advisor_ai_rate_limit(id,next_allowed_at)
+    VALUES(1,now()+interval '13 seconds')
+    ON CONFLICT(id) DO UPDATE SET next_allowed_at=now()+interval '13 seconds'
+      WHERE wealth_stock_advisor_ai_rate_limit.next_allowed_at<=now()
+    RETURNING id
+  `);
+  if (acquired.length) return;
+  const [slot] = await sql.query("SELECT GREATEST(1000,ceil(extract(epoch FROM (next_allowed_at-now()))*1000)::int) AS wait_ms FROM wealth_stock_advisor_ai_rate_limit WHERE id=1");
+  throw Object.assign(new Error('Nemotron free-tier request pacing; retrying when the shared provider slot is available.'), {
+    code:'AI_DEFERRED', retryAfterMs:Number(slot?.wait_ms||13000)
+  });
+}
+
 async function callFreeModel(messages, maxTokens=2200) {
   const key = String(process.env.AI_GATEWAY_API_KEY || '').trim();
   if (!key) throw new Error('AI Gateway is not configured in this Development Preview.');
+  await reserveFreeModelSlot();
   const response = await fetch('https://ai-gateway.vercel.sh/v1/chat/completions', {
     method:'POST',
     headers:{ Authorization:'Bearer ' + key, 'Content-Type':'application/json' },
     body:JSON.stringify({ model:FREE_AI_MODEL, messages, temperature:0.2, max_tokens:maxTokens, reasoning:{effort:'none'}, response_format:{type:'json_object'} })
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error('Free Nemotron Gateway error ' + response.status + ': ' + String(payload?.error?.message || payload?.message || 'provider unavailable').slice(0,180));
+  if (!response.ok) {
+    const retryHeader=String(response.headers.get('retry-after')||'').trim();
+    const retryMs=retryHeader
+      ? (Number.isFinite(Number(retryHeader)) ? Number(retryHeader)*1000 : Math.max(1000,Date.parse(retryHeader)-Date.now()))
+      : (response.status===429?30000:0);
+    throw Object.assign(new Error('Free Nemotron Gateway error ' + response.status + ': ' + String(payload?.error?.message || payload?.message || 'provider unavailable').slice(0,180)), {
+      code:response.status===429?'AI_PROVIDER_RATE_LIMIT':'AI_GATEWAY_ERROR',
+      retryAfterMs:Math.max(1000,retryMs||30000)
+    });
+  }
   const choice = payload?.choices?.[0], raw = choice?.message?.content;
   if (typeof raw !== 'string' || !raw.trim()) throw new Error('Empty Nemotron response; finish=' + String(choice?.finish_reason || 'unknown') + ', completion_tokens=' + Number(payload?.usage?.completion_tokens || 0));
   return { raw, usage:payload?.usage || {}, finish_reason:choice?.finish_reason || null };
@@ -224,14 +252,19 @@ async function loadEvidence(uid, holding, assetType, runId) {
   };
 }
 
-function scheduleWorker(req, runId) {
+function scheduleWorker(req, runId, delayMs=0) {
   const host = String(req.headers['x-forwarded-host'] || req.headers.host || process.env.VERCEL_URL || '').trim();
   if (!host) return;
   const protocol = String(req.headers['x-forwarded-proto'] || 'https').split(',')[0].trim();
-  const cookie = String(req.headers.cookie || '');
-  const task = fetch(protocol + '://' + host + '/api/stock-advisor/debate/worker', {
-    method:'POST', headers:{'content-type':'application/json',cookie},
-    body:JSON.stringify({run_id:runId})
+  const secret = String(process.env.CRON_SECRET || '').trim();
+  const headers = {'content-type':'application/json'};
+  if (secret.length>=16) headers.authorization='Bearer '+secret;
+  else if (req.headers.cookie) headers.cookie=String(req.headers.cookie);
+  const delay = Math.max(0,Math.min(30000,Number(delayMs)||0));
+  const task = new Promise(resolve=>setTimeout(resolve,delay)).then(()=>fetch(protocol + '://' + host + '/api/stock-advisor/debate/worker', {
+    method:'POST', headers, body:JSON.stringify({run_id:runId})
+  })).then(async response=>{
+    if(!response.ok) console.warn('[stock-advisor-debate:kick] worker returned HTTP',response.status);
   }).catch(error=>console.warn('[stock-advisor-debate:kick]',error?.message||error));
   try { waitUntil(task); } catch (error) { console.warn('[stock-advisor-debate:waitUntil]',error?.message||error); }
 }
@@ -358,28 +391,36 @@ async function advanceStep(jobId,runId,step,plan,message,cio=null) {
 }
 
 async function handleWorker(req,res) {
-  const uid=await sessionUser(req); if(!uid) return json(res,401,{error:'Sign in required'});
+  const secret=String(process.env.CRON_SECRET||'').trim();
+  const internal=secret.length>=16 && safeEqual(String(req.headers.authorization||''),'Bearer '+secret);
+  const uid=internal?null:await sessionUser(req);
+  if(!internal&&!uid) return json(res,401,{error:'Sign in required'});
   const input=await body(req),runId=String(input.run_id||input.runId||'').trim();
   if(!/^[0-9a-f-]{36}$/i.test(runId)) return json(res,400,{error:'A valid run_id is required.'});
-  const [owned]=await sql.query('SELECT id,status FROM wealth_stock_advisor_runs WHERE id=$1 AND user_id=$2',[runId,uid]);
+  const [owned]=internal
+    ? await sql.query('SELECT id,status FROM wealth_stock_advisor_runs WHERE id=$1',[runId])
+    : await sql.query('SELECT id,status FROM wealth_stock_advisor_runs WHERE id=$1 AND user_id=$2',[runId,uid]);
   if(!owned) return json(res,404,{error:'Debate run not found.'});
   if(owned.status==='completed') return json(res,200,{ok:true,status:'completed'});
   try {
     const result=await processStep(req,runId);
-    const [job]=await sql.query("SELECT status,step_no,step_attempts,last_error FROM wealth_stock_advisor_run_jobs WHERE run_id=$1 AND stage='debate'",[runId]);
-    if(job?.status==='pending') scheduleWorker(req,runId);
+    const [job]=await sql.query("SELECT status,step_no,step_attempts,last_error,available_at FROM wealth_stock_advisor_run_jobs WHERE run_id=$1 AND stage='debate'",[runId]);
+    if(job?.status==='pending') scheduleWorker(req,runId,Math.max(0,Date.parse(job.available_at||new Date().toISOString())-Date.now()));
     return json(res,202,{ok:true,status:job?.status||owned.status,step:job?.step_no||0,result});
   } catch(error) {
     const [job]=await sql.query("SELECT id,step_no,step_attempts,max_attempts FROM wealth_stock_advisor_run_jobs WHERE run_id=$1 AND stage='debate'",[runId]);
-    const exhausted=job && Number(job.step_attempts)>=Number(job.max_attempts);
+    const deferred=error?.code==='AI_DEFERRED';
+    const exhausted=!deferred && job && Number(job.step_attempts)>=Number(job.max_attempts);
     const [savedCount]=await sql.query('SELECT count(*)::int AS count FROM wealth_stock_advisor_messages WHERE run_id=$1',[runId]);
     const finalStatus=Number(savedCount?.count||0)>0?'partially_completed':'failed';
-    const delay=Math.min(60000,Math.pow(2,Math.max(0,Number(job?.step_attempts||1)-1))*3000);
-    await sql.query("UPDATE wealth_stock_advisor_run_jobs SET status=$2,locked_at=NULL,available_at=now()+($3::text||' milliseconds')::interval,last_error=$4,updated_at=now() WHERE run_id=$1 AND stage='debate'",[runId,exhausted?'failed':'pending',delay,String(error?.message||error).slice(0,1000)]);
-    await sql.query("UPDATE wealth_stock_advisor_runs SET status=$2,last_error=$3,updated_at=now() WHERE id=$1",[runId,exhausted?finalStatus:'running',String(error?.message||error).slice(0,1000)]);
+    const delay=deferred
+      ? Math.min(30000,Math.max(1000,Number(error.retryAfterMs)||13000))
+      : Math.min(60000,Math.max(1000,Number(error?.retryAfterMs)||Math.pow(2,Math.max(0,Number(job?.step_attempts||1)-1))*3000));
+    await sql.query("UPDATE wealth_stock_advisor_run_jobs SET status=$2,step_attempts=CASE WHEN $5 THEN GREATEST(step_attempts-1,0) ELSE step_attempts END,locked_at=NULL,available_at=now()+($3::text||' milliseconds')::interval,last_error=$4,updated_at=now() WHERE run_id=$1 AND stage='debate'",[runId,exhausted?'failed':'pending',delay,deferred?null:String(error?.message||error).slice(0,1000),deferred]);
+    await sql.query("UPDATE wealth_stock_advisor_runs SET status=$2,last_error=$3,updated_at=now() WHERE id=$1",[runId,exhausted?finalStatus:'running',deferred?null:String(error?.message||error).slice(0,1000)]);
     console.error('[stock-advisor-debate:step]',runId,job?.step_no,error?.message||error);
-    if(!exhausted) scheduleWorker(req,runId);
-    return json(res,202,{ok:false,status:exhausted?finalStatus:'retrying',step:job?.step_no||0,error:exhausted?'A debate step failed after its retry limit.': 'A transient error occurred; the step will be retried.'});
+    if(!exhausted) scheduleWorker(req,runId,delay);
+    return json(res,202,{ok:false,status:exhausted?finalStatus:deferred?'queued':'retrying',step:job?.step_no||0,error:exhausted?'A debate step failed after its retry limit.':deferred?'Waiting for the shared AI provider slot.':'A transient error occurred; the step will be retried.'});
   }
 }
 
@@ -408,7 +449,7 @@ async function getProgress(req,res) {
     sql.query('SELECT report_json,run_at FROM wealth_stock_advisor_reports WHERE run_id=$1',[runId])
   ]);
   const job=jobRows[0]||null;
-  if(run.status!=='completed' && job && (job.status==='pending' || (job.status==='running' && (!job.locked_at || Date.now()-Date.parse(job.locked_at)>90000)))) scheduleWorker(req,runId);
+  if(run.status!=='completed' && job && (job.status==='pending' || (job.status==='running' && (!job.locked_at || Date.now()-Date.parse(job.locked_at)>90000)))) scheduleWorker(req,runId,Math.max(0,Date.parse(job.available_at||new Date().toISOString())-Date.now()));
   return json(res,200,{run,progress:{completed:messages.length,total:9,current_step:job?.step_no||run.next_step||0,current_round:Math.min(4,Math.floor((job?.step_no||run.next_step||0)/2)+1),last_completed_round:run.last_completed_round,last_completed_speaker:run.last_completed_speaker,job_status:job?.status||run.status,retry_count:job?.step_attempts||0,last_error:job?.last_error||run.last_error||null},messages,report:reportRows[0]||null});
 }
 
