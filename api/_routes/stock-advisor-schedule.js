@@ -69,6 +69,7 @@ async function runNow(req,res) {
 }
 export default async function handler(req,res) {
   try {
+    if(req.method!=='GET'&&req.method!=='PUT'&&req.method!=='POST')return json(res,405,{error:'Method not allowed'});
     await schema();
     if(req.route==='stock-advisor/schedule'&&req.method==='GET')return await getSchedule(req,res);
     if(req.route==='stock-advisor/schedule'&&req.method==='PUT')return await putSchedule(req,res);
