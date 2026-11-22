@@ -7,10 +7,10 @@ import {
   getLocalDateTime, dueScheduleDates
 } from '../../api/_lib/stock-advisor-schedule-time.js';
 
-test('schedule defaults to the existing 09:48 IST target and documents the daily polling window',()=>{
+test('schedule defaults to the existing 09:48 IST due-time cutoff and documents the central dispatcher',()=>{
   assert.equal(DEFAULT_SCHEDULE_TIME,'09:48');
   assert.equal(SCHEDULE_TIMEZONE,'Asia/Kolkata');
-  assert.equal(DAILY_POLL_WINDOW,'09:48–10:47 IST');
+  assert.equal(DAILY_POLL_WINDOW,'18:45 IST central dispatcher');
 });
 test('validates time format and enforces the daily-Cron-supported due-time cutoff',()=>{
   assert.equal(isValidScheduleTime('09:48'),true);
