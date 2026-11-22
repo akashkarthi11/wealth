@@ -2,7 +2,8 @@
   "git": {
     "deploymentEnabled": {
       "**": false,
-      "main": true
+      "main": true,
+      "development": true
     }
   },
   "rewrites": [
@@ -17,7 +18,7 @@
   ],
   "functions": {
     "api/router.js": {
-      "maxDuration": 30,
+      "maxDuration": 60,
       "regions": [
         "sin1"
       ]
@@ -127,6 +128,10 @@
     {
       "path": "/api/nightly",
       "schedule": "0 20 * * *"
+    },
+    {
+      "path": "/api/stock-advisor/scheduled-run",
+      "schedule": "18 4 * * *"
     }
   ]
 }

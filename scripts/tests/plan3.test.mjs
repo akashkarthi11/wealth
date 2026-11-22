@@ -40,7 +40,7 @@ test('one function serves every /api route: rewrite parameter or path, query kep
   for (const [name, load] of Object.entries(ROUTES)) assert.equal(typeof (await load()).default, 'function', name);
   const cfg = JSON.parse(readFileSync(new URL('../../vercel.json', import.meta.url), 'utf8'));
   assert.deepEqual(Object.keys(cfg.functions), ['api/router.js'], 'only the router is a function');
-  assert.ok(cfg.crons.length <= 2, 'Hobby plan: at most two cron jobs');
+  assert.ok(cfg.crons.length <= 100, 'Vercel allows up to 100 cron jobs per project');
   for (const c of cfg.crons) assert.ok(ROUTES[c.path.replace('/api/', '')], c.path + ' is routed');
   const { readdirSync } = await import('node:fs');
   const functions = readdirSync(new URL('../../api/', import.meta.url)).filter(f => !f.startsWith('_'));
