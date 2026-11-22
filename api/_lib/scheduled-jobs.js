@@ -96,7 +96,9 @@ export async function executeJob(job,triggerType='scheduled') {
 }
 export async function dispatchDueJobs() {
   const due=await sql.query(`SELECT * FROM wealth_scheduled_jobs WHERE enabled=true AND next_run_at<=now()
-    AND (locked_until IS NULL OR locked_until<now()) ORDER BY next_run_at LIMIT 8`);
+    AND (locked_until IS NULL OR locked_until<now()) ORDER BY CASE handler_key
+    WHEN 'interest-accrual' THEN 1 WHEN 'backup' THEN 2 WHEN 'market-price-refresh' THEN 3
+    WHEN 'stock-advisor-data-collection' THEN 4 WHEN 'stock-advisor-auto-research' THEN 5 ELSE 99 END LIMIT 8`);
   const results=[];
   for(const job of due){
     try{results.push(await executeJob(job,'scheduled'))}
