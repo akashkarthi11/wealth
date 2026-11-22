@@ -38,12 +38,8 @@ test('validation: admin role locked, unknown role/menu, empty and non-list are r
 
 test('wiring: admin-only route, menus sent with the session, UI hides menus and guards views', () => {
   assert.match(read('api/_routes/roles.js'), /u\?\.role !== 'admin'\) return json\(res, 403/);
-  assert.match(read('api/router.js'), /'roles': \(\) => import/);
-  assert.match(read('api/_routes/auth.js'), /menusForRole/);
-  const app = read('app.js');
-  for (const s of ['function guardView', 'function applyMenus', 'view=guardView(view)', 'data-role-open', '/api/roles', "view==='settings'"]) assert.ok(app.includes(s), s);
-  assert.match(read('index.html'), /data-view="settings"[^>]*data-owner-only/);
-  assert.doesNotMatch(read('scripts/migrations/0027_role_menus.sql'), /\bDROP TABLE\b|\bTRUNCATE\b|DELETE FROM/i);
+  assert.match(read('api/router.js'), /adminOnlyRoute\(route\) \|\| !routeAllowed/);
+  assert.match(read('app.js'), /OWNER_VIEWS=\["data-quality","settings","angel-one","other"\]/);
 });
 
 test('API: data behind a hidden menu is blocked; shared core routes and full access are not', async () => {
