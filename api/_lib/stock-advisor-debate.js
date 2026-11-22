@@ -253,19 +253,29 @@ async function loadEvidence(uid, holding, assetType, runId) {
 }
 
 function scheduleWorker(req, runId, delayMs=0) {
-  const host = String(req.headers['x-forwarded-host'] || req.headers.host || process.env.VERCEL_URL || '').trim();
-  if (!host) return;
-  const protocol = String(req.headers['x-forwarded-proto'] || 'https').split(',')[0].trim();
+  // Invoke the worker in-process. Calling this same Vercel Function over HTTP is
+  // rejected by Vercel's recursive-request guard (HTTP 508), so no self-fetch.
   const secret = String(process.env.CRON_SECRET || '').trim();
-  const headers = {'content-type':'application/json'};
+  const headers = {};
   if (secret.length>=16) headers.authorization='Bearer '+secret;
-  else if (req.headers.cookie) headers.cookie=String(req.headers.cookie);
+  else if (req?.headers?.cookie) headers.cookie=String(req.headers.cookie);
   const delay = Math.max(0,Math.min(30000,Number(delayMs)||0));
-  const task = new Promise(resolve=>setTimeout(resolve,delay)).then(()=>fetch(protocol + '://' + host + '/api/stock-advisor/debate/worker', {
-    method:'POST', headers, body:JSON.stringify({run_id:runId})
-  })).then(async response=>{
-    if(!response.ok) console.warn('[stock-advisor-debate:kick] worker returned HTTP',response.status);
-  }).catch(error=>console.warn('[stock-advisor-debate:kick]',error?.message||error));
+  const task = new Promise(resolve=>setTimeout(resolve,delay)).then(async ()=>{
+    const workerReq = {
+      method:'POST',
+      url:'/api/stock-advisor/debate/worker',
+      route:'stock-advisor/debate/worker',
+      headers,
+      async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify({run_id:runId})); }
+    };
+    const workerRes = {
+      statusCode:200, headers:{}, body:'',
+      setHeader(name,value) { this.headers[name]=value; },
+      end(value='') { this.body=String(value); return this; }
+    };
+    await handleWorker(workerReq,workerRes);
+    if (workerRes.statusCode>=400) console.warn('[stock-advisor-debate:worker]',workerRes.statusCode,workerRes.body);
+  }).catch(error=>console.warn('[stock-advisor-debate:worker]',error?.message||error));
   try { waitUntil(task); } catch (error) { console.warn('[stock-advisor-debate:waitUntil]',error?.message||error); }
 }
 
@@ -405,7 +415,9 @@ async function handleWorker(req,res) {
   try {
     const result=await processStep(req,runId);
     const [job]=await sql.query("SELECT status,step_no,step_attempts,last_error,available_at FROM wealth_stock_advisor_run_jobs WHERE run_id=$1 AND stage='debate'",[runId]);
-    if(job?.status==='pending') scheduleWorker(req,runId,Math.max(0,Date.parse(job.available_at||new Date().toISOString())-Date.now()));
+    // The progress endpoint is the poll-driven continuation trigger. Do not chain
+    // another worker invocation from this background task; that would outlive the
+    // current UI polling cycle and can exceed the Hobby function duration.
     return json(res,202,{ok:true,status:job?.status||owned.status,step:job?.step_no||0,result});
   } catch(error) {
     const [job]=await sql.query("SELECT id,step_no,step_attempts,max_attempts FROM wealth_stock_advisor_run_jobs WHERE run_id=$1 AND stage='debate'",[runId]);
@@ -419,7 +431,6 @@ async function handleWorker(req,res) {
     await sql.query("UPDATE wealth_stock_advisor_run_jobs SET status=$2,step_attempts=CASE WHEN $5 THEN GREATEST(step_attempts-1,0) ELSE step_attempts END,locked_at=NULL,available_at=now()+($3::text||' milliseconds')::interval,last_error=$4,updated_at=now() WHERE run_id=$1 AND stage='debate'",[runId,exhausted?'failed':'pending',delay,deferred?null:String(error?.message||error).slice(0,1000),deferred]);
     await sql.query("UPDATE wealth_stock_advisor_runs SET status=$2,last_error=$3,updated_at=now() WHERE id=$1",[runId,exhausted?finalStatus:'running',deferred?null:String(error?.message||error).slice(0,1000)]);
     console.error('[stock-advisor-debate:step]',runId,job?.step_no,error?.message||error);
-    if(!exhausted) scheduleWorker(req,runId,delay);
     return json(res,202,{ok:false,status:exhausted?finalStatus:deferred?'queued':'retrying',step:job?.step_no||0,error:exhausted?'A debate step failed after its retry limit.':deferred?'Waiting for the shared AI provider slot.':'A transient error occurred; the step will be retried.'});
   }
 }
@@ -449,7 +460,9 @@ async function getProgress(req,res) {
     sql.query('SELECT report_json,run_at FROM wealth_stock_advisor_reports WHERE run_id=$1',[runId])
   ]);
   const job=jobRows[0]||null;
-  if(run.status!=='completed' && job && (job.status==='pending' || (job.status==='running' && (!job.locked_at || Date.now()-Date.parse(job.locked_at)>90000)))) scheduleWorker(req,runId,Math.max(0,Date.parse(job.available_at||new Date().toISOString())-Date.now()));
+  const availableAt=job?.available_at?Date.parse(job.available_at):0;
+  const staleRunning=job?.status==='running'&&(!job.locked_at||Date.now()-Date.parse(job.locked_at)>90000);
+  if(run.status!=='completed' && job && (staleRunning || (job.status==='pending' && availableAt<=Date.now()))) scheduleWorker(req,runId,staleRunning?0:0);
   return json(res,200,{run,progress:{completed:messages.length,total:9,current_step:job?.step_no||run.next_step||0,current_round:Math.min(4,Math.floor((job?.step_no||run.next_step||0)/2)+1),last_completed_round:run.last_completed_round,last_completed_speaker:run.last_completed_speaker,job_status:job?.status||run.status,retry_count:job?.step_attempts||0,last_error:job?.last_error||run.last_error||null},messages,report:reportRows[0]||null});
 }
 
