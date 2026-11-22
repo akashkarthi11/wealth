@@ -1,13 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from '../_lib.js';
 import marketPriceRefresh from '../_routes/refresh-market-prices.js';
-import nightlyOperations from '../_routes/nightly.js';
+import interestAccrual from '../_routes/interest-accrual.js';
+import backupJob from '../_routes/backup.js';
 import stockAdvisorResearch from '../_routes/stock-advisor-scheduled.js';
 import stockAdvisorCollection from '../_routes/stock-advisor-data-collection.js';
 
 const HANDLERS = {
   'market-price-refresh': marketPriceRefresh,
-  'nightly-operations': nightlyOperations,
+  'interest-accrual': interestAccrual,
+  'backup': backupJob,
   'stock-advisor-auto-research': stockAdvisorResearch,
   'stock-advisor-data-collection': stockAdvisorCollection
 };
