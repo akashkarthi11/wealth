@@ -29,6 +29,7 @@ export default async function handler(req,res) {
     const frequency=String(body.schedule_frequency||'daily');
     if(!id)return json(res,400,{error:'Job id is required.'});
     if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(time))return json(res,400,{error:'Schedule time must be HH:MM.'});
+    if(time>'18:45')return json(res,400,{error:'On the free Vercel plan, automatic jobs dispatch once daily at 18:45 IST. Choose a due-time no later than 18:45.'});
     if(!['daily','weekdays'].includes(frequency))return json(res,400,{error:'Frequency must be daily or weekdays.'});
     if(typeof body.enabled!=='boolean')return json(res,400,{error:'enabled must be true or false.'});
     const [current]=await sql.query('SELECT id,schedule_time::text,schedule_frequency,timezone FROM wealth_scheduled_jobs WHERE id=$1',[id]);
