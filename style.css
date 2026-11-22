@@ -1379,6 +1379,19 @@ b.pj-medium{color:#f5c26b}
 .advisor-bullbear-card>small{display:block;margin-top:9px;letter-spacing:0}
 @media(max-width:680px){.advisor-bullbear-list{grid-template-columns:1fr}}
 
+/* Stock Advisor refresh: action-oriented overview and message filters */
+.advisor-chat-filters{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:12px 0 8px}
+.advisor-filter{display:grid;gap:5px;color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.08em}
+.advisor-filter select{width:100%;min-height:42px;padding:8px 10px;border:1px solid #3a4b62;border-radius:10px;background:#0d1929;color:var(--text);font-size:13px;letter-spacing:0}
+.advisor-chat-count{margin:0 0 8px;color:var(--muted);font-size:11px}
+.advisor-filter-message.hidden{display:none!important}
+.advisor-plan-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0}
+.advisor-plan-field{display:grid;gap:3px;min-width:0;padding:9px 10px;border:1px solid #2d4058;border-radius:10px;background:#0c1827}
+.advisor-plan-field small{font-size:9px;color:var(--muted);font-weight:800;letter-spacing:.07em}
+.advisor-plan-field b{font-size:13px;overflow-wrap:anywhere;color:#e8f1fc}
+.advisor-stock-card>p{white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:520px){.advisor-chat-filters{grid-template-columns:1fr 1fr;gap:7px}.advisor-plan-grid{gap:6px}.advisor-plan-field{padding:8px}.advisor-plan-field b{font-size:12px}}
+
 /* Per-account Auto Research controls */
 .advisor-auto-toggle,.advisor-auto-stock{display:flex;align-items:center;gap:11px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#0d1929}
 .advisor-auto-toggle{margin:12px 0}
