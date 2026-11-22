@@ -93,8 +93,8 @@ export async function collectTejHqEquityEvidence({ ticker, name, runId, db }) {
     };
     const priceUrl = 'https://api.tejhq.dev/v1/ohlcv/nse/' + encodeURIComponent(symbol);
     await db.query(
-      "INSERT INTO wealth_stock_advisor_research_sources (run_id,ticker,source_type,title,url,publisher,published_at,retrieved_at,excerpt,evidence,verification_status) VALUES ($1,$2,'market_price',$3,$4,'TejHQ',$5::timestamptz,$6::timestamptz,$7,$8::jsonb,'verified') ON CONFLICT (run_id,ticker,url) DO UPDATE SET title=EXCLUDED.title,published_at=EXCLUDED.published_at,retrieved_at=EXCLUDED.retrieved_at,excerpt=EXCLUDED.excerpt,evidence=EXCLUDED.evidence,verification_status='verified'",
-      [runId, symbol, 'NSE end-of-day market price — ' + symbol, priceUrl, latest.date, result.fetched_at, 'Latest NSE close ₹' + latest.close + ' on ' + latest.date + '; ' + deduped.length + ' daily observations.', JSON.stringify(priceEvidence)]
+      "INSERT INTO wealth_stock_advisor_research_sources (run_id,ticker,source_type,title,url,publisher,published_at,retrieved_at,excerpt,evidence,verification_status) VALUES (NULL,$1,'market_price',$2,$3,'TejHQ',$4::timestamptz,$5::timestamptz,$6,$7::jsonb,'verified') ON CONFLICT (ticker,url) WHERE run_id IS NULL DO UPDATE SET title=EXCLUDED.title,published_at=EXCLUDED.published_at,retrieved_at=EXCLUDED.retrieved_at,excerpt=EXCLUDED.excerpt,evidence=EXCLUDED.evidence,verification_status='verified'",
+      [symbol, 'NSE end-of-day market price — ' + symbol, priceUrl, latest.date, result.fetched_at, 'Latest NSE close ₹' + latest.close + ' on ' + latest.date + '; ' + deduped.length + ' daily observations.', JSON.stringify(priceEvidence)]
     );
 
     const technical = indicators(deduped);
@@ -107,8 +107,8 @@ export async function collectTejHqEquityEvidence({ ticker, name, runId, db }) {
       };
       const technicalUrl = 'https://api.tejhq.dev/v1/ohlcv/nse/' + encodeURIComponent(symbol) + '#technical-indicators';
       await db.query(
-        "INSERT INTO wealth_stock_advisor_research_sources (run_id,ticker,source_type,title,url,publisher,published_at,retrieved_at,excerpt,evidence,verification_status) VALUES ($1,$2,'technical_indicator',$3,$4,'TejHQ / Wealth',$5::timestamptz,$6::timestamptz,$7,$8::jsonb,'verified') ON CONFLICT (run_id,ticker,url) DO UPDATE SET title=EXCLUDED.title,published_at=EXCLUDED.published_at,retrieved_at=EXCLUDED.retrieved_at,excerpt=EXCLUDED.excerpt,evidence=EXCLUDED.evidence,verification_status='verified'",
-        [runId, symbol, 'Technical indicators — ' + symbol, technicalUrl, latest.date, result.fetched_at, 'RSI14 ' + technical.rsi14 + '; SMA20 ' + technical.sma20 + '; SMA50 ' + technical.sma50 + '; SMA200 ' + (technical.sma200 ?? 'not available') + '; MACD ' + technical.macd + '.', JSON.stringify(technicalEvidence)]
+        "INSERT INTO wealth_stock_advisor_research_sources (run_id,ticker,source_type,title,url,publisher,published_at,retrieved_at,excerpt,evidence,verification_status) VALUES (NULL,$1,'technical_indicator',$2,$3,'TejHQ / Wealth',$4::timestamptz,$5::timestamptz,$6,$7::jsonb,'verified') ON CONFLICT (ticker,url) WHERE run_id IS NULL DO UPDATE SET title=EXCLUDED.title,published_at=EXCLUDED.published_at,retrieved_at=EXCLUDED.retrieved_at,excerpt=EXCLUDED.excerpt,evidence=EXCLUDED.evidence,verification_status='verified'",
+        [symbol, 'Technical indicators — ' + symbol, technicalUrl, latest.date, result.fetched_at, 'RSI14 ' + technical.rsi14 + '; SMA20 ' + technical.sma20 + '; SMA50 ' + technical.sma50 + '; SMA200 ' + (technical.sma200 ?? 'not available') + '; MACD ' + technical.macd + '.', JSON.stringify(technicalEvidence)]
       );
       result.technicals_stored = true;
       result.technical_indicators = technical;
