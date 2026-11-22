@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { collectMutualFundEvidence } from './stock-advisor-mfapi.js';
 import { collectNseNews } from './stock-advisor-live-evidence.js';
 import { collectTejHqEquityEvidence } from './stock-advisor-tejhq.js';
+import { collectFincruxFinancials } from './stock-advisor-fincrux.js';
 
 export const FREE_AI_MODEL = 'nvidia/nemotron-3.5-lightning-free';
 export const DEBATE_SEQUENCE = Object.freeze([
@@ -225,7 +226,10 @@ async function loadEvidence(uid, holding, assetType, runId) {
   const sources = sourceRows.map(s => {
     const freshnessTimestamp = s.source_type === 'fund_nav' ? (s.published_at || s.retrieved_at) : s.retrieved_at;
     const age = (now - Date.parse(freshnessTimestamp)) / 3600000;
-    const maxAgeHours = s.source_type === 'fund_nav' ? 24 * 7 : (s.source_type === 'market_price' || s.source_type === 'technical_indicator') ? 36 : 24 * 45;
+    const maxAgeHours = s.source_type === 'fund_nav' ? 24 * 7
+      : (s.source_type === 'market_price' || s.source_type === 'technical_indicator') ? 36
+      : (s.source_type === 'financial_statement' || s.source_type === 'exchange_filing' || s.source_type === 'company_filing') ? 24 * 400
+      : s.source_type === 'news' ? 24 * 14 : 24 * 45;
     const fresh = s.verification_status === 'verified' && age >= 0 && age <= maxAgeHours;
     evidenceRefs.push({type:s.source_type,id:s.id,title:s.title,url:s.url,status:fresh?'verified':s.verification_status,as_of:s.published_at || s.retrieved_at});
     return {...s, verification_status:fresh?'verified':(age>24*45?'stale':s.verification_status)};
@@ -345,6 +349,13 @@ async function processStep(req, runId) {
         evidence=await loadEvidence(run.user_id,holdingRows[0],run.asset_type,run.id);
       } else {
         refreshes.tejhq={status:'skipped',reason:'Fresh verified market price and technical evidence already exist in the database.'};
+      }
+      // Financial statements are enriched from Fincrux only when the optional free key
+      // is configured. The provider payload remains unverified until official filings
+      // corroborate it, so it cannot unlock a BUY decision by itself.
+      if(evidence.missing_evidence_types.includes('financial_statement')) {
+        refreshes.fincrux=await collectFincruxFinancials({instrument:{symbol:run.ticker,name:run.stock_name},db:sql});
+        evidence=await loadEvidence(run.user_id,holdingRows[0],run.asset_type,run.id);
       }
       // NSE announcement discovery remains an independent, low-cost refresh.
       refreshes.nse_news=await collectNseNews({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
