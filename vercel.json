@@ -123,7 +123,7 @@
   "crons": [
     {
       "path": "/api/jobs/dispatch",
-      "schedule": "*/15 * * * *"
+      "schedule": "15 13 * * *"
     }
   ]
 }
