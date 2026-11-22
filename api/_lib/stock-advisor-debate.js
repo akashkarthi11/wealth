@@ -224,7 +224,7 @@ async function loadEvidence(uid, holding, assetType, runId) {
   const sources = sourceRows.map(s => {
     const freshnessTimestamp = s.source_type === 'fund_nav' ? (s.published_at || s.retrieved_at) : s.retrieved_at;
     const age = (now - Date.parse(freshnessTimestamp)) / 3600000;
-    const maxAgeHours = s.source_type === 'fund_nav' ? 24 * 7 : 24 * 45;
+    const maxAgeHours = s.source_type === 'fund_nav' ? 24 * 7 : (s.source_type === 'market_price' || s.source_type === 'technical_indicator') ? 36 : 24 * 45;
     const fresh = s.verification_status === 'verified' && age >= 0 && age <= maxAgeHours;
     evidenceRefs.push({type:s.source_type,id:s.id,title:s.title,url:s.url,status:fresh?'verified':s.verification_status,as_of:s.published_at || s.retrieved_at});
     return {...s, verification_status:fresh?'verified':(age>24*45?'stale':s.verification_status)};
