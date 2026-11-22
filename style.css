@@ -1699,3 +1699,66 @@ b.pj-medium{color:#f5c26b}
  .jobs-overview article b{font-size:21px}
  .jobs-next-up{padding:11px}
 }
+
+
+/* Mobile density pass: Scheduled Jobs + Auto Research (presentation only). */
+@media (max-width:600px){
+ .jobs-page{gap:9px}
+ .jobs-page-head{gap:8px}
+ .jobs-page-head p{line-height:1.35}
+ .jobs-list{gap:9px}
+ .jobs-card{padding:10px;border-radius:13px;box-shadow:0 4px 14px #0002}
+ .jobs-card-head{gap:8px}
+ .jobs-job-title{gap:8px}
+ .jobs-job-icon{flex-basis:32px;height:32px;border-radius:10px;font-size:18px}
+ .jobs-job-title h4{font-size:13px;line-height:1.25}
+ .jobs-job-title p{margin-top:3px;font-size:10px;line-height:1.35}
+ .jobs-switch span{width:40px;height:24px}
+ .jobs-switch span:after{width:18px;height:18px;top:3px;left:3px}
+ .jobs-switch input:checked+span:after{transform:translateX(16px)}
+ .jobs-card-meta{gap:6px;margin:9px 0 6px}
+ .jobs-card-meta>div{padding:8px;border-radius:9px}
+ .jobs-card-meta small{font-size:9px;margin-bottom:3px}
+ .jobs-card-meta b{font-size:11px;line-height:1.3}
+ .jobs-card-status{padding:6px 0;font-size:10px}
+ .jobs-status{padding:4px 7px;font-size:9px}
+ .jobs-card-actions{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:7px}
+ .jobs-card-actions button{min-height:38px;padding:8px 9px;font-size:12px;border-radius:10px}
+ .jobs-edit-panel{margin-top:9px;padding:10px;border-radius:11px}
+ .jobs-edit-title{font-size:11px;margin-bottom:8px}
+ .jobs-edit-fields{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-bottom:9px}
+ .jobs-edit-fields label{gap:4px;font-size:10px}
+ .jobs-edit-fields input,.jobs-edit-fields select{min-height:38px;padding:7px 8px;font-size:12px;border-radius:9px}
+ .jobs-edit-panel>button{min-height:38px;font-size:12px}
+ .jobs-history{margin-top:8px;padding-top:7px}
+ .jobs-history summary{min-height:28px;font-size:10px}
+ .jobs-history summary:after{font-size:14px}
+ .jobs-history-list{gap:6px;padding-top:6px}
+ .jobs-history-list>div{padding:7px;font-size:9px}
+ .jobs-history-list>div>span b{font-size:9px}
+ .jobs-history-list>div>span small{font-size:8px}
+ .jobs-next{margin-top:7px;padding-top:7px;font-size:9px;line-height:1.4}
+ .jobs-error{font-size:10px}
+ .jobs-footnote{font-size:9px}
+ .jobs-overview{gap:6px}
+ .jobs-overview article{padding:8px;border-radius:10px}
+ .jobs-overview article span,.jobs-overview article small{font-size:9px}
+ .jobs-overview article b{font-size:18px;margin:3px 0}
+ .jobs-next-up{gap:8px;padding:9px;border-radius:11px}
+ .jobs-next-icon{flex-basis:30px;height:30px;border-radius:9px;font-size:17px}
+ .jobs-next-up small{font-size:8px}
+ .jobs-next-up b{font-size:11px}
+ .jobs-next-up span:last-child{font-size:10px}
+
+ /* Research coverage gets its own row; time and repeat share the next row. */
+ .research-schedule-card>.jobs-edit-panel{margin-top:9px!important;padding:10px}
+ .research-schedule-card .jobs-edit-fields{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .research-schedule-card .jobs-edit-fields>label:first-child{grid-column:1/-1}
+ .research-schedule-card .jobs-edit-fields label{font-size:10px}
+ .research-schedule-card .jobs-edit-fields input,
+ .research-schedule-card .jobs-edit-fields select{min-height:40px;font-size:12px}
+ .research-schedule-card .jobs-card-actions{grid-template-columns:1.2fr .8fr}
+ .research-schedule-card .jobs-card-actions button{min-height:40px;font-size:11px}
+ .research-schedule-card .muted{font-size:10px;line-height:1.4}
+ .research-schedule-card [data-research-manual-stocks] .advisor-auto-stock-list{max-height:190px;overflow:auto}
+}
