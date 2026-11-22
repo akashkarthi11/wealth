@@ -82,7 +82,8 @@ export default async function handler(req,res){
    const reportJson=input.report_json??input.reportJson;
    if(!reportJson||typeof reportJson!=='object'||Array.isArray(reportJson))return json(res,400,{error:'report_json must be a JSON object.'});
    const reportText=String(input.report_text??input.reportText??reportJson.summary??'').trim();
-   const messages=cleanMessages(input.messages??input.transcript);\n   const bullBearCases=cleanBullBearCases(input.bull_bear_cases??input.bullBearCases);
+   const messages=cleanMessages(input.messages??input.transcript); 
+   const bullBearCases=cleanBullBearCases(input.bull_bear_cases??input.bullBearCases);
    if(!reportText&&!Array.isArray(reportJson.recommendations))return json(res,400,{error:'Provide report_text or structured recommendations.'});
    const runAt=input.run_at??input.runAt??null;
    if(runAt&&!Number.isFinite(Date.parse(runAt)))return json(res,400,{error:'run_at must be a valid ISO date.'});
@@ -132,7 +133,8 @@ export default async function handler(req,res){
   if(run){
    const result=await Promise.all([
     sql.query('SELECT id,run_id,run_at,report_text,report_json FROM wealth_stock_advisor_reports WHERE user_id=$1 AND run_id=$2 LIMIT 1',[uid,run.id]),
-    sql.query('SELECT id,sequence_no,round_no,speaker,agent_key,message_type,content,metadata,created_at FROM wealth_stock_advisor_messages WHERE run_id=$1 ORDER BY sequence_no ASC',[run.id]),\n    sql.query('SELECT id,ticker,stock_name,exchange,side,agent_key,agent_name,thesis,key_points,fundamental_evidence,technical_evidence,valuation,catalysts,risks,sources,confidence,target_price,time_horizon,verdict,created_at FROM wealth_stock_advisor_bull_bear_cases WHERE run_id=$1 ORDER BY ticker,side,agent_key',[run.id])
+    sql.query('SELECT id,sequence_no,round_no,speaker,agent_key,message_type,content,metadata,created_at FROM wealth_stock_advisor_messages WHERE run_id=$1 ORDER BY sequence_no ASC',[run.id]),
+    sql.query('SELECT id,ticker,stock_name,exchange,side,agent_key,agent_name,thesis,key_points,fundamental_evidence,technical_evidence,valuation,catalysts,risks,sources,confidence,target_price,time_horizon,verdict,created_at FROM wealth_stock_advisor_bull_bear_cases WHERE run_id=$1 ORDER BY ticker,side,agent_key',[run.id])
    ]);
    report=result[0][0]||null;messages=result[1];bullBearCases=result[2];
   }else if(!requestedRun){
