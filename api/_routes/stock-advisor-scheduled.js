@@ -31,7 +31,7 @@ export default async function handler(req,res){
  if(!sql)return json(res,503,{error:'Database is not configured'});
  const job=await startJob('stock-advisor-auto-research');
  try{
-  const users=await sql.query("SELECT s.user_id,s.mode,s.selected_tickers,u.session_version FROM wealth_stock_advisor_settings s JOIN wealth_users u ON u.id=s.user_id WHERE s.enabled=true ORDER BY s.updated_at");
+  const users=await sql.query("SELECT s.user_id,s.mode,s.selected_tickers,u.session_version FROM wealth_stock_advisor_settings s JOIN wealth_users u ON u.id=s.user_id WHERE s.enabled=true AND (s.last_run_at IS NULL OR s.last_run_at < now() - interval '23 hours') ORDER BY s.updated_at");
   const summaries=[];let totalCompleted=0,totalFailed=0;
   for(const user of users){
    const selected=Array.isArray(user.selected_tickers)?user.selected_tickers:(typeof user.selected_tickers==='string'?JSON.parse(user.selected_tickers||'[]'):[]);
