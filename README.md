@@ -79,3 +79,49 @@ Content-Type: application/json
 ```
 
 The endpoint resolves the admin account server-side; callers cannot choose another user's ID. It accepts only a valid bearer secret, validates the report shape and timestamp, and stores the full structured report in Neon. Apply `scripts/migrations/20261110_stock_advisor_reports.sql` to the production Neon database before enabling report ingestion. Never put the ingest secret in browser code or commit it to Git.
+
+### Persisting agent conversations
+
+New Stock Advisor runs can include a `messages` array in the same POST body. Each item is stored as an individual, ordered message linked to the run; the dashboard shows the transcript and keeps prior runs selectable.
+
+```json
+{
+  "run_id": "stable-id-for-this-agent-run",
+  "run_at": "2026-11-22T09:48:00+05:30",
+  "status": "completed",
+  "agent_count": 3,
+  "report_text": "Final committee report",
+  "report_json": {
+    "summary": "Final recommendation and portfolio overview",
+    "portfolio_review": {
+      "diversification": "Sector and concentration review",
+      "mtf": "Verified MTF exposure and borrowing-cost review"
+    },
+    "recommendations": []
+  },
+  "messages": [
+    {
+      "sequence_no": 0,
+      "round_no": 1,
+      "speaker": "Bull Analyst",
+      "agent_key": "bull",
+      "message_type": "argument",
+      "content": "Evidence-based investment thesis...",
+      "created_at": "2026-11-22T09:42:00+05:30",
+      "metadata": { "stock": "RELIANCE" }
+    },
+    {
+      "sequence_no": 1,
+      "round_no": 1,
+      "speaker": "Bear Analyst",
+      "agent_key": "bear",
+      "message_type": "rebuttal",
+      "content": "Specific counterargument...",
+      "created_at": "2026-11-22T09:43:00+05:30",
+      "metadata": { "stock": "RELIANCE" }
+    }
+  ]
+}
+```
+
+Use a stable `run_id` when retrying the same run. Messages are ordered by `sequence_no` and duplicate sequence numbers are ignored. Apply the additive migration `scripts/migrations/0037_stock_advisor_conversation_history.sql` before enabling the transcript UI in Production. Existing report rows are retained; historical conversations appear only when their actual message data is supplied. The authenticated dashboard GET returns the latest 50 runs, and `GET /api/stock-advisor?run_id=<run-uuid>` returns that run's report and messages.
