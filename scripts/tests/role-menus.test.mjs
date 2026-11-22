@@ -61,16 +61,17 @@ test('API: data behind a hidden menu is blocked; shared core routes and full acc
   assert.match(router, /u\.role !== 'admin'/);
 });
 
-test('Stock Advisor is role-selectable; Angel One and Records remain admin-only', async () => {
+test('Stock Advisor is role-selectable; admin-only views include Scheduled Jobs', async () => {
   const { MENUS, adminOnlyRoute, ADMIN_ONLY_VIEWS } = await import('../../api/_roles.js');
   assert.ok(MENUS.some(m => m.key === 'stock-advisor'), 'Stock Advisor can be granted to User role');
   for (const k of ['angel-one', 'other']) {
     assert.ok(!MENUS.some(m => m.key === k), k + ' is not a role menu');
     assert.ok(ADMIN_ONLY_VIEWS.includes(k));
   }
+  for (const k of ['data-quality','settings','jobs']) assert.ok(ADMIN_ONLY_VIEWS.includes(k), k + ' is admin-only');
   assert.ok(!ADMIN_ONLY_VIEWS.includes('stock-advisor'));
   assert.ok(adminOnlyRoute('angel') && !adminOnlyRoute('stock-advisor') && !adminOnlyRoute('loans'));
   assert.match(read('api/router.js'), /adminOnlyRoute\(route\) \|\| !routeAllowed/);
-  assert.ok(read('app.js').includes('OWNER_VIEWS=["data-quality","settings","angel-one","other"]'));
+  assert.ok(read('app.js').includes('OWNER_VIEWS=["data-quality","settings","angel-one","other","jobs"]'));
   assert.ok(read('api/_roles.js').includes("'stock-advisor': ['stock-advisor']"));
 });
