@@ -79,6 +79,8 @@ export async function addFincruxApiKey(db, userId, { key, label }) {
   const [existing] = await db.query('SELECT id FROM wealth_provider_api_keys WHERE user_id=$1 AND provider=$2 AND key_fingerprint=$3', [userId, PROVIDER, fp]);
   if (existing) throw Object.assign(new Error('This API key is already in your saved list.'), { status: 409 });
   const encrypted = encryptProviderKey(value);
+  const [count] = await db.query('SELECT count(*)::int AS total FROM wealth_provider_api_keys WHERE user_id=$1 AND provider=$2', [userId, PROVIDER]);
+  if (Number(count?.total || 0) >= 10) throw Object.assign(new Error('You can save up to 10 database override keys.'), { status: 400 });
   const [position] = await db.query('SELECT COALESCE(max(priority),0)+1 AS next FROM wealth_provider_api_keys WHERE user_id=$1 AND provider=$2', [userId, PROVIDER]);
   const [saved] = await db.query("INSERT INTO wealth_provider_api_keys (user_id,provider,label,encrypted_key,key_iv,key_tag,key_fingerprint,priority,enabled) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true) RETURNING id,label,priority,enabled", [userId, PROVIDER, safeLabel, encrypted.encrypted_key, encrypted.key_iv, encrypted.key_tag, fp, Number(position?.next || 1)]);
   return saved;
