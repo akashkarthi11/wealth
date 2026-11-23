@@ -2,6 +2,7 @@ import {sql,schema,json,sessionUser,body} from '../_lib.js';
 import {timingSafeEqual,randomUUID} from 'node:crypto';
 import {startJob,finishJob} from '../_jobs.js';
 import {SCHEDULE_TIMEZONE,DEFAULT_SCHEDULE_TIME,nextScheduledAt,getLocalDateTime} from '../_lib/stock-advisor-schedule-time.js';
+import { listFincruxKeyMetadata } from '../_lib/provider-api-keys.js';
 
 // The agents' shared WEALTH_INGEST_SECRET (Plan 3) or the older advisor-only secret.
 function validIngestSecret(req){
@@ -80,16 +81,17 @@ function cleanMessages(input){
 
 
 async function loadResearchHealth(uid,holdings){
+ const fincruxKeys=await listFincruxKeyMetadata(sql,uid);
  const tickers=[...new Set((holdings||[]).filter(h=>h.currency==='INR'&&['EQUITY','ETF'].includes(String(h.record_type||'').toUpperCase())).map(h=>String(h.ticker||'').trim().toUpperCase()).filter(Boolean))];
  const providers=[
   {key:'tejhq',name:'TejHQ',status:'available',detail:'NSE end-of-day prices · no API key'},
   {key:'mfapi',name:'MFAPI.in',status:'available',detail:'Indian mutual-fund NAV · no API key'},
   {key:'nse',name:'NSE disclosures',status:'available',detail:'Official RSS listings · filing content still needs verification'},
-  {key:'fincrux',name:'Fincrux',status:String(process.env.FINCRUX_API_KEY||'').trim()?'configured':'needs_key',detail:'Five free requests per IST day · unverified until official cross-check'},
+  {key:'fincrux',name:'Fincrux',status:fincruxKeys.total_enabled?'configured':'needs_key',detail:fincruxKeys.total_enabled+' active key(s) · automatic fallback · unverified until official cross-check'},
   {key:'nemotron',name:'Nemotron Free',status:String(process.env.AI_GATEWAY_API_KEY||'').trim()?'configured':'needs_key',detail:'Primary free AI model through Vercel AI Gateway'},
   {key:'groq',name:'Groq Free',status:String(process.env.GROQ_API_KEY||'').trim()?(String(process.env.GROQ_ZERO_DATA_RETENTION_CONFIRMED||'').toLowerCase()==='true'?'configured':'blocked'):'needs_key',detail:'Fallback requires API key and confirmed Zero Data Retention'}
  ];
- if(!tickers.length)return {status:'ok',eligible_equities:0,coverage:{},providers,last_collection:null,evidence_summary:[]};
+ if(!tickers.length)return {status:'ok',eligible_equities:0,coverage:{},providers,fincrux_keys:fincruxKeys,last_collection:null,evidence_summary:[]};
  try{
   const [coverageRows,evidenceRows,collectionRows]=await Promise.all([
    sql.query(`SELECT
@@ -120,7 +122,7 @@ async function loadResearchHealth(uid,holdings){
    evidence_summary:evidenceRows
   };
  }catch(error){
-  return {status:'unavailable',eligible_equities:tickers.length,coverage:{},providers,last_collection:null,evidence_summary:[],error:String(error?.message||error).slice(0,180)};
+  return {status:'unavailable',eligible_equities:tickers.length,coverage:{},providers,fincrux_keys:fincruxKeys,last_collection:null,evidence_summary:[],error:String(error?.message||error).slice(0,180)};
  }
 }
 

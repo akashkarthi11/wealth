@@ -31,3 +31,13 @@ test('provider health UI has responsive status and evidence coverage styles',()=
  assert.match(css,/\.status-needs_key/);
  assert.match(css,/\.advisor-collection-status/);
 });
+
+test('Provider Health can add, disable and remove encrypted Fincrux fallback keys',()=>{
+ assert.match(app,/Fincrux API keys/);
+ assert.match(app,/data-fincrux-key-save/);
+ assert.match(app,/data-fincrux-key-toggle/);
+ assert.match(app,/data-fincrux-key-delete/);
+ assert.match(app,/Environment default/);
+ assert.match(app,/Database override/);
+ assert.match(css,/\.advisor-key-manager/);
+});

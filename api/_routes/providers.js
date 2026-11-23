@@ -1,4 +1,5 @@
 import { sql, schema, json, sessionUser, cacheGet, cacheSet } from '../_lib.js';
+import { addFincruxApiKey, listFincruxKeyMetadata } from '../_lib/provider-api-keys.js';
 
 const EXA_URL = 'https://api.exa.ai/search';
 const MASSIVE_BASE = 'https://api.massive.com';
@@ -41,9 +42,34 @@ export default async function handler(req, res) {
     }
 
     const action = String(input.action || '');
+    if (action === 'fincrux_keys') {
+      return json(res, 200, { provider: 'Fincrux', ...(await listFincruxKeyMetadata(sql, auth.uid)) });
+    }
+    if (action === 'fincrux_key_add') {
+      const saved = await addFincruxApiKey(sql, auth.uid, { key: input.key, label: input.label });
+      return json(res, 201, { saved: true, key: { id: saved.id, label: saved.label, priority: saved.priority, enabled: saved.enabled },
+        ...(await listFincruxKeyMetadata(sql, auth.uid)) });
+    }
+    if (action === 'fincrux_key_update') {
+      const id = String(input.id || '');
+      if (!/^[0-9a-f-]{36}$/i.test(id)) return json(res, 400, { error: 'Invalid key ID.' });
+      const enabled = input.enabled === true;
+      const updated = await sql.query("UPDATE wealth_provider_api_keys SET enabled=$3,updated_at=now() WHERE id=$1 AND user_id=$2 AND provider='fincrux' RETURNING id", [id, auth.uid, enabled]);
+      if (!updated.length) return json(res, 404, { error: 'Saved Fincrux key not found.' });
+      return json(res, 200, { saved: true, ...(await listFincruxKeyMetadata(sql, auth.uid)) });
+    }
+    if (action === 'fincrux_key_delete') {
+      const id = String(input.id || '');
+      if (!/^[0-9a-f-]{36}$/i.test(id)) return json(res, 400, { error: 'Invalid key ID.' });
+      const deleted = await sql.query("DELETE FROM wealth_provider_api_keys WHERE id=$1 AND user_id=$2 AND provider='fincrux' RETURNING id", [id, auth.uid]);
+      if (!deleted.length) return json(res, 404, { error: 'Saved Fincrux key not found.' });
+      return json(res, 200, { deleted: true, ...(await listFincruxKeyMetadata(sql, auth.uid)) });
+    }
     if (action === 'status') {
+      const fincrux = await listFincruxKeyMetadata(sql, auth.uid);
       return json(res, 200, {
         exa: { configured: Boolean(process.env.EXA_API_KEY), purpose: 'Financial research and source discovery' },
+        fincrux: { configured: fincrux.total_enabled > 0, environmentKeys: fincrux.environment.length, databaseKeys: fincrux.database.length, purpose: 'Ordered financial-statement provider keys with automatic fallback' },
         massive: { configured: Boolean(process.env.MASSIVE_API_KEY), purpose: 'Structured market data; endpoint availability depends on supported market and ticker' }
       });
     }
@@ -119,8 +145,9 @@ export default async function handler(req, res) {
       return json(res, 200, payload);
     }
 
-    return json(res, 400, { error: 'Unsupported action. Use status, research, or quote.' });
+    return json(res, 400, { error: 'Unsupported action. Use status, fincrux_keys, fincrux_key_add, fincrux_key_update, fincrux_key_delete, research, or quote.' });
   } catch (error) {
+    if (error?.status) return json(res, error.status, { error: error.message });
     console.error('[wealth-providers]', error?.message || error);
     return json(res, 502, { error: 'Provider request failed. Check server configuration and provider access.' });
   }

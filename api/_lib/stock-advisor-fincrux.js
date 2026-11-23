@@ -2,6 +2,7 @@ const BASE = 'https://api.fincrux.org/api/financials';
 const SOURCE = 'Fincrux';
 const MAX_DAILY_REQUESTS = 5;
 import { recordApiCall } from './api-audit.js';
+import { loadFincruxApiKeys } from './provider-api-keys.js';
 const timeout = ms => AbortSignal.timeout(ms);
 const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
 const safeDate = value => {
@@ -96,11 +97,11 @@ export async function collectFincruxFinancials({ instrument, db } = {}) {
   const ticker = clean(instrument?.symbol).toUpperCase();
   const result = {
     provider: SOURCE, ticker, status: 'skipped', request_limit_per_ist_day: MAX_DAILY_REQUESTS,
-    statement_rows: 0, verification_status: 'unverified', error: null
+    statement_rows: 0, verification_status: 'unverified', error: null, attempted_keys: 0
   };
-  const apiKey = clean(process.env.FINCRUX_API_KEY);
-  if (!apiKey) {
-    result.reason = 'FINCRUX_API_KEY is not configured; no request was made.';
+  const keys = await loadFincruxApiKeys(db);
+  if (!keys.length) {
+    result.reason = 'No Fincrux keys are configured. Add keys in Provider Health or set FINCRUX_API_KEY in the environment.';
     return result;
   }
   if (!/^[A-Z0-9&.-]{1,30}$/.test(ticker)) {
@@ -119,91 +120,95 @@ export async function collectFincruxFinancials({ instrument, db } = {}) {
   }
   const dateKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   const sourceUrl = BASE + '/' + encodeURIComponent(ticker);
-  let reservationId = null, payload = null;
+  let lastError = null, lastPayload = null, successful = null;
   const startedAt = Date.now();
-  try {
-    reservationId = await reserveDailySlot(db, ticker, sourceUrl, dateKey);
+  for (const key of keys) {
+    const reservationUrl = sourceUrl + '#key-' + encodeURIComponent(key.id);
+    const reservationId = await reserveDailySlot(db, ticker, reservationUrl, dateKey);
     if (!reservationId) {
       result.status = 'skipped';
-      result.reason = 'Daily Fincrux free-tier quota is exhausted or this ticker was already requested today.';
-      return result;
+      result.reason = 'Daily Fincrux request allowance is exhausted, or this key already attempted this ticker today.';
+      break;
     }
-    const response = await fetch(sourceUrl + '?api_key=' + encodeURIComponent(apiKey), {
-      headers: { Accept: 'application/json', 'User-Agent': 'WealthPersonalStockResearch/1.0' },
-      signal: timeout(12000)
-    });
-    if (!response.ok) throw new Error('Fincrux HTTP ' + response.status + '.');
-    payload = await response.json();
-    // Record what came back before parsing, so one request answers "what data does this plan actually give".
-    await recordApiCall(db, { provider: SOURCE, endpoint: sourceUrl, ticker, httpStatus: response.status, ok: true,
-      durationMs: Date.now() - startedAt, payload, bytes: JSON.stringify(payload || {}).length });
-    const normalized = normalizeFincruxFinancials(payload, ticker);
-    const retrievedAt = new Date().toISOString();
-    const evidence = {
-      provider: SOURCE,
-      endpoint: sourceUrl,
-      ticker: normalized.ticker,
-      company: normalized.company,
-      about: normalized.about,
-      last_updated_at: normalized.last_updated_at,
-      financials: normalized.financials,
-      statement_row_count: normalized.statement_row_count,
-      retrieved_at: retrievedAt,
-      verification_note: 'Third-party structured financial data. Stored as unverified until key figures are checked against the linked official exchange/company filings. Must not satisfy the verified financial_statement evidence gate.'
-    };
-    const excerpt = [
-      normalized.company || ticker,
-      normalized.statement_row_count + ' statement rows returned.',
-      'Quarterly results: ' + normalized.financials.quarterly_results.length,
-      'P&L: ' + normalized.financials.profit_and_loss.length,
-      'Balance sheet: ' + normalized.financials.balance_sheet.length,
-      'Cash flow: ' + normalized.financials.cash_flows.length,
-      normalized.last_updated_at ? 'Provider data updated ' + normalized.last_updated_at + '.' : 'Provider update date not supplied.'
-    ].join(' ');
-    await db.query(`
-      UPDATE wealth_stock_advisor_research_sources
-      SET title=$2,published_at=$3::timestamptz,retrieved_at=$4::timestamptz,
-          excerpt=$5,evidence=$6::jsonb,verification_status='unverified'
-      WHERE id=$1
-    `, [reservationId, 'Financial statements — ' + (normalized.company || ticker), normalized.last_updated_at, retrievedAt, excerpt, JSON.stringify(evidence)]);
-    result.status = 'stored_unverified';
-    result.statement_rows = normalized.statement_row_count;
-    await recordApiCall(db, { provider: SOURCE, endpoint: sourceUrl, ticker, httpStatus: 200, ok: true, usable: true,
-      durationMs: Date.now() - startedAt, payload: { data: normalized.financials }, bytes: null });
-    result.last_updated_at = normalized.last_updated_at;
-    result.source_url = sourceUrl;
-    return result;
-  } catch (error) {
-    result.status = 'failed';
-    result.error = String(error?.message || error).slice(0, 240);
-    await recordApiCall(db, { provider: SOURCE, endpoint: sourceUrl, ticker, ok: false, usable: false,
-      durationMs: Date.now() - startedAt, payload, bytes: payload ? JSON.stringify(payload).length : null, error: result.error });
-    // One of five requests a day was spent, so keep everything the response did carry. 'rejected' keeps it out of the
-    // 30-day freshness check, so the ticker can be tried again instead of being locked out for a month.
-    const salvage = { provider: SOURCE, request_date_ist: dateKey, request_failed: true, error: result.error,
-      response_keys: payload && typeof payload === 'object' ? Object.keys(payload).slice(0, 20) : [],
-      data_keys: payload?.data && typeof payload.data === 'object' && !Array.isArray(payload.data) ? Object.keys(payload.data).slice(0, 30) : [],
-      partial: {} };
-    for (const section of ['about', 'ratios', 'top_ratios', 'shareholding_quarterly', 'shareholding_yearly', 'last_updated_at']) {
-      const value = payload?.data?.[section];
-      if (value !== undefined && value !== null) salvage.partial[section] = value;
-    }
-    result.response_keys = salvage.response_keys;
-    result.data_keys = salvage.data_keys;
-    if (reservationId) {
+    result.attempted_keys++;
+    let payload = null, responseStatus = null;
+    try {
+      const response = await fetch(sourceUrl + '?api_key=' + encodeURIComponent(key.value), {
+        headers: { Accept: 'application/json', 'User-Agent': 'WealthPersonalStockResearch/1.0' },
+        signal: timeout(12000)
+      });
+      responseStatus = response.status;
+      payload = await response.json().catch(() => null);
+      lastPayload = payload;
+      if (!response.ok) throw new Error('Fincrux HTTP ' + response.status + '.');
+      if (!payload) throw new Error('Fincrux returned invalid JSON.');
+      const normalized = normalizeFincruxFinancials(payload, ticker);
+      await recordApiCall(db, { provider: SOURCE, endpoint: sourceUrl, ticker, httpStatus: response.status, ok: true,
+        durationMs: Date.now() - startedAt, payload, bytes: JSON.stringify(payload || {}).length, usable: true });
+      successful = { key, reservationId, normalized };
+      break;
+    } catch (error) {
+      lastError = String(error?.message || error).slice(0, 240);
+      await recordApiCall(db, { provider: SOURCE, endpoint: sourceUrl, ticker, httpStatus: responseStatus, ok: false,
+        durationMs: Date.now() - startedAt, payload, bytes: payload ? JSON.stringify(payload).length : null, usable: false, error: lastError });
+      const salvage = { provider: SOURCE, request_date_ist: dateKey, request_failed: true, attempted_key: key.id, error: lastError,
+        response_keys: payload && typeof payload === 'object' ? Object.keys(payload).slice(0, 20) : [],
+        data_keys: payload?.data && typeof payload.data === 'object' && !Array.isArray(payload.data) ? Object.keys(payload.data).slice(0, 30) : [],
+        partial: {} };
+      for (const section of ['about', 'ratios', 'top_ratios', 'shareholding_quarterly', 'shareholding_yearly', 'last_updated_at']) {
+        const value = payload?.data?.[section];
+        if (value !== undefined && value !== null) salvage.partial[section] = value;
+      }
       try {
         await db.query(`
           UPDATE wealth_stock_advisor_research_sources
           SET title=$2::text,retrieved_at=now(),excerpt=$3::text,evidence=$4::jsonb,verification_status='rejected'
           WHERE id=$1
         `, [reservationId, 'Fincrux request failed — ' + ticker,
-          (result.error + (salvage.data_keys.length ? ' Response carried: ' + salvage.data_keys.join(', ') + '.' : '')).slice(0, 1000),
+          (lastError + (salvage.data_keys.length ? ' Response carried: ' + salvage.data_keys.join(', ') + '.' : '')).slice(0, 1000),
           JSON.stringify(salvage)]);
       } catch (writeError) {
-        // Never silent: a slot was spent and we failed to record it.
-        console.error('[stock-advisor-fincrux] could not record the failed request', writeError?.message || writeError);
+        console.error('[stock-advisor-fincrux] could not record the failed key attempt', writeError?.message || writeError);
       }
     }
+  }
+  if (!successful) {
+    result.status = lastError ? 'failed' : 'skipped';
+    result.error = lastError || null;
+    result.reason = lastError ? 'All available Fincrux keys failed; tried ' + result.attempted_keys + ' key(s). Last error: ' + lastError : result.reason;
+    result.response_keys = lastPayload && typeof lastPayload === 'object' ? Object.keys(lastPayload).slice(0, 20) : [];
+    result.data_keys = lastPayload?.data && typeof lastPayload.data === 'object' && !Array.isArray(lastPayload.data) ? Object.keys(lastPayload.data).slice(0, 30) : [];
     return result;
   }
+
+  const { normalized, reservationId, key } = successful;
+  const retrievedAt = new Date().toISOString();
+  const evidence = {
+    provider: SOURCE, endpoint: sourceUrl, ticker: normalized.ticker, company: normalized.company, about: normalized.about,
+    last_updated_at: normalized.last_updated_at, financials: normalized.financials,
+    statement_row_count: normalized.statement_row_count, retrieved_at: retrievedAt,
+    key_source: key.source, key_label: key.label,
+    verification_note: 'Third-party structured financial data. Stored as unverified until key figures are checked against the linked official exchange/company filings. Must not satisfy the verified financial_statement evidence gate.'
+  };
+  const excerpt = [
+    normalized.company || ticker, normalized.statement_row_count + ' statement rows returned.',
+    'Quarterly results: ' + normalized.financials.quarterly_results.length,
+    'P&L: ' + normalized.financials.profit_and_loss.length,
+    'Balance sheet: ' + normalized.financials.balance_sheet.length,
+    'Cash flow: ' + normalized.financials.cash_flows.length,
+    normalized.last_updated_at ? 'Provider data updated ' + normalized.last_updated_at + '.' : 'Provider update date not supplied.'
+  ].join(' ');
+  await db.query(`
+    UPDATE wealth_stock_advisor_research_sources
+    SET title=$2,published_at=$3::timestamptz,retrieved_at=$4::timestamptz,
+        excerpt=$5,evidence=$6::jsonb,verification_status='unverified'
+    WHERE id=$1
+  `, [reservationId, 'Financial statements — ' + (normalized.company || ticker), normalized.last_updated_at, retrievedAt, excerpt, JSON.stringify(evidence)]);
+  result.status = 'stored_unverified';
+  result.statement_rows = normalized.statement_row_count;
+  result.last_updated_at = normalized.last_updated_at;
+  result.source_url = sourceUrl;
+  result.key_label = key.label;
+  result.attempted_keys = result.attempted_keys;
+  return result;
 }
