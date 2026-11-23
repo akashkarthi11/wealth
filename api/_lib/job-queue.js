@@ -45,6 +45,12 @@ export async function claimNext(db, remainingMs) {
   const rows = await db.query(`UPDATE wealth_job_queue q SET status='running',attempts=q.attempts+1,locked_until=now()+interval '${LOCK_SECONDS} seconds',started_at=now(),finished_at=NULL,error=NULL
     WHERE q.id=(SELECT id FROM wealth_job_queue
       WHERE ((status='pending' AND available_at<=now()) OR (status='running' AND locked_until<now())) AND attempts<max_attempts AND min_budget_ms<=$1
+      AND NOT (
+        task='fincrux' AND EXISTS (
+          SELECT 1 FROM wealth_job_queue active_fincrux
+          WHERE active_fincrux.task='fincrux' AND active_fincrux.status='running'
+        )
+      )
       ORDER BY priority,created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED)
     RETURNING q.*`, [Math.floor(remainingMs)]);
   return rows[0] || null;
