@@ -1,9 +1,13 @@
 import { runCollectionTask, finalizeCollectionRun, TASKS } from './stock-advisor-data-collection.js';
+import { runDebateStep } from './stock-advisor-debate.js';
 
 // The job queue. The dispatch only puts work on wealth_job_queue; a worker takes ONE item at a time and runs it, then takes the next while
 // time is left in this function call (Vercel stops a call at 60 s). What is not reached stays queued for the next worker call, so a slow or
 // big job never has to fit in one call and never blocks the others. A queue item is either a whole job (interest, backup, ...) or, for the
 // Stock Advisor data collection, one provider call for one stock.
+export const DEBATE_HANDLER = 'stock-advisor-debate';
+export const DEBATE_PRIORITY = 60;        // after the day's data collection, before anything optional
+const DEBATE_STEP_MS = 16000;             // one free-model call, with headroom
 export const DISPATCH_BUDGET_MS = 52000;
 export const MIN_START_MS = 1000;
 const LOCK_SECONDS = 90;
@@ -36,6 +40,29 @@ export async function claimNext(db, remainingMs) {
       ORDER BY priority,created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED)
     RETURNING q.*`, [Math.floor(remainingMs)]);
   return rows[0] || null;
+}
+
+// One queued item = one debate step. The next step is queued only when the run still has one, so a finished or failed
+// run stops by itself and nothing loops.
+export async function enqueueDebateStep(db, runId, { availableAt = null } = {}) {
+  if (!runId) return 0;
+  const rows = await db.query(`INSERT INTO wealth_job_queue(handler_key,task,payload,priority,min_budget_ms,max_attempts,available_at)
+    SELECT $1,'step',jsonb_build_object('run_id',$2::text),$3,$4,2,COALESCE($5::timestamptz,now())
+    WHERE NOT EXISTS (SELECT 1 FROM wealth_job_queue q WHERE q.handler_key=$1 AND q.payload->>'run_id'=$2::text AND q.status IN ('pending','running'))
+    RETURNING id`, [DEBATE_HANDLER, String(runId), DEBATE_PRIORITY, DEBATE_STEP_MS, availableAt]);
+  return rows.length;
+}
+// Research runs that are still open but have nothing on the queue: the ones the old browser-driven worker left stranded.
+export async function adoptStrandedDebates(db, limit = 25) {
+  const open = await db.query(`SELECT r.id, j.available_at FROM wealth_stock_advisor_runs r
+    JOIN wealth_stock_advisor_run_jobs j ON j.run_id=r.id AND j.stage='debate'
+    WHERE r.status NOT IN ('completed','failed','partially_completed')
+      AND j.status IN ('pending','running')
+      AND NOT EXISTS (SELECT 1 FROM wealth_job_queue q WHERE q.handler_key=$1 AND q.payload->>'run_id'=r.id::text AND q.status IN ('pending','running'))
+    ORDER BY r.run_at LIMIT ${Number(limit) || 25}`, [DEBATE_HANDLER]);
+  let adopted = 0;
+  for (const row of open) adopted += await enqueueDebateStep(db, row.id, { availableAt: row.available_at });
+  return adopted;
 }
 
 const mapRunStatus = (http, payload) => http >= 500 || http === 401 || (payload?.ok === false && payload?.status === 'failed') ? 'failed' : payload?.ok === false ? 'partial' : 'succeeded';
@@ -83,7 +110,13 @@ async function settle(db, jobRunId) {
 export async function runItem(db, item, { runHandler, deadlineAt }) {
   try {
     let result;
-    if (item.handler_key === 'stock-advisor-data-collection' && TASKS[item.task]) result = await runCollectionTask(db, item.task, obj(item.payload), { deadlineAt });
+    if (item.handler_key === DEBATE_HANDLER) {
+      const runId = obj(item.payload).run_id;
+      result = await runDebateStep(runId);
+      // Queue the next step unless the run has finished; a step waiting on the shared model slot keeps its wait.
+      if (!result.done) await enqueueDebateStep(db, runId, { availableAt: result.available_at });
+    }
+    else if (item.handler_key === 'stock-advisor-data-collection' && TASKS[item.task]) result = await runCollectionTask(db, item.task, obj(item.payload), { deadlineAt });
     else { const r = await runHandler(item.handler_key, deadlineAt); result = { http_status: r.http_status, payload: r.payload }; }
     await db.query(`UPDATE wealth_job_queue SET status='done',result=$2::jsonb,finished_at=now(),locked_until=NULL WHERE id=$1`, [item.id, JSON.stringify(result)]);
     await settle(db, item.job_run_id);
@@ -127,5 +160,6 @@ export async function reapStalled(db) {
     WHERE c.status='running' AND c.started_at<now()-interval '${STALLED_AFTER}'
       AND NOT EXISTS (SELECT 1 FROM wealth_job_queue q WHERE q.payload->>'collection_run_id'=c.id::text) RETURNING c.id`, [STALLED_MESSAGE]);
   await db.query(`DELETE FROM wealth_job_queue WHERE status IN ('done','failed') AND finished_at<now()-interval '30 days'`);
-  return { items_failed: failedItems.length, job_runs: closed, collection_runs: collections.length };
+  const adopted = await adoptStrandedDebates(db).catch(() => 0);
+  return { items_failed: failedItems.length, job_runs: closed, collection_runs: collections.length, debates_adopted: adopted };
 }

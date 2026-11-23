@@ -119,6 +119,7 @@ test('wiring: the debate and the data collection both run the period match after
   const debate = readFileSync(new URL('../../api/_lib/stock-advisor-debate.js', import.meta.url), 'utf8');
   const coll = readFileSync(new URL('../../api/_lib/stock-advisor-data-collection.js', import.meta.url), 'utf8');
   assert.ok(debate.indexOf('collectNseNews({ticker:run.ticker') < debate.indexOf('verifyFinancialStatements(sql,run.ticker,{name:run.stock_name})'), 'after NSE news in the debate');
-  assert.match(coll, /verifyFinancialStatements\(db, i\.symbol, \{ name: i\.name \}\)/);
+  assert.match(coll, /verifyFinancialStatements\(db, i\.symbol, \{ name: registered \|\| i\.name \}\)/,
+    'the registered NSE name is preferred, because the saved name is often just the symbol');
   assert.match(coll, /financials_verified/);
 });

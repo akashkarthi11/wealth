@@ -24,6 +24,7 @@ export const ROUTES = {
   'reconcile': () => import('./_routes/reconcile.js'),
   'refresh-market-prices': () => import('./_routes/refresh-market-prices.js'),
   'ai-data': () => import('./_routes/ai-data.js'),
+  'api-usage': () => import('./_routes/api-usage.js'),
   'jobs': () => import('./_routes/jobs.js'),
   'jobs/run-now': () => import('./_routes/jobs-run-now.js'),
   'jobs/dispatch': () => import('./_routes/jobs-dispatch.js'),
