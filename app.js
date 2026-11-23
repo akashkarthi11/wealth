@@ -1145,6 +1145,12 @@ async function loadStockAdvisor(runId=null){
   const providerRows=Array.isArray(researchHealth.providers)?researchHealth.providers:[];
   const providerStatusText=status=>status==='available'?'READY':status==='configured'?'CONFIGURED':status==='blocked'?'BLOCKED':'NEEDS KEY';
   const providerCards=providerRows.map(p=>'<article class="advisor-provider-card"><div><b>'+esc(p.name||p.key)+'</b><small>'+esc(p.detail||'')+'</small></div><span class="advisor-provider-status status-'+esc(p.status||'unknown')+'">'+providerStatusText(p.status)+'</span></article>').join('');
+  const fincruxKeys=researchHealth.fincrux_keys||{database:[],environment:[]};
+  const dbFincruxKeys=Array.isArray(fincruxKeys.database)?fincruxKeys.database:[];
+  const envFincruxKeys=Array.isArray(fincruxKeys.environment)?fincruxKeys.environment:[];
+  const fincruxKeyRows=dbFincruxKeys.map(k=>'<div class="advisor-key-row"><div><b>'+esc(k.label||'Saved key')+'</b><small>'+esc(k.masked||'Unavailable')+' · Database override · Priority '+Number(k.priority||0)+'</small></div><div class="advisor-key-actions"><button type="button" class="ghost" data-fincrux-key-toggle="'+esc(k.id)+'" data-enabled="'+(k.enabled?'true':'false')+'">'+(k.enabled?'Disable':'Enable')+'</button><button type="button" class="ghost danger" data-fincrux-key-delete="'+esc(k.id)+'">Remove</button></div></div>').join('');
+  const envFincruxRows=envFincruxKeys.map(k=>'<div class="advisor-key-row"><div><b>'+esc(k.label)+'</b><small>'+esc(k.masked)+' · Environment default</small></div><span class="advisor-key-default">DEFAULT</span></div>').join('');
+  const fincruxKeyManager='<section class="advisor-key-manager"><div><b>Fincrux API keys</b><small>Database keys are tried first in list order. Environment keys are the fallback defaults.</small></div><div class="advisor-key-list">'+(fincruxKeyRows||'<p class="muted">No database overrides saved.</p>')+'</div><div class="advisor-key-list advisor-key-env">'+(envFincruxRows||'<p class="muted">No environment default keys detected.</p>')+'</div><div class="advisor-key-add"><input id="fincruxKeyLabel" type="text" maxlength="60" placeholder="Key label (e.g. Account 2)"><input id="fincruxKeyValue" type="password" autocomplete="new-password" placeholder="Paste Fincrux API key"><button type="button" class="primary" data-fincrux-key-save>Add key</button></div><small id="fincruxKeyStatus" class="advisor-key-status">Keys are encrypted before storage. Full key values are never displayed.</small></section>';
   const coverage=researchHealth.coverage||{};
   const eligibleCount=Number(researchHealth.eligible_equities||0);
   const coverageCard=(label,value)=>'<article class="advisor-coverage-card"><small>'+label+'</small><b>'+Number(value||0)+' / '+eligibleCount+'</b></article>';
@@ -1152,7 +1158,7 @@ async function loadStockAdvisor(runId=null){
   const collectionTime=collection?.started_at?new Date(collection.started_at).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'}):'No collection run yet';
   const evidenceRows=Array.isArray(researchHealth.evidence_summary)?researchHealth.evidence_summary:[];
   const evidenceDetails=evidenceRows.length?'<details class="advisor-evidence-source-list"><summary>Stored evidence sources ('+evidenceRows.length+')</summary><div>'+evidenceRows.map(row=>'<div><b>'+esc(row.publisher||'Provider')+'</b><span>'+esc(row.source_type||'source')+' · '+esc(row.verification_status||'unknown')+' · '+Number(row.records||0)+' records</span><small>'+esc(row.latest_retrieved?new Date(row.latest_retrieved).toLocaleString('en-IN'):'No retrieval time')+'</small></div>').join('')+'</div></details>':'<p class="muted">No shared evidence has been collected for these holdings yet.</p>';
-  const researchHealthPanel='<section class="advisor-panel advisor-research-health"><div class="advisor-section-head"><div><small class="eyebrow">RESEARCH ENGINE</small><h4>Provider health & evidence</h4><small>'+eligibleCount+' eligible saved Indian equities / ETFs</small></div><span class="pill">'+(researchHealth.status==='ok'?'LIVE STATUS':'STATUS UNAVAILABLE')+'</span></div><div class="advisor-provider-grid">'+(providerCards||'<p class="muted">Provider status unavailable.</p>')+'</div><div class="advisor-coverage-grid">'+coverageCard('Verified prices',coverage.verified_prices)+coverageCard('Verified technicals',coverage.verified_technicals)+coverageCard('Verified financials',coverage.verified_financials)+'<article class="advisor-coverage-card"><small>Unverified financial snapshots</small><b>'+Number(coverage.unverified_financials||0)+'</b></article></div><div class="advisor-collection-status"><span>Last data collection</span><b>'+esc(collection?.status||'not run')+' · '+esc(collectionTime)+'</b><small>Prices '+Number(collectionSummary.market_data_updated||0)+' · NAV '+Number(collectionSummary.nav_updated||0)+' · Disclosures '+Number(collectionSummary.announcements||0)+' · Failed '+Number(collectionSummary.failed||0)+'</small>'+(collection?.error?'<small class="advisor-health-error">'+esc(collection.error)+'</small>':'')+'</div><p class="muted">Unverified financial snapshots and RSS listings cannot unlock a BUY decision. The CIO keeps the evidence gate closed until official filing data is validated.</p>'+evidenceDetails+'</section>';
+  const researchHealthPanel='<section class="advisor-panel advisor-research-health"><div class="advisor-section-head"><div><small class="eyebrow">RESEARCH ENGINE</small><h4>Provider health & evidence</h4><small>'+eligibleCount+' eligible saved Indian equities / ETFs</small></div><span class="pill">'+(researchHealth.status==='ok'?'LIVE STATUS':'STATUS UNAVAILABLE')+'</span></div><div class="advisor-provider-grid">'+(providerCards||'<p class="muted">Provider status unavailable.</p>')+'</div>'+fincruxKeyManager+<div class="advisor-coverage-grid">'+coverageCard('Verified prices',coverage.verified_prices)+coverageCard('Verified technicals',coverage.verified_technicals)+coverageCard('Verified financials',coverage.verified_financials)+'<article class="advisor-coverage-card"><small>Unverified financial snapshots</small><b>'+Number(coverage.unverified_financials||0)+'</b></article></div><div class="advisor-collection-status"><span>Last data collection</span><b>'+esc(collection?.status||'not run')+' · '+esc(collectionTime)+'</b><small>Prices '+Number(collectionSummary.market_data_updated||0)+' · NAV '+Number(collectionSummary.nav_updated||0)+' · Disclosures '+Number(collectionSummary.announcements||0)+' · Failed '+Number(collectionSummary.failed||0)+'</small>'+(collection?.error?'<small class="advisor-health-error">'+esc(collection.error)+'</small>':'')+'</div><p class="muted">Unverified financial snapshots and RSS listings cannot unlock a BUY decision. The CIO keeps the evidence gate closed until official filing data is validated.</p>'+evidenceDetails+'</section>';
   const overviewView='<div class="advisor-dashboard">'+portfolioValueCard+researchHealthPanel+kpis+nextRunPanel+latestCard+fullReport+automationSettings+'</div>';
   const chatView=runHeading+transcript;
   box.innerHTML=advisorRenderTabs()+(advisorActiveTab==='history'?history:advisorActiveTab==='chat'?chatView:overviewView);
@@ -1173,6 +1179,37 @@ $('viewContent').addEventListener('click',async e=>{
   await loadStockAdvisor(advisorSelectedRunId);
  }catch(err){if(status)status.textContent=err.message||'Could not save schedule.'}
  finally{button.disabled=false}
+});
+$('viewContent').addEventListener('click',async e=>{
+ const save=e.target.closest('[data-fincrux-key-save]');
+ const remove=e.target.closest('[data-fincrux-key-delete]');
+ const toggle=e.target.closest('[data-fincrux-key-toggle]');
+ if(!save&&!remove&&!toggle)return;
+ const status=document.getElementById('fincruxKeyStatus');
+ const setStatus=(message,error=false)=>{if(status){status.textContent=message;status.classList.toggle('is-error',error)}};
+ const buttons=[...document.querySelectorAll('[data-fincrux-key-save],[data-fincrux-key-delete],[data-fincrux-key-toggle]')];
+ buttons.forEach(b=>b.disabled=true);
+ try{
+  if(save){
+   const key=document.getElementById('fincruxKeyValue')?.value||'';
+   const label=document.getElementById('fincruxKeyLabel')?.value||'';
+   if(!key.trim()){setStatus('Paste an API key first.',true);return}
+   await api('/api/providers',{method:'POST',body:JSON.stringify({action:'fincrux_key_add',key,label})});
+   const value=document.getElementById('fincruxKeyValue');if(value)value.value='';
+   const name=document.getElementById('fincruxKeyLabel');if(name)name.value='';
+   setStatus('Key saved securely. It will be tried before environment defaults.');
+  }else if(remove){
+   if(!confirm('Remove this saved Fincrux key?'))return;
+   await api('/api/providers',{method:'POST',body:JSON.stringify({action:'fincrux_key_delete',id:remove.dataset.fincruxKeyDelete})});
+   setStatus('Saved key removed.');
+  }else{
+   const enabled=toggle.dataset.enabled!=='true';
+   await api('/api/providers',{method:'POST',body:JSON.stringify({action:'fincrux_key_update',id:toggle.dataset.fincruxKeyToggle,enabled})});
+   setStatus(enabled?'Key enabled.':'Key disabled.');
+  }
+  await loadStockAdvisor(advisorSelectedRunId);
+ }catch(err){setStatus(err.message||'Could not update Fincrux keys.',true)}
+ finally{buttons.forEach(b=>b.disabled=false)}
 });
 $('viewContent').addEventListener('click',async e=>{
  const button=e.target.closest('[data-advisor-schedule-run-now]');if(!button)return;
