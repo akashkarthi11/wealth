@@ -173,7 +173,7 @@ export async function collectFincruxFinancials({ instrument, db } = {}) {
     }
   }
   if (!successful) {
-    result.status = result.status === 'skipped' ? 'skipped' : 'failed';
+    result.status = lastError ? 'failed' : 'skipped';
     result.error = lastError || null;
     result.reason = lastError ? 'All available Fincrux keys failed; tried ' + result.attempted_keys + ' key(s). Last error: ' + lastError : result.reason;
     result.response_keys = lastPayload && typeof lastPayload === 'object' ? Object.keys(lastPayload).slice(0, 20) : [];
