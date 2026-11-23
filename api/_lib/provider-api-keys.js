@@ -44,6 +44,16 @@ export async function listFincruxKeyMetadata(db, userId) {
   return { database, environment, total_enabled: database.filter(x => x.enabled && !x.error).length + environment.length };
 }
 
+export function selectFincruxKeysForTicker(keys, ticker) {
+  const symbol = clean(ticker).toUpperCase();
+  const explicitlyAssigned = (keys || []).filter(key =>
+    Array.isArray(key.assigned_tickers) && key.assigned_tickers.length && key.assigned_tickers.includes(symbol)
+  );
+  return explicitlyAssigned.length
+    ? explicitlyAssigned
+    : (keys || []).filter(key => !Array.isArray(key.assigned_tickers) || !key.assigned_tickers.length);
+}
+
 export async function loadFincruxApiKeys(db) {
   const owners = await db.query("SELECT id FROM wealth_users WHERE role='admin' ORDER BY created_at LIMIT 1");
   const userId = owners[0]?.id;
