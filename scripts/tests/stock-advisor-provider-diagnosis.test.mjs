@@ -3,19 +3,24 @@
 // rows — neither recorded enough to tell an empty feed from an unmatched one (owner's Production run, 2026-11-23).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { collectNseNewsBatch } from '../../api/_lib/stock-advisor-live-evidence.js';
+import { collectNseNewsBatch, resetNseSymbolNames } from '../../api/_lib/stock-advisor-live-evidence.js';
 import { normalizeFincruxFinancials } from '../../api/_lib/stock-advisor-fincrux.js';
 
 const feed = (items) => '<rss><channel>' + items.map(t =>
   '<item><title><![CDATA[' + t + ']]></title><link>https://www.nseindia.com/x' + Math.random().toString(36).slice(2) + '</link>' +
   '<description><![CDATA[' + t + ']]></description><pubDate>Mon, 23 Nov 2026 10:00:00 +0530</pubDate></item>').join('') + '</channel></rss>';
 
+// The NSE symbol lists are answered with a tiny CSV so these tests exercise feed matching only.
+const LIST_CSV = ['SYMBOL,NAME OF COMPANY', 'TRENT,Trent Limited'].join('\n');
 async function run(titles, instruments) {
+  resetNseSymbolNames();
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response(feed(titles), { status: 200, headers: { 'Content-Type': 'application/rss+xml' } });
+  globalThis.fetch = async (url) => String(url).endsWith('.csv')
+    ? new Response(LIST_CSV, { status: 200, headers: { 'Content-Type': 'text/csv' } })
+    : new Response(feed(titles), { status: 200, headers: { 'Content-Type': 'application/rss+xml' } });
   try {
     return await collectNseNewsBatch({ instruments, db: { query: async () => [] }, feedLabels: ['Announcements'] });
-  } finally { globalThis.fetch = originalFetch; }
+  } finally { globalThis.fetch = originalFetch; resetNseSymbolNames(); }
 }
 
 test('a feed that carried announcements but matched nothing is reported differently from a feed that was empty', async () => {
@@ -26,7 +31,7 @@ test('a feed that carried announcements but matched nothing is reported differen
   assert.deepEqual(unmatched.feeds.map(f => [f.label, f.items, f.matched]), [['Announcements', 1, 0]]);
   assert.match(unmatched.feeds[0].sample[0], /Oil & Natural Gas/, 'a real title is kept, so the mismatch is visible');
   assert.match(String(unmatched.errors.at(-1).error), /none named a saved holding/);
-  assert.match(String(unmatched.errors.at(-1).error), /real company name, not just its symbol/);
+  assert.match(String(unmatched.errors.at(-1).error), /NSE lists loaded: Equities 1/, 'the run names which lists it had');
 
   const empty = await run([], held);
   assert.equal(empty.items_seen, 0);

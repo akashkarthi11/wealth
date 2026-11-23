@@ -607,6 +607,24 @@ async function getProgress(req,res) {
   return json(res,200,{run,progress:{completed:messages.length,total:9,current_step:job?.step_no||run.next_step||0,current_round:Math.min(4,Math.floor((job?.step_no||run.next_step||0)/2)+1),last_completed_round:run.last_completed_round,last_completed_speaker:run.last_completed_speaker,job_status:job?.status||run.status,retry_count:job?.step_attempts||0,last_error:job?.last_error||run.last_error||null},messages,report:reportRows[0]||null});
 }
 
+// Advance a research run by one step from the job queue. The browser polling the progress endpoint is no longer the only
+// thing that moves a run forward, so scheduled research finishes on its own (owner's stuck runs, 2026-11-23).
+export async function runDebateStep(runId) {
+  const secret=String(process.env.CRON_SECRET||'').trim();
+  if(secret.length<16)throw new Error('CRON_SECRET is not configured.');
+  const req={method:'POST',url:'/api/stock-advisor/debate/worker',route:'stock-advisor/debate/worker',
+    headers:{authorization:'Bearer '+secret},
+    async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify({run_id:runId})); }};
+  const res={statusCode:200,headers:{},body:'',setHeader(k,v){this.headers[k]=v},end(v=''){this.body=String(v);return this}};
+  await handleWorker(req,res);
+  let payload={};try{payload=JSON.parse(res.body||'{}')}catch{payload={message:String(res.body||'').slice(0,300)}}
+  const [run]=await sql.query('SELECT status,next_step FROM wealth_stock_advisor_runs WHERE id=$1',[runId]);
+  const [job]=await sql.query("SELECT status,available_at FROM wealth_stock_advisor_run_jobs WHERE run_id=$1 AND stage='debate'",[runId]);
+  const done=!run||['completed','failed','partially_completed'].includes(String(run.status));
+  return {http_status:res.statusCode,payload,status:run?.status||'unknown',step:Number(run?.next_step||0),done,
+    available_at:job?.available_at||null};
+}
+
 export default async function handler(req,res) {
   try {
     if (!sql) return json(res,503,{error:'Database is not configured.'});
