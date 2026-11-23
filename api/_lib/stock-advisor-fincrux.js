@@ -6,24 +6,24 @@ import { recordApiCall } from './api-audit.js';
 import { loadFincruxApiKeys } from './provider-api-keys.js';
 const timeout = ms => AbortSignal.timeout(ms);
 
-// Per-isolate working counter. It is seeded from today's persisted attempts, incremented immediately
-// after each successful reservation, and cleared when the collection run is finalized. The database
-// reservation remains authoritative across separate serverless isolates.
-let dailyUsageMemory = null;
-async function dailyFincruxUsage(db, dateKey) {
-  if (!dailyUsageMemory || dailyUsageMemory.dateKey !== dateKey) {
-    const [row] = await db.query(`
-      SELECT count(*)::int AS used
+// Per-isolate set of unique tickers attempted today (IST). It is seeded from today's
+// persisted records, updated after each reservation, and cleared when the collection run ends.
+// The database check/reservation remains authoritative across separate serverless isolates.
+let dailyTickersMemory = null;
+async function dailyFincruxTickers(db, dateKey) {
+  if (!dailyTickersMemory || dailyTickersMemory.dateKey !== dateKey) {
+    const rows = await db.query(`
+      SELECT DISTINCT upper(ticker) AS ticker
       FROM wealth_stock_advisor_research_sources
-      WHERE publisher='Fincrux'
+      WHERE publisher='Fincrux' AND source_type='financial_statement'
         AND retrieved_at >= (date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata')
         AND retrieved_at < ((date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') + interval '1 day') AT TIME ZONE 'Asia/Kolkata')
     `);
-    dailyUsageMemory = { dateKey, used: Number(row?.used || 0) };
+    dailyTickersMemory = { dateKey, tickers: new Set(rows.map(row => clean(row.ticker).toUpperCase()).filter(Boolean)) };
   }
-  return dailyUsageMemory;
+  return dailyTickersMemory;
 }
-export function clearFincruxDailyUsageMemory() { dailyUsageMemory = null; }
+export function clearFincruxDailyUsageMemory() { dailyTickersMemory = null; }
 const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
 const safeDate = value => {
   if (!value) return null;
@@ -168,14 +168,13 @@ export async function collectFincruxFinancials({ instrument, db, manual = false 
   }
   const dateKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   const sourceUrl = BASE + '/' + encodeURIComponent(ticker);
-  const usageMemory = await dailyFincruxUsage(db, dateKey);
-  const totalDailyLimit = MAX_DAILY_REQUESTS * keys.length;
-  result.daily_records_at_start = usageMemory.used;
-  result.daily_records_in_memory = usageMemory.used;
-  result.daily_limit_all_accounts = totalDailyLimit;
-  if (usageMemory.used >= totalDailyLimit) {
+  const usageMemory = await dailyFincruxTickers(db, dateKey);
+  result.unique_tickers_attempted_at_start = usageMemory.tickers.size;
+  result.unique_tickers_in_memory = usageMemory.tickers.size;
+  if (!manual && usageMemory.tickers.has(ticker)) {
     result.status = 'skipped';
-    result.reason = 'All configured Fincrux accounts have used their combined daily allowance.';
+    result.reason = 'Fincrux was already attempted for this stock today (IST); ticker is present in the in-memory set.';
+    result.already_attempted_today = true;
     return result;
   }
   if (!manual) {
@@ -212,8 +211,8 @@ export async function collectFincruxFinancials({ instrument, db, manual = false 
       continue;
     }
     result.attempted_keys++;
-    usageMemory.used++;
-    result.daily_records_in_memory = usageMemory.used;
+    usageMemory.tickers.add(ticker);
+    result.unique_tickers_in_memory = usageMemory.tickers.size;
     let payload = null, responseStatus = null;
     try {
       const response = await fetch(sourceUrl + '?api_key=' + encodeURIComponent(key.value), {
