@@ -45,13 +45,15 @@ export async function listFincruxKeyMetadata(db, userId) {
 }
 
 export function selectFincruxKeysForTicker(keys, ticker) {
+  const available = Array.isArray(keys) ? keys : [];
+  if (!available.length) return [];
+  // Stable automatic sharding: the same ticker starts with the same key, while
+  // different tickers are spread across active keys. Remaining keys stay in
+  // rotation order as fallbacks if the preferred key is unavailable or limited.
   const symbol = clean(ticker).toUpperCase();
-  const explicitlyAssigned = (keys || []).filter(key =>
-    Array.isArray(key.assigned_tickers) && key.assigned_tickers.length && key.assigned_tickers.includes(symbol)
-  );
-  return explicitlyAssigned.length
-    ? explicitlyAssigned
-    : (keys || []).filter(key => !Array.isArray(key.assigned_tickers) || !key.assigned_tickers.length);
+  const hash = createHash('sha256').update(symbol).digest();
+  const start = hash.readUInt32BE(0) % available.length;
+  return available.slice(start).concat(available.slice(0, start));
 }
 
 export async function loadFincruxApiKeys(db) {
