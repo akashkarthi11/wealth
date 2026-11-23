@@ -515,6 +515,39 @@ async function resumeDebate(req,res) {
   return json(res,202,{ok:true,resumed:true,run_id:runId,next_step:Number(run.next_step||0)});
 }
 
+async function pumpQueue(req,res) {
+  const uid=await sessionUser(req); if(!uid) return json(res,401,{error:'Sign in required'});
+  const url=new URL(req.url,'https://wealth.local'),executionId=String(url.searchParams.get('execution_id')||'').trim();
+  if(!/^[0-9a-f-]{36}$/i.test(executionId)) return json(res,400,{error:'A valid execution_id is required.'});
+  const [execution]=await sql.query('SELECT id,result_json,status FROM wealth_stock_advisor_schedule_runs WHERE id=$1 AND user_id=$2',[executionId,uid]);
+  if(!execution) return json(res,404,{error:'Research execution not found.'});
+  let entries=execution.result_json;
+  if(typeof entries==='string'){try{entries=JSON.parse(entries)}catch{entries=[]}}
+  const runIds=[...new Set((Array.isArray(entries)?entries:[]).map(x=>String(x?.run_id||'')).filter(x=>/^[0-9a-f-]{36}$/i.test(x)))];
+  if(!runIds.length) return json(res,200,{ok:true,dispatched:false,done:true,counts:{total:0,completed:0,failed:0,active:0}});
+  const [next]=await sql.query(`
+    SELECT r.id FROM wealth_stock_advisor_runs r
+    JOIN wealth_stock_advisor_run_jobs j ON j.run_id=r.id AND j.stage='debate'
+    WHERE r.user_id=$1 AND r.id=ANY($2::uuid[]) AND r.status NOT IN ('completed','failed','partially_completed')
+      AND NOT EXISTS (SELECT 1 FROM wealth_stock_advisor_run_jobs active WHERE active.run_id=ANY($2::uuid[]) AND active.stage='debate' AND active.status='running' AND active.locked_at>now()-interval '90 seconds')
+      AND ((j.status='pending' AND j.available_at<=now())
+        OR (j.status='running' AND (j.locked_at IS NULL OR j.locked_at<now()-interval '90 seconds')))
+    ORDER BY j.available_at,r.run_at,r.id LIMIT 1
+  `,[uid,runIds]);
+  if(next) scheduleWorker(req,next.id);
+  const states=await sql.query(`
+    SELECT r.status,count(*)::int AS count FROM wealth_stock_advisor_runs r
+    WHERE r.user_id=$1 AND r.id=ANY($2::uuid[]) GROUP BY r.status
+  `,[uid,runIds]);
+  const counts={total:runIds.length,completed:0,failed:0,active:0};
+  for(const row of states){
+    if(row.status==='completed')counts.completed+=Number(row.count);
+    else if(row.status==='failed'||row.status==='partially_completed')counts.failed+=Number(row.count);
+    else counts.active+=Number(row.count);
+  }
+  return json(res,200,{ok:true,dispatched:!!next,done:counts.completed+counts.failed===counts.total,counts});
+}
+
 async function getProgress(req,res) {
   const uid=await sessionUser(req); if(!uid) return json(res,401,{error:'Sign in required'});
   const url=new URL(req.url,'https://wealth.local'),runId=String(url.searchParams.get('run_id')||'').trim();
@@ -539,6 +572,7 @@ export default async function handler(req,res) {
     if (req.route==='stock-advisor/debate/start' || req.route==='stock-advisor/free-run') return await startDebate(req,res);
     if (req.route==='stock-advisor/debate/worker' && req.method==='POST') return await handleWorker(req,res);
     if (req.route==='stock-advisor/debate/resume' && req.method==='POST') return await resumeDebate(req,res);
+    if (req.route==='stock-advisor/debate/queue' && req.method==='GET') return await pumpQueue(req,res);
     if (req.route==='stock-advisor/debate/progress' && req.method==='GET') return await getProgress(req,res);
     return json(res,405,{error:'Method not allowed'});
   } catch(error) {

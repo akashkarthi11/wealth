@@ -157,3 +157,18 @@ test('asset prompts prohibit operating-company analysis for ETFs',()=>{
   assert.match(debate,/Do NOT discuss operating-company revenue, management, mining operations or company debt/);
   assert.match(debate,/tracking error, expense ratio, liquidity\/spread, NAV versus market price/);
 });
+
+const routerSource=readFileSync(new URL('../../api/router.js',import.meta.url),'utf8');
+const appSource=readFileSync(new URL('../../app.js',import.meta.url),'utf8');
+test('manual multi-ticker research has an authenticated serialized queue pump',()=>{
+  assert.match(debate,/async function pumpQueue\(req,res\)/);
+  assert.match(debate,/wealth_stock_advisor_schedule_runs WHERE id=\$1 AND user_id=\$2/);
+  assert.match(debate,/NOT EXISTS \(SELECT 1 FROM wealth_stock_advisor_run_jobs active/);
+  assert.match(debate,/stock-advisor\/debate\/queue/);
+  assert.match(routerSource,/'stock-advisor\/debate\/queue':/);
+});
+test('Run Now keeps dispatching queued tickers instead of abandoning jobs after submission',()=>{
+  assert.match(appSource,/stock-advisor\/debate\/queue\?execution_id=/);
+  assert.match(appSource,/for\(let i=0;i<180&&!finished;i\+\+\)/);
+  assert.match(appSource,/Research processing/);
+});

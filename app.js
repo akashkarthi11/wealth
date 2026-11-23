@@ -1000,7 +1000,27 @@ $('viewContent').addEventListener('click',async e=>{
  const status=document.getElementById('advisorAutoStatus');button.disabled=true;button.textContent='Starting…';if(status)status.textContent='Queueing research for your saved holdings…';
  try{
   const result=await api('/api/stock-advisor/schedule/run-now',{method:'POST',body:JSON.stringify({})});
-  if(status)status.textContent=result.reused?'A recent Run Now is already active.':('Research '+result.status+' · '+Number(result.tickers||0)+' investments queued.');
+  if(result.reused){if(status)status.textContent='A recent Run Now is already active. Open its history entry to monitor progress.';await loadStockAdvisor(advisorSelectedRunId);return;}
+  const executionId=result.execution_id;
+  if(!executionId)throw new Error('Research was submitted but no execution ID was returned.');
+  const total=Number(result.tickers||0);
+  if(status)status.textContent='Research queued · '+total+' investments. Starting the background queue…';
+  await loadStockAdvisor(advisorSelectedRunId);
+  let finished=false,lastCounts=null;
+  // The server deliberately dispatches one debate step at a time: the free Nemotron
+  // provider is globally rate-limited. Keep pumping the durable DB queue while this
+  // page is open; a single Run Now must not leave 15 of 16 tickers waiting forever.
+  for(let i=0;i<180&&!finished;i++){
+   await new Promise(resolve=>setTimeout(resolve,15000));
+   const progress=await api('/api/stock-advisor/debate/queue?execution_id='+encodeURIComponent(executionId),{timeout:15000});
+   lastCounts=progress.counts||lastCounts;
+   if(status&&lastCounts)status.textContent='Research processing · '+Number(lastCounts.completed||0)+'/'+Number(lastCounts.total||total)+' complete · '+Number(lastCounts.active||0)+' remaining';
+   finished=progress.done===true;
+  }
+  if(status){
+   if(finished)status.textContent='Research finished · '+Number(lastCounts?.completed||0)+' completed · '+Number(lastCounts?.failed||0)+' need review.';
+   else status.textContent='Research is still queued. Keep this page open; you can continue monitoring from History.';
+  }
   await loadStockAdvisor(advisorSelectedRunId);
  }catch(err){if(status)status.textContent=err.message||'Run Now failed.'}
  finally{button.disabled=false;button.textContent='Run Now'}
