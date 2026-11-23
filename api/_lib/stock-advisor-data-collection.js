@@ -1,5 +1,5 @@
 import { collectFincruxFinancials } from './stock-advisor-fincrux.js';
-import { collectNseNewsBatch, NSE_FEED_LABELS } from './stock-advisor-live-evidence.js';
+import { collectNseNewsBatch, NSE_FEED_LABELS, nseSymbolNames } from './stock-advisor-live-evidence.js';
 import { collectMutualFundEvidence } from './stock-advisor-mfapi.js';
 import { collectTejHqEquityEvidence } from './stock-advisor-tejhq.js';
 import { verifyFinancialStatements } from './stock-advisor-verify.js';
@@ -106,7 +106,11 @@ export async function runCollectionTask(db, task, payload = {}, { deadlineAt = n
     }
     if (task === 'fincrux_skip') return { ...base, status: 'skipped', note: payload.reason, detail: [{ provider: 'Fincrux', status: 'skipped', reason: payload.reason }] };
     // verify: a Fincrux statement whose reporting period matches an official NSE results announcement becomes verified (database only, no provider call).
-    const v = await verifyFinancialStatements(db, i.symbol, { name: i.name });
+    // The announcement is titled with the registered company name, so use that when the saved name is only the symbol.
+    // The lists are worth a download, but not when the call is about to be cut off.
+    const names = await nseSymbolNames({ cachedOnly: !!deadlineAt && deadlineAt - Date.now() < CALL_MS });
+    const registered = names.map?.get(String(i.symbol || '').toUpperCase()) || '';
+    const v = await verifyFinancialStatements(db, i.symbol, { name: registered || i.name });
     return { ...base, status: v.status, note: '', detail: v.status === 'verified' ? [{ provider: 'Period match with NSE', ...v }] : [] };
   } catch (e) {
     const message = String(e?.message || e).slice(0, 180);

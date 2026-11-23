@@ -68,10 +68,10 @@ test('Stock Advisor is role-selectable; admin-only views include Scheduled Jobs'
     assert.ok(!MENUS.some(m => m.key === k), k + ' is not a role menu');
     assert.ok(ADMIN_ONLY_VIEWS.includes(k));
   }
-  for (const k of ['data-quality','settings','jobs','ai-data']) assert.ok(ADMIN_ONLY_VIEWS.includes(k), k + ' is admin-only');
+  for (const k of ['data-quality','settings','jobs','ai-data','api-usage']) assert.ok(ADMIN_ONLY_VIEWS.includes(k), k + ' is admin-only');
   assert.ok(!ADMIN_ONLY_VIEWS.includes('stock-advisor'));
   assert.ok(adminOnlyRoute('angel') && !adminOnlyRoute('stock-advisor') && !adminOnlyRoute('loans'));
   assert.match(read('api/router.js'), /adminOnlyRoute\(route\) \|\| !routeAllowed/);
-  assert.ok(read('app.js').includes('OWNER_VIEWS=["data-quality","settings","angel-one","other","jobs","ai-data"]'));
+  assert.ok(read('app.js').includes('OWNER_VIEWS=["data-quality","settings","angel-one","other","jobs","ai-data","api-usage"]'));
   assert.ok(read('api/_roles.js').includes("'stock-advisor': ['stock-advisor']"));
 });
