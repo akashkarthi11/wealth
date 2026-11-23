@@ -120,7 +120,7 @@ export async function releaseAbandonedReservations(db) {
   return released.map(r => r.ticker);
 }
 
-export async function collectFincruxFinancials({ instrument, db } = {}) {
+export async function collectFincruxFinancials({ instrument, db, manual = false } = {}) {
   const ticker = clean(instrument?.symbol).toUpperCase();
   const result = {
     provider: SOURCE, ticker, status: 'skipped', request_limit_per_ist_day: MAX_DAILY_REQUESTS,
@@ -148,6 +148,23 @@ export async function collectFincruxFinancials({ instrument, db } = {}) {
   }
   const dateKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   const sourceUrl = BASE + '/' + encodeURIComponent(ticker);
+  if (!manual) {
+    const [todayAttempt] = await db.query(`
+      SELECT id, retrieved_at, verification_status, evidence->>'reservation' AS reservation
+      FROM wealth_stock_advisor_research_sources
+      WHERE publisher='Fincrux' AND source_type='financial_statement'
+        AND upper(ticker)=upper($1)
+        AND retrieved_at >= (date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata')
+        AND retrieved_at < ((date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') + interval '1 day') AT TIME ZONE 'Asia/Kolkata')
+      ORDER BY retrieved_at DESC LIMIT 1
+    `, [ticker]);
+    if (todayAttempt) {
+      result.status = 'skipped';
+      result.reason = 'Fincrux was already attempted for this stock today (IST). Automatic runs never call the same ticker twice in one day; use an explicit manual refresh to override.';
+      result.already_attempted_today = true;
+      return result;
+    }
+  }
   let lastError = null, lastPayload = null, successful = null;\n  const rateLimitedKeys = [];
   const startedAt = Date.now();
   for (const key of keys) {
