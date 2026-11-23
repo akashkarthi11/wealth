@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { migratedDb } from './helpers/pglite.mjs';
-import { queueCounts, enqueueDebateStep, claimNext, DEBATE_HANDLER } from '../../api/_lib/job-queue.js';
+import { queueCounts, enqueueDebateStep, claimNext, runItem, DEBATE_HANDLER } from '../../api/_lib/job-queue.js';
 
 const read = p => readFileSync(new URL('../../' + p, import.meta.url), 'utf8');
 
@@ -63,6 +63,19 @@ test('provider health sits with the usage, and no key value is ever exposed', ()
   assert.match(app, /function auHealth\(p\)/);
 });
 
+
+test('queue execution success does not erase a partial or failed provider outcome',async()=>{
+  const updates=[];
+  const db={query:async(sql,params)=>{updates.push({sql:String(sql),params});return [];}};
+  const item={id:'queue-1',handler_key:'test-handler',task:'test',attempts:1,max_attempts:1,job_run_id:null};
+  const partial=await runItem(db,item,{runHandler:async()=>({http_status:200,payload:{ok:false,status:'partial',failed:1}}),deadlineAt:Date.now()+1000});
+  assert.deepEqual([partial.status,partial.outcome],['done','partial']);
+  assert.equal(updates.at(-1).params[1],'done');
+  const failed=await runItem(db,{...item,id:'queue-2'},{runHandler:async()=>({http_status:200,payload:{status:'failed',error:'provider rate limited'}}),deadlineAt:Date.now()+1000});
+  assert.deepEqual([failed.status,failed.outcome],['failed','failed']);
+  assert.equal(updates.at(-1).params[1],'failed');
+  assert.equal(updates.at(-1).params[3],'provider rate limited');
+});
 
 test('claimNext executes its SQL successfully when the queue is empty', async () => {
   const { a } = await migratedDb();
