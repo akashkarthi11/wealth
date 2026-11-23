@@ -71,7 +71,8 @@ export default async function handler(req, res) {
       FROM wealth_stock_advisor_research_sources WHERE run_id IS NULL
       GROUP BY 1,2,3 ORDER BY 1,2,3`);
 
-    const where = ['run_id IS NULL'], params = [];\n    if (q) { params.push('%' + q.replace(/[\\\\%_]/g, '\\\\const where = ['run_id IS NULL'], params = [];') + '%'); where.push('(ticker ILIKE 
+    const where = ['run_id IS NULL'], params = [];
+    if (q) { params.push('%' + q + '%'); where.push('(ticker ILIKE $' + params.length + ' OR title ILIKE $' + params.length + ' OR publisher ILIKE $' + params.length + ' OR excerpt ILIKE $' + params.length + ')'); }
     if (ticker) { params.push(ticker); where.push('upper(ticker)=$' + params.length); }
     if (provider) { params.push(provider); where.push('publisher=$' + params.length); }
     if (verification) { params.push(verification); where.push('verification_status=$' + params.length); }
