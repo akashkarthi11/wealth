@@ -83,8 +83,8 @@ export async function adoptStrandedDebates(db, limit = 25) {
 }
 
 const mapRunStatus = (http, payload) => {
-  if (http >= 400 || payload?.status === 'failed' || payload?.failed > 0 || payload?.instruments?.failed > 0) return 'failed';
-  if (payload?.status === 'partial' || payload?.ok === false || payload?.instruments?.failed > 0) return 'partial';
+  if (http >= 500 || http === 401 || payload?.status === 'failed') return 'failed';
+  if (payload?.status === 'partial' || payload?.ok === false || payload?.failed > 0 || payload?.instruments?.failed > 0) return 'partial';
   if (payload?.status === 'skipped' || payload?.outcome === 'no_work_due') return 'skipped';
   return 'succeeded';
 };
