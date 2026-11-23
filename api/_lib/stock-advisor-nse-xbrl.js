@@ -40,6 +40,16 @@ const nseDateParam = iso => {
   return m ? m[3] + '-' + m[2] + '-' + m[1] : null;
 };
 const audit = (db, values) => recordApiCall(db, { provider: 'NSE XBRL', ...values });
+function xbrlShapeProbe(xml, contentType) {
+  const source = String(xml || '');
+  const names = [...new Set([...source.matchAll(/<([A-Za-z_][\w:.-]*)\b/g)].map(m => m[1]))].slice(0, 120);
+  const contextIds = [...new Set([...source.matchAll(/<(?:[\w.-]+:)?context\b[^>]*\bid=["']([^"']+)["']/gi)].map(m => m[1]))].slice(0, 40);
+  const namespaces = [...source.matchAll(/\bxmlns(?::([A-Za-z_][\w.-]*))?\s*=\s*["']([^"']+)["']/g)]
+    .map(m => ({ prefix: m[1] || '', uri: m[2] })).slice(0, 30);
+  const rootElement = source.match(/<([A-Za-z_][\w:.-]*)\b/)?.[1] || null;
+  return { content_type: contentType || '', document_kind: 'nse_filed_xbrl', byte_length: new TextEncoder().encode(source).byteLength,
+    root_element: rootElement, namespaces, xml_element_names: names, context_ids: contextIds };
+}
 
 async function readLatestAnnouncement(db, ticker) {
   const rows = await db.query(`SELECT id,title,url,published_at,excerpt,evidence
@@ -142,7 +152,7 @@ export async function collectNseXbrlFinancialStatement({ instrument, db } = {}) 
       const xbrlBytes = new TextEncoder().encode(xbrlText).byteLength;
       await audit(db, { endpoint: xbrlUrl, ticker, httpStatus: xbrlResponse.status, ok: xbrlResponse.ok,
         durationMs: Date.now() - xbrlStarted, bytes: xbrlBytes,
-        payload: { content_type: xbrlResponse.headers.get('content-type') || '', document_kind: 'nse_filed_xbrl', byte_length: xbrlBytes },
+        payload: xbrlShapeProbe(xbrlText, xbrlResponse.headers.get('content-type') || ''),
         usable: xbrlResponse.ok && /<(?:[\w.-]+:)?xbrl\b/i.test(xbrlText), error: xbrlResponse.ok ? null : 'NSE XBRL download failed.' });
       if (!xbrlResponse.ok) return { ticker, status: 'failed', reason: 'NSE XBRL download returned HTTP ' + xbrlResponse.status + '.', filing_url: announcementUrl, xbrl_url: xbrlUrl };
     } catch (error) {
