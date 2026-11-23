@@ -6,10 +6,17 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { migratedDb } from './helpers/pglite.mjs';
 import { createAccount, recordBalance } from '../../api/_ingest.js';
-import { addMonthsISO, creditPeriods, periodHolding, planAccrual, runAccrual, saveInterestAccount, interestOverview, interestAccountKind } from '../../api/_interest.js';
+import { addMonthsISO, creditPeriods, periodHolding, planAccrual, runAccrual, saveInterestAccount as saveInterestAccountConfig, interestOverview, interestAccountKind } from '../../api/_interest.js';
 
 const NOW = Date.parse('2026-11-14T10:00:00Z');     // through = 2026-11-13 (yesterday IST)
 const read = p => readFileSync(new URL('../../' + p, import.meta.url), 'utf8');
+
+async function saveInterestAccount(uid, body, options = {}) {
+  const saved = await saveInterestAccountConfig(uid, body, options);
+  await runAccrual(uid, { db: options.db, now: options.now ?? NOW, actor: 'cron' });
+  return saved;
+}
+
 
 async function setup({ balance = 100000, asOf = '2026-09-30T18:30:00Z' } = {}) {      // 1 Oct 2026 00:00 IST
   const { a } = await migratedDb();
@@ -33,6 +40,16 @@ test('an FD account or linked FD product is never classified as a savings source
   const missingMaturity=planAccrual({kind:'fd',terms:{principal:100000,bookedOn:'2026-01-01',maturityOn:null,payout:'monthly'},balances:[{as_of:'2026-11-01T00:00:00Z',balance:100000,status:'verified'}],rates:[{id:'r',annual_rate:0.08,effective_from:'2026-01-01',effective_to:null}],through:'2026-11-13'});
   assert.equal(missingMaturity.status,'pending_terms');
   assert.equal(missingMaturity.rows.length,0);
+});
+
+test('saving interest settings previews only; the nightly accrual job performs the writes',async()=>{
+  const {a,uid,acc,interestRows}=await setup();
+  await saveInterestAccountConfig(uid,{accountId:acc,annualRatePercent:6,creditFrequency:'monthly',creditAnchor:'2026-10-01'},{db:a,now:NOW});
+  assert.equal((await a.query('SELECT count(*)::int AS n FROM wealth_interest_ledger WHERE user_id=$1',[uid]))[0].n,0);
+  assert.equal((await interestRows()).length,0);
+  await runAccrual(uid,{db:a,now:NOW,actor:'cron'});
+  assert.ok((await a.query('SELECT count(*)::int AS n FROM wealth_interest_ledger WHERE user_id=$1',[uid]))[0].n>0);
+  assert.equal((await interestRows()).length,1);
 });
 
 test('periods: months are added on the calendar, cut to the month end; periods every N months from the start', () => {
