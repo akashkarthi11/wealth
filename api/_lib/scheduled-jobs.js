@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from '../_lib.js';
 import marketPriceRefresh from '../_routes/refresh-market-prices.js';
-import interestAccrual from '../_routes/interest-accrual.js';
 import backupJob from '../_routes/backup.js';
 import stockAdvisorResearch from '../_routes/stock-advisor-scheduled.js';
 import stockAdvisorCollection from '../_routes/stock-advisor-data-collection.js';
@@ -12,13 +11,12 @@ export { DISPATCH_BUDGET_MS, reapStalled, queueCounts };
 
 const HANDLERS = {
   'market-price-refresh': marketPriceRefresh,
-  'interest-accrual': interestAccrual,
   'backup': backupJob,
   'stock-advisor-auto-research': stockAdvisorResearch,
   'stock-advisor-data-collection': stockAdvisorCollection
 };
 // Queue order between jobs: lower runs first. The collection's own tasks use 40-44 (see TASKS in stock-advisor-data-collection.js).
-const JOB_PRIORITY = { 'interest-accrual': 10, 'backup': 20, 'market-price-refresh': 30, 'stock-advisor-auto-research': 90 };
+const JOB_PRIORITY = { 'backup': 20, 'market-price-refresh': 30, 'stock-advisor-auto-research': 90 };
 const WHOLE_JOB_MIN_BUDGET_MS = 15000;
 
 function fakeResponse(){
@@ -61,6 +59,7 @@ async function claimJob(job,triggerType,db=sql) {
 
 // Put a job on the queue (nothing runs yet). The data collection is planned into one item per provider call; any other job is one item.
 export async function enqueueJob(job,triggerType='scheduled',db=sql) {
+  if(job.handler_key==='interest-accrual')return {job_key:job.job_key,status:'blocked',reason:'Interest accrual is owned exclusively by /api/nightly.'};
   const claimed=await claimJob(job,triggerType,db);
   if(!claimed)return {job_key:job.job_key,status:'busy'};
   try{
