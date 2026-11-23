@@ -63,6 +63,7 @@ test('invalid schedule settings fail closed',()=>{
 const route=readFileSync(new URL('../../api/_routes/stock-advisor-schedule.js',import.meta.url),'utf8');
 const service=readFileSync(new URL('../../api/_lib/stock-advisor-schedule-service.js',import.meta.url),'utf8');
 const cron=readFileSync(new URL('../../api/_routes/stock-advisor-scheduled.js',import.meta.url),'utf8');
+const debate=readFileSync(new URL('../../api/_lib/stock-advisor-debate.js',import.meta.url),'utf8');
 const router=readFileSync(new URL('../../api/router.js',import.meta.url),'utf8');
 const ui=readFileSync(new URL('../../app.js',import.meta.url),'utf8');
 const migration=readFileSync(new URL('../migrations/0042_stock_advisor_dynamic_schedule.sql',import.meta.url),'utf8');
@@ -84,6 +85,11 @@ test('Run Now has a database lock and a recent-run duplicate guard',()=>{
 test('submitted work is not counted as a successful completed research run',()=>{
   assert.match(service,/last_success_at=CASE WHEN \$2='completed' THEN now\(\) ELSE last_success_at END/);
   assert.doesNotMatch(service,/last_success_at=CASE WHEN \$2 IN \('submitted','completed'\)/);
+});
+test('scheduled research records remain submitted until all linked debates are terminal',()=>{
+  assert.match(debate,/schedule_execution_id:String\(input\.schedule_execution_id/);
+  assert.match(debate,/settleScheduledExecutionForRun\(runId\)/);
+  assert.match(debate,/last_success_at=CASE WHEN \$2='completed' THEN now\(\)/);
 });
 test('empty scheduler windows are explicitly reported as no work due',()=>{
   assert.match(cron,/researchLaunched=result\.results\.some/);
