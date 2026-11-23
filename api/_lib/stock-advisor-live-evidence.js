@@ -1,4 +1,5 @@
 const NSE_HOSTS = new Set(['www.nseindia.com','nsearchives.nseindia.com','nseindia.com']);
+export const NSE_FEED_LABELS = ['Announcements','Financial results','Annual reports','Board meetings','Shareholding patterns','Corporate actions'];
 const NSE_FEEDS = Object.freeze([
   { label:'Announcements', source_type:'corporate_announcement', url:'https://nsearchives.nseindia.com/content/RSS/Online_announcements.xml' },
   { label:'Financial results', source_type:'financial_statement', url:'https://nsearchives.nseindia.com/content/RSS/Financial_Results.xml' },
@@ -58,11 +59,15 @@ async function saveItem({runId,ticker,sourceType,title,url,published,excerpt,fee
   }
 }
 
-export async function collectNseNewsBatch({instruments=[],runId=null,db}={}) {
+// feedLabels limits the run to those NSE feeds (the job queue runs one feed per item, so no single call has to download all six).
+export async function collectNseNewsBatch({instruments=[],runId=null,db,deadlineAt=null,feedLabels=null}={}) {
+  const feeds=Array.isArray(feedLabels)&&feedLabels.length?NSE_FEEDS.filter(f=>feedLabels.includes(f.label)):NSE_FEEDS;
   const list=(Array.isArray(instruments)?instruments:[]).filter(x=>x?.symbol);
   const results=new Map(list.map(x=>[String(x.symbol).toUpperCase(),{ticker:String(x.symbol).toUpperCase(),status:'no_matching_items',stored:0,errors:[]} ]));
   const batch={provider:'NSE RSS',fetched_at:new Date().toISOString(),feeds_checked:0,stored:0,errors:[],results:[]};
-  for(const feed of NSE_FEEDS) {
+  for(const feed of feeds) {
+    // A feed can wait up to 10 seconds; do not start one that could run past the caller's deadline.
+    if(deadlineAt&&deadlineAt-Date.now()<11000){batch.errors.push({feed:feed.label,error:'skipped: time limit reached'});continue}
     try {
       const xml=await getFeed(feed.url);
       batch.feeds_checked++;

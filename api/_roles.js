@@ -81,6 +81,6 @@ export const guardedRoute = route => Object.prototype.hasOwnProperty.call(ROUTE_
 
 // Tools (Stock Advisor, Angel One, Records) and Settings / Data quality are for the admin only (2026-11-14).
 // Scheduled agents that post with their own token are not affected: this applies to signed-in non-admin users.
-export const ADMIN_ONLY_VIEWS = ['angel-one', 'other', 'data-quality', 'settings', 'jobs'];
+export const ADMIN_ONLY_VIEWS = ['angel-one', 'other', 'data-quality', 'settings', 'jobs', 'ai-data'];
 export const ADMIN_ONLY_ROUTES = ['angel'];
 export const adminOnlyRoute = route => ADMIN_ONLY_ROUTES.includes(String(route || '').split('/')[0]);

@@ -1,4 +1,5 @@
 import { sql, json, sessionUser } from '../_lib.js';
+import { queueCounts } from '../_lib/job-queue.js';
 
 async function adminUser(req) {
   const uid=await sessionUser(req);
@@ -16,11 +17,12 @@ export default async function handler(req,res) {
       const jobs=await sql.query(`SELECT j.id,j.job_key,j.name,j.description,j.enabled,
         to_char(j.schedule_time,'HH24:MI') AS schedule_time,j.schedule_frequency,j.timezone,j.next_run_at,
         j.last_run_at,j.last_status,j.last_error,
+        (SELECT count(*)::int FROM wealth_job_queue q WHERE q.job_id=j.id AND q.status IN ('pending','running')) AS queued,
         (SELECT json_agg(x ORDER BY x.created_at DESC) FROM
           (SELECT id,trigger_type,status,started_at,finished_at,http_status,error,created_at
            FROM wealth_scheduled_job_runs r WHERE r.job_id=j.id ORDER BY r.created_at DESC LIMIT 10) x) AS recent_runs
         FROM wealth_scheduled_jobs j ORDER BY j.schedule_time,j.name`);
-      return json(res,200,{jobs});
+      return json(res,200,{jobs,queue:await queueCounts(sql)});
     }
     const body=await (async()=>{let raw='';for await(const c of req)raw+=c;if(raw.length>5000)throw new Error('Request too large');return JSON.parse(raw||'{}')})();
     const id=String(body.id||'');

@@ -123,8 +123,10 @@ test('schedule migration is additive and stores execution history',()=>{
   assert.match(migration,/UNIQUE\(user_id,execution_key\)/);
   assert.doesNotMatch(migration,/DROP TABLE|DELETE FROM|TRUNCATE/);
 });
-test('one central Vercel Cron dispatches the database-driven jobs once daily',()=>{
-  assert.deepEqual(vercel.crons,[{path:'/api/jobs/dispatch',schedule:'15 13 * * *'}]);
+test('one central Vercel Cron dispatches (queues) the database-driven jobs once daily; the other crons only work the job queue',()=>{
+  assert.deepEqual(vercel.crons.filter(c=>c.path==='/api/jobs/dispatch'),[{path:'/api/jobs/dispatch',schedule:'15 13 * * *'}]);
+  assert.ok(vercel.crons.every(c=>['/api/jobs/dispatch','/api/jobs/worker'].includes(c.path)),'no other cron paths');
+  assert.ok(vercel.crons.every(c=>/^\d+ \d+ \* \* \*$/.test(c.schedule)),'each cron runs once a day (Hobby plan)');
 });
 test('frontend saves preferences via PUT and Run Now via POST',()=>{
   assert.match(ui,/api\('\/api\/stock-advisor\/schedule',\{method:'PUT'/);
