@@ -31,6 +31,7 @@ export const ROUTES = {
   'stock-advisor/free-run': () => import('./_lib/stock-advisor-debate.js'),
   'stock-advisor/debate/start': () => import('./_lib/stock-advisor-debate.js'),
   'stock-advisor/debate/progress': () => import('./_lib/stock-advisor-debate.js'),
+  'stock-advisor/debate/queue': () => import('./_lib/stock-advisor-debate.js'),
   'stock-advisor/debate/worker': () => import('./_lib/stock-advisor-debate.js'),
   'stock-advisor/debate/resume': () => import('./_lib/stock-advisor-debate.js'),
   'stock-advisor/settings': () => import('./_routes/stock-advisor.js'),
