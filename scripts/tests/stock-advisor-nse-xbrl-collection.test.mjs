@@ -45,8 +45,8 @@ test('a parsed NSE filing is stored verified with the source filing URL, period 
     assert.equal(result.period, '2026-09');
     assert.deepEqual(result.figures.sort(), ['eps','net_profit','profit_before_tax','revenue','total_income','total_assets','total_equity','operating_cash_flow'].sort());
     assert.equal(s.audits.length, 3, 'PDF, NSE filing metadata and XBRL document requests are all audited');
-    assert.ok(s.audits[2].params[7].includes('xml_element_names'), 'XBRL element names are recorded before the parser runs');
-    assert.ok(JSON.parse(s.audits[2].params[9]).context_ids >= 3, 'XBRL context IDs and their count are audited');
+    assert.ok(s.audits[2].params[7].includes('response_preview'), 'raw XBRL response metadata is audited before XML parsing');
+    assert.match(JSON.parse(s.audits[2].params[10]).response_preview, /^<\?xml/);
     assert.equal(s.sourceWrites.length, 1);
     assert.match(s.sourceWrites[0].sql, /set_config\('wealth.actor', 'agent', true\)/);
     const evidence = JSON.parse(s.sourceWrites[0].params[5]);

@@ -40,17 +40,6 @@ const nseDateParam = iso => {
   return m ? m[3] + '-' + m[2] + '-' + m[1] : null;
 };
 const audit = (db, values) => recordApiCall(db, { provider: 'NSE XBRL', ...values });
-function xbrlShapeProbe(xml, contentType) {
-  const source = String(xml || '');
-  const names = [...new Set([...source.matchAll(/<([A-Za-z_][\w:.-]*)\b/g)].map(m => m[1]))].slice(0, 120);
-  const contextIds = [...new Set([...source.matchAll(/<(?:[\w.-]+:)?context\b[^>]*\bid=["']([^"']+)["']/gi)].map(m => m[1]))].slice(0, 40);
-  const namespaces = [...source.matchAll(/\bxmlns(?::([A-Za-z_][\w.-]*))?\s*=\s*["']([^"']+)["']/g)]
-    .map(m => ({ prefix: m[1] || '', uri: m[2] })).slice(0, 30);
-  const rootElement = source.match(/<([A-Za-z_][\w:.-]*)\b/)?.[1] || null;
-  return { content_type: contentType || '', document_kind: 'nse_filed_xbrl', byte_length: new TextEncoder().encode(source).byteLength,
-    root_element: rootElement, namespaces, xml_element_names: names, context_ids: contextIds };
-}
-
 async function readLatestAnnouncement(db, ticker) {
   const rows = await db.query(`SELECT id,title,url,published_at,excerpt,evidence
     FROM wealth_stock_advisor_research_sources
@@ -105,12 +94,12 @@ export async function collectNseXbrlFinancialStatement({ instrument, db } = {}) 
     try {
       const pdfResponse = await fetch(announcementUrl, { headers: { 'User-Agent': USER_AGENT, Accept: 'application/pdf,application/octet-stream;q=0.9,*/*;q=0.1' }, signal: timeout() });
       const pdfBytes = new Uint8Array(await pdfResponse.arrayBuffer());
-      const isPdf = new TextDecoder().decode(pdfBytes.slice(0, 5)) === '%PDF-';
       await audit(db, { endpoint: announcementUrl, ticker, httpStatus: pdfResponse.status, ok: pdfResponse.ok,
         durationMs: Date.now() - pdfStarted, bytes: pdfBytes.byteLength,
         payload: { content_type: pdfResponse.headers.get('content-type') || '', document_kind: 'stored_nse_announcement', byte_length: pdfBytes.byteLength },
-        usable: pdfResponse.ok && isPdf, error: pdfResponse.ok ? (isPdf ? null : 'Stored NSE announcement did not return a PDF document.') : 'NSE announcement download failed.' });
+        usable: null, error: pdfResponse.ok ? null : 'NSE announcement download failed.' });
       if (!pdfResponse.ok) return { ticker, status: 'failed', reason: 'NSE announcement download returned HTTP ' + pdfResponse.status + '.' };
+      const isPdf = new TextDecoder().decode(pdfBytes.slice(0, 5)) === '%PDF-';
       if (!isPdf) return { ticker, status: 'failed', reason: 'Stored NSE announcement did not return a PDF document.' };
     } catch (error) {
       await audit(db, { endpoint: announcementUrl, ticker, ok: false, durationMs: Date.now() - pdfStarted, error: String(error?.message || error) });
@@ -128,11 +117,12 @@ export async function collectNseXbrlFinancialStatement({ instrument, db } = {}) 
     try {
       metadataResponse = await fetch(metadataUrl, { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json, text/plain, */*', Referer: 'https://www.nseindia.com/companies-listing/corporate-integrated-filing' }, signal: timeout() });
       metadataRaw = await metadataResponse.text();
-      try { metadata = JSON.parse(metadataRaw); } catch { metadata = null; }
+      const metadataBytes = new TextEncoder().encode(metadataRaw).byteLength;
       await audit(db, { endpoint: metadataUrl, ticker, httpStatus: metadataResponse.status, ok: metadataResponse.ok,
-        durationMs: Date.now() - metadataStarted, bytes: new TextEncoder().encode(metadataRaw).byteLength,
-        payload: metadata && typeof metadata === 'object' ? metadata : { response_text: metadataRaw.slice(0, 300), content_type: metadataResponse.headers.get('content-type') || '' },
-        usable: metadataResponse.ok && Array.isArray(metadata?.data), error: metadataResponse.ok ? null : 'NSE integrated filing metadata request failed.' });
+        durationMs: Date.now() - metadataStarted, bytes: metadataBytes,
+        payload: { content_type: metadataResponse.headers.get('content-type') || '', document_kind: 'nse_integrated_filing_metadata', byte_length: metadataBytes, response_preview: metadataRaw.slice(0, 100) },
+        usable: null, error: metadataResponse.ok ? null : 'NSE integrated filing metadata request failed.' });
+      try { metadata = JSON.parse(metadataRaw); } catch { metadata = null; }
       if (!metadataResponse.ok) return { ticker, status: 'failed', reason: 'NSE Integrated Filing API returned HTTP ' + metadataResponse.status + '.' };
       if (!metadata || typeof metadata !== 'object') return { ticker, status: 'failed', reason: 'NSE Integrated Filing API did not return valid JSON.' };
       if (!Array.isArray(metadata.data)) return { ticker, status: 'failed', reason: 'NSE API response shape changed: expected data array; received keys ' + Object.keys(metadata).slice(0, 20).join(', ') + '.' };
@@ -152,8 +142,8 @@ export async function collectNseXbrlFinancialStatement({ instrument, db } = {}) 
       const xbrlBytes = new TextEncoder().encode(xbrlText).byteLength;
       await audit(db, { endpoint: xbrlUrl, ticker, httpStatus: xbrlResponse.status, ok: xbrlResponse.ok,
         durationMs: Date.now() - xbrlStarted, bytes: xbrlBytes,
-        payload: xbrlShapeProbe(xbrlText, xbrlResponse.headers.get('content-type') || ''),
-        usable: xbrlResponse.ok && /<(?:[\w.-]+:)?xbrl\b/i.test(xbrlText), error: xbrlResponse.ok ? null : 'NSE XBRL download failed.' });
+        payload: { content_type: xbrlResponse.headers.get('content-type') || '', document_kind: 'nse_filed_xbrl', byte_length: xbrlBytes, response_preview: xbrlText.slice(0, 100) },
+        usable: null, error: xbrlResponse.ok ? null : 'NSE XBRL download failed.' });
       if (!xbrlResponse.ok) return { ticker, status: 'failed', reason: 'NSE XBRL download returned HTTP ' + xbrlResponse.status + '.', filing_url: announcementUrl, xbrl_url: xbrlUrl };
     } catch (error) {
       await audit(db, { endpoint: xbrlUrl, ticker, ok: false, durationMs: Date.now() - xbrlStarted, error: String(error?.message || error) });

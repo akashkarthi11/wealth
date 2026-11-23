@@ -25,7 +25,7 @@ https://www.nseindia.com/api/integrated-filing-results
   &to_date=<DD-MM-YYYY>
 ```
 
-The API is undocumented and may change. The collector audits the returned JSON shape before matching records and fails closed if `data` is not an array or expected filing fields are absent. NSE Circular NSE/CML/2025/20 (2 April 2025) requires the PDF financial-results announcement and its Integrated Filing - Financial XBRL submission on the same date; this supports the IST-day match when the API's `pdf_attach` field is null. [NSE circular](https://nsearchives.nseindia.com/web/sites/default/files/inline-files/NSE_Circular_02042025_0.pdf).
+The API is undocumented and may change. The collector records each raw HTTP response's status, content type, byte count and a short safe preview before JSON/XML parsing. It then validates the parsed response shape and fails closed if `data` is not an array or expected filing fields are absent. NSE Circular NSE/CML/2025/20 (2 April 2025) requires the PDF financial-results announcement and its Integrated Filing - Financial XBRL submission on the same date; this supports the IST-day match when the API's `pdf_attach` field is null. [NSE circular](https://nsearchives.nseindia.com/web/sites/default/files/inline-files/NSE_Circular_02042025_0.pdf).
 
 A real NSE response observed on 12 November 2026 contained `data[]` rows with fields including `symbol`, `cmName`, `broadcast_Date`, `creation_Date`, `qe_Date`, `consolidated`, `audited`, `type_Sub`, `pdf_attach`, `ixbrl`, and `xbrl`. One observed HDFIRE record had `pdf_attach: null` while `xbrl` was present. The XBRL URL is therefore taken only from the response's `xbrl` field.
 
