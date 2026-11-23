@@ -246,3 +246,90 @@ sources, quote times) and any held / stale / missing; Gmail counts (incl. alread
 imported transactions and items needing review; reward/cashback mails for the owner; whether the advisor report was saved
 and its run_at. Keep everything idempotent and source-backed.
 ```
+
+---
+
+## One-off task: NSE XBRL financial statements — prompt (copy everything inside the box)
+
+Added 23 Nov 2026. The advisor cannot give a BUY/HOLD/SELL because no holding has a **verified** financial statement.
+Fincrux (free tier, 5 requests per IST day) returns no statement arrays at all — its own docs show `profit_and_loss`,
+`balance_sheet` and `cash_flows` empty — so that route is a dead end. NSE attaches an XBRL file to every results
+filing; taking the figures from there removes both the quota and the need to cross-check a third party.
+Prerequisite: pull the latest `development` first (the API audit, migration 0049 and the NSE name matching are in it).
+
+```text
+Build the NSE XBRL financial-statement source for the Wealth Stock Advisor.
+
+READ FIRST
+- Read rules.md on the development branch of akashkarthi11/wealth and follow it; it wins over this prompt.
+- Production Neon only (project blue-lake-22403547, database neondb). Never Development.
+- Start any write transaction with: SELECT set_config('wealth.actor', 'agent', true);
+- Never write interest of any kind. Never change balances. Never DELETE/TRUNCATE/DROP. Never change the schema
+  except by adding a numbered migration file under scripts/migrations/.
+
+WHY
+The advisor cannot produce a BUY/HOLD/SELL for any holding. Its evidence gate needs three VERIFIED types per ticker:
+market_price, technical_indicator, financial_statement. As of 23 Nov 2026 Production has:
+  market_price         16 of 16 verified
+  technical_indicator  16 of 16 verified
+  financial_statement   0 verified        <- the only gap
+
+GOAL
+Take the figures from NSE's own filing. Every NSE "Financial results" announcement has an XBRL file attached. Parse
+that and store it as a VERIFIED financial_statement. Because the numbers come from the filing itself, no cross-check
+against a third party is needed.
+
+WHAT ALREADY EXISTS (do not rebuild)
+- wealth_stock_advisor_research_sources
+    (run_id, ticker, source_type, title, url, publisher, published_at, retrieved_at, excerpt, evidence jsonb,
+     verification_status)  UNIQUE (ticker, url) WHERE run_id IS NULL
+    verification_status: 'verified' | 'unverified' | 'stale' | 'rejected'
+    NSE results announcements are already stored here with publisher='NSE', source_type='financial_statement',
+    evidence->>'feed_label' = 'Financial results', and url = the filing link on nsearchives.nseindia.com.
+    THOSE URLS ARE YOUR INPUT.
+- api/_lib/stock-advisor-live-evidence.js   reads the six NSE RSS feeds; works from Vercel (6/6 read on 23 Nov).
+- api/_lib/stock-advisor-verify.js          periodsIn(), announcementIsFor(), verifyFinancialStatements().
+- api/_lib/stock-advisor-evidence.js        buildEvidenceContext() computes the gate; a source counts only when
+                                            verification_status='verified'.
+- api/_lib/stock-advisor-data-collection.js TASKS / planCollection() / runCollectionTask(); add a task here.
+- api/_lib/job-queue.js                     one queue item per provider call; items carry min_budget_ms.
+- api/_lib/api-audit.js + wealth_api_audit (migration 0049)  call recordApiCall() for EVERY outside request. It
+                                            records the response's field names and row counts and redacts keys.
+                                            Use it; it is how a response's shape is learned without re-requesting.
+
+THE WORK
+1. For each active indian_equity holding, find its most recent stored NSE "Financial results" announcement.
+2. Fetch the filing and locate its XBRL. Record every request with recordApiCall() BEFORE parsing, so the first run
+   tells us the real structure even if parsing fails.
+3. Parse the XBRL into the reporting period and the headline figures actually present (revenue, profit before tax,
+   net profit, EPS - whatever the filing contains). Do not invent a field that is not in the document.
+4. Store as source_type='financial_statement', publisher='NSE', verification_status='verified', with evidence
+   recording: the filing URL, the reporting period as YYYY-MM, the XBRL element names read, and a note stating the
+   figures were taken from the filed document.
+5. Add it as a task in the data collection so it runs on the job queue, one holding per item.
+6. If the XBRL cannot be found or parsed, store nothing as verified. Record why, and leave the announcement as is.
+
+CONSTRAINTS
+- No API key, no paid service, no scraping of a rendered web page - the filed XBRL only.
+- NSE's endpoints are undocumented: handle a changed shape by reporting it, never by guessing.
+- Do not weaken the gate. Do not mark anything 'verified' that was not read from the filing.
+- Do not touch the Fincrux adapter; it stays as a secondary, unverified source.
+
+TESTS (required)
+- Unit tests over a saved XBRL sample: the period is read correctly, and the figures match the document.
+- A test that a filing which cannot be parsed yields NO verified row.
+- Run the whole suite: node scripts/run-tests.mjs (in Docker). The Vercel build no longer runs tests, so a failing
+  test will not stop a deploy - check it yourself and report the totals. Three failures are expected on a machine
+  without network (Redis, and two Preview-migration checks).
+
+DONE WHEN
+- At least one holding has a verified financial_statement whose evidence names the filing it came from, and
+  buildEvidenceContext() returns action_gate='EVIDENCE_READY' for it.
+- A debate run for that holding produces a decision other than DATA REQUIRED.
+
+REPORT
+- The XBRL URL pattern found and how it was derived from the announcement link.
+- The exact element names read, per figure.
+- Which holdings now have a verified statement and which do not, with the reason.
+- Anything NSE returned that differs from this brief.
+```
