@@ -21,7 +21,7 @@ test('each provider call of the job is timed, and the steps are saved while the 
   try {
     const r = await runStockAdvisorDataCollection(db);
     const names = r.steps.map(s => s.provider + (s.ticker ? ':' + s.ticker : ''));
-    assert.deepEqual(names, ['NSE RSS', 'NSE RSS', 'NSE RSS', 'NSE RSS', 'NSE RSS', 'NSE RSS', 'TejHQ:TCS', 'Fincrux', 'Period match with NSE:TCS'],
+    assert.deepEqual(names, ['NSE RSS', 'NSE RSS', 'NSE RSS', 'NSE RSS', 'NSE RSS', 'NSE RSS', 'TejHQ:TCS', 'NSE XBRL:TCS', 'Fincrux'],
       'one step per NSE feed, so no single step has to download all six');
     assert.deepEqual(r.steps.filter(s => s.provider === 'NSE RSS').map(s => s.name.split(' · ')[0]),
       ['Announcements', 'Financial results', 'Annual reports', 'Board meetings', 'Shareholding patterns', 'Corporate actions']);
@@ -196,8 +196,8 @@ test('the data collection is queued as one item per provider call; when the last
   const tcs = { id: 'i1', asset_class: 'indian_equity', symbol: 'TCS', name: 'Tata Consultancy Services Limited', price_source_symbol: 'TCS' };
   const base = { job_id: job.id, job_run_id: runId, handler_key: job.handler_key, max_attempts: 2 };
   await enqueueItems(a, [
-    { ...base, task: 'fincrux_skip', payload: { reason: 'FINCRUX_API_KEY is not configured; no paid or unauthenticated request attempted.', collection_run_id: crid }, priority: 43, min_budget_ms: 1000, seq: 0 },
-    { ...base, task: 'verify', payload: { instrument: tcs, collection_run_id: crid }, priority: 44, min_budget_ms: 1000, seq: 1 },
+    { ...base, task: 'nse_xbrl', payload: { instrument: tcs, collection_run_id: crid }, priority: 43, min_budget_ms: 26000, seq: 0 },
+    { ...base, task: 'fincrux_skip', payload: { reason: 'FINCRUX_API_KEY is not configured; no paid or unauthenticated request attempted.', collection_run_id: crid }, priority: 44, min_budget_ms: 1000, seq: 1 },
   ]);
   const [{ n: before }] = await a.query(`SELECT count(*)::int AS n FROM wealth_job_queue WHERE payload->>'collection_run_id'=$1`, [crid]);
   assert.equal(before, 2);
@@ -205,16 +205,17 @@ test('the data collection is queued as one item per provider call; when the last
   assert.equal(out.processed, 2);
   const [c] = await a.query('SELECT status,finished_at,summary FROM wealth_stock_advisor_data_collection_runs WHERE id=$1', [crid]);
   const s = typeof c.summary === 'string' ? JSON.parse(c.summary) : c.summary;
-  assert.equal(c.status, 'succeeded'); assert.ok(c.finished_at);
-  assert.deepEqual(s.steps.map(x => x.provider + (x.ticker ? ':' + x.ticker : '')), ['Fincrux', 'Period match with NSE:TCS']);
-  assert.equal(s.steps[0].status, 'skipped'); assert.match(s.steps[0].note, /FINCRUX_API_KEY/);
-  assert.equal(s.steps[1].status, 'no_fincrux_data');
+  assert.equal(c.status, 'failed', 'a collection with no verified financial source is incomplete'); assert.ok(c.finished_at);
+  assert.deepEqual(s.steps.map(x => x.provider + (x.ticker ? ':' + x.ticker : '')), ['NSE XBRL:TCS', 'Fincrux']);
+  assert.equal(s.steps[0].status, 'no_announcement');
+  assert.equal(s.steps[1].status, 'skipped'); assert.match(s.steps[1].note, /FINCRUX_API_KEY/);
+  assert.equal(s.financials_missing, 1);
   assert.equal(typeof s.work_ms, 'number');
   const [jr] = await a.query('SELECT status,result FROM wealth_scheduled_job_runs WHERE id=$1', [runId]);
-  assert.equal(jr.status, 'succeeded');
+  assert.equal(jr.status, 'failed');
   const res = typeof jr.result === 'string' ? JSON.parse(jr.result) : jr.result;
   assert.equal(res.run_id, crid); assert.equal(res.tasks, 2);
-  assert.equal((await jobRow(a, 'stock-advisor-data-collection')).last_status, 'succeeded');
+  assert.equal((await jobRow(a, 'stock-advisor-data-collection')).last_status, 'failed');
 });
 
 test('a job is queued once: running it again while its items wait says busy; an empty collection finishes at once; a due job queues without running', async () => {
