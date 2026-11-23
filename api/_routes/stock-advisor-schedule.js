@@ -10,7 +10,7 @@ function defaultSettings() {
   return {enabled:false,mode:'all',selected_tickers:[],schedule_timezone:SCHEDULE_TIMEZONE,schedule_time:DEFAULT_SCHEDULE_TIME,schedule_frequency:'daily',last_run_at:null,last_success_at:null,next_run_at:null,last_status:'not_configured',last_error:null};
 }
 async function loadSchedule(uid) {
-  const rows=await sql.query('SELECT enabled,mode,selected_tickers,schedule_timezone,schedule_time,schedule_frequency,last_run_at,last_success_at,last_scheduled_date,next_run_at,last_status,last_error,updated_at FROM wealth_stock_advisor_settings WHERE user_id=$1',[uid]);
+  const rows=await sql.query('SELECT enabled,mode,selected_tickers,schedule_timezone,schedule_time,schedule_frequency,last_run_at,last_success_at,last_scheduled_date,next_run_at,last_status,last_error,updated_at FROM wealth_stock_advisor_settings WHERE user_id=$1::uuid',[uid]);
   const settings={...defaultSettings(),...(rows[0]||{})};
   const next=settings.enabled?nextScheduledAt(new Date(),settings.schedule_time,settings.schedule_frequency,settings.schedule_timezone).toISOString():null;
   return {
@@ -26,7 +26,7 @@ async function loadSchedule(uid) {
 async function getSchedule(req,res) {
   const uid=await sessionUser(req);if(!uid)return json(res,401,{error:'Sign in required'});
   const settings=await loadSchedule(uid);
-  const recent=await sql.query("SELECT id,run_type,scheduled_for,started_at,finished_at,status,tickers_total,tickers_submitted,tickers_failed,last_error FROM wealth_stock_advisor_schedule_runs WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1",[uid]);
+  const recent=await sql.query("SELECT id,run_type,scheduled_for,started_at,finished_at,status,tickers_total,tickers_submitted,tickers_failed,last_error FROM wealth_stock_advisor_schedule_runs WHERE user_id=$1::uuid ORDER BY created_at DESC LIMIT 1",[uid]);
   return json(res,200,{...settings,last_execution:recent[0]||null});
 }
 async function putSchedule(req,res) {
@@ -35,7 +35,7 @@ async function putSchedule(req,res) {
   if(typeof input.enabled!=='boolean')return json(res,400,{error:'enabled must be true or false.'});
   const time=String(input.schedule_time??input.time??'').trim();
   if(!isValidScheduleTime(time))return json(res,400,{error:'Choose a valid IST time no later than 09:48. The central dispatcher runs once daily at 18:45 IST.'});
-  const [coverage]=await sql.query('SELECT mode,selected_tickers FROM wealth_stock_advisor_settings WHERE user_id=$1',[uid]);
+  const [coverage]=await sql.query('SELECT mode,selected_tickers FROM wealth_stock_advisor_settings WHERE user_id=$1::uuid',[uid]);
   const currentSelected=Array.isArray(coverage?.selected_tickers)?coverage.selected_tickers:(typeof coverage?.selected_tickers==='string'?JSON.parse(coverage.selected_tickers||'[]'):[]);
   if(input.enabled && coverage?.mode==='manual' && !currentSelected.length)return json(res,400,{error:'Select at least one saved investment before enabling the schedule.'});
   const frequency=String(input.frequency??input.schedule_frequency??'daily');
@@ -51,13 +51,13 @@ async function putSchedule(req,res) {
 }
 async function runNow(req,res) {
   const uid=await sessionUser(req);if(!uid)return json(res,401,{error:'Sign in required'});
-  const [user]=await sql.query('SELECT session_version FROM wealth_users WHERE id=$1',[uid]);
+  const [user]=await sql.query('SELECT session_version FROM wealth_users WHERE id=$1::uuid',[uid]);
   if(!user)return json(res,401,{error:'Account session is no longer valid.'});
-  const [settingsRow]=await sql.query('SELECT * FROM wealth_stock_advisor_settings WHERE user_id=$1',[uid]);
+  const [settingsRow]=await sql.query('SELECT * FROM wealth_stock_advisor_settings WHERE user_id=$1::uuid',[uid]);
   const settings={...defaultSettings(),...(settingsRow||{})};
-  await sql.query("UPDATE wealth_stock_advisor_schedule_runs SET status='failed',last_error='Manual execution lease expired before completion.',finished_at=now(),updated_at=now() WHERE user_id=$1 AND run_type='manual' AND status IN ('queued','running') AND updated_at<now()-interval '30 minutes'",[uid]);
+  await sql.query("UPDATE wealth_stock_advisor_schedule_runs SET status='failed',last_error='Manual execution lease expired before completion.',finished_at=now(),updated_at=now() WHERE user_id=$1::uuid AND run_type='manual' AND status IN ('queued','running') AND updated_at<now()-interval '30 minutes'",[uid]);
   const key='manual:'+randomUUID();
-  const rows=await sql.query("WITH lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(hashtext($1::text))), active AS MATERIALIZED (SELECT r.id,r.status FROM wealth_stock_advisor_schedule_runs r CROSS JOIN lock WHERE r.user_id=$1 AND r.run_type='manual' AND (r.status IN ('queued','running') OR (r.status='submitted' AND r.created_at>now()-interval '15 minutes')) ORDER BY r.created_at DESC LIMIT 1), inserted AS (INSERT INTO wealth_stock_advisor_schedule_runs (user_id,execution_key,run_type,scheduled_for,status,created_at,updated_at) SELECT $1,$2,'manual',now(),'queued',now(),now() FROM lock WHERE NOT EXISTS (SELECT 1 FROM active) RETURNING id,status) SELECT id,status,true AS reused FROM active UNION ALL SELECT id,status,false AS reused FROM inserted LIMIT 1",[uid,key]);
+  const rows=await sql.query("WITH lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(hashtext($1::text))), active AS MATERIALIZED (SELECT r.id,r.status FROM wealth_stock_advisor_schedule_runs r CROSS JOIN lock WHERE r.user_id=$1::uuid::uuid AND r.run_type='manual' AND (r.status IN ('queued','running') OR (r.status='submitted' AND r.created_at>now()-interval '15 minutes')) ORDER BY r.created_at DESC LIMIT 1), inserted AS (INSERT INTO wealth_stock_advisor_schedule_runs (user_id,execution_key,run_type,scheduled_for,status,created_at,updated_at) SELECT $1,$2,'manual',now(),'queued',now(),now() FROM lock WHERE NOT EXISTS (SELECT 1 FROM active) RETURNING id,status) SELECT id,status,true AS reused FROM active UNION ALL SELECT id,status,false AS reused FROM inserted LIMIT 1",[uid,key]);
   if(!rows.length)return json(res,409,{error:'Could not acquire the research execution lock. Try again shortly.'});
   if(rows[0].reused)return json(res,202,{ok:true,reused:true,execution_id:rows[0].id,status:rows[0].status,message:'A recent Run Now request is already in progress.'});
   try {
