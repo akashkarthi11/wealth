@@ -73,7 +73,9 @@ export default async function handler(req, res) {
 
     const where = ['run_id IS NULL'], params = [];
     if (ticker) { params.push(ticker); where.push('upper(ticker)=$' + params.length); }
-    if (provider) { params.push(provider); where.push('publisher=
+    if (provider) { params.push(provider); where.push('publisher=$' + params.length); }
+    if (verification) { params.push(verification); where.push('verification_status=$' + params.length); }
+    if (sourceType) { params.push(sourceType); where.push('source_type=$' + params.length); }
     const sources = await sql.query(`SELECT id,ticker,source_type,title,url,publisher,published_at,retrieved_at,verification_status,left(COALESCE(excerpt,''),240) AS excerpt
       FROM wealth_stock_advisor_research_sources WHERE ${where.join(' AND ')} ORDER BY retrieved_at DESC LIMIT 100`, params);
 
@@ -106,7 +108,7 @@ export default async function handler(req, res) {
       ORDER BY i.name LIMIT 100`);
 
     const providers = [...new Set(stored.map(r => r.publisher))].sort();
-    return json(res, 200, { function_limit_seconds: FUNCTION_LIMIT_SECONDS, runs, selected, stored, providers, sources, not_collected: notCollected, queue: await queueCounts(sql), filter: { ticker, provider } });
+    return json(res, 200, { function_limit_seconds: FUNCTION_LIMIT_SECONDS, runs, selected, stored, providers, source_types: [...new Set(stored.map(r => r.source_type))].sort(), verification_statuses: [...new Set(stored.map(r => r.verification_status))].sort(), sources, not_collected: notCollected, queue: await queueCounts(sql), filter: { ticker, provider, verification, source_type: sourceType } });
   } catch (error) {
     console.error('[ai-data]', error?.message || error);
     return json(res, 500, { error: 'Could not load AI data.' });
