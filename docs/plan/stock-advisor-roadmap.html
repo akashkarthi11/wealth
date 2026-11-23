@@ -1,0 +1,251 @@
+<title>Stock Advisor Roadmap</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one reading column, an operations-console palette — ink neutrals with a blue bias, teal for done, amber for blocked. */
+:root{
+  --bg:#f6f7f9; --panel:#ffffff; --sunken:#eef1f5;
+  --fg:#141a21; --muted:#5a6673; --line:#d6dce4;
+  --go:#0d6e63; --go-soft:#dcf0ed;
+  --warn:#8a5200; --warn-soft:#fbeed6;
+  --stop:#9d2235; --stop-soft:#fbe3e6;
+  --f-sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0d1116; --panel:#161c24; --sunken:#1d242d;
+  --fg:#e7edf4; --muted:#95a3b3; --line:#2a333e;
+  --go:#4fc9ba; --go-soft:#10322f;
+  --warn:#f0b65c; --warn-soft:#352711;
+  --stop:#f08597; --stop-soft:#3a1b21;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0d1116; --panel:#161c24; --sunken:#1d242d;
+  --fg:#e7edf4; --muted:#95a3b3; --line:#2a333e;
+  --go:#4fc9ba; --go-soft:#10322f;
+  --warn:#f0b65c; --warn-soft:#352711;
+  --stop:#f08597; --stop-soft:#3a1b21;
+  color-scheme:dark;
+}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-sans);font-size:15px;line-height:1.6;
+  padding-block:30px 72px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:880px;margin:0 auto;display:flex;flex-direction:column;gap:34px}
+h1,h2,h3{margin:0;line-height:1.2;text-wrap:balance;font-weight:600}
+h1{font-size:clamp(27px,5vw,36px);letter-spacing:-.6px}
+h2{font-size:20px;letter-spacing:-.2px}
+h3{font-size:15.5px}
+p{margin:0;max-width:66ch}
+.eyebrow{font-family:var(--f-mono);font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted)}
+section{display:flex;flex-direction:column;gap:14px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+.muted{color:var(--muted)}
+.small{font-size:13.5px}
+code{font-family:var(--f-mono);font-size:12.5px;background:var(--sunken);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+ul{margin:0;padding-left:19px;display:flex;flex-direction:column;gap:7px}
+/* state callouts */
+.call{border-left:3px solid var(--stop);background:var(--stop-soft);border-radius:0 8px 8px 0;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.call h2{font-size:17px}
+/* findings */
+.find{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px 13px;align-items:start}
+.find+.find{border-top:1px solid var(--line);padding-top:13px}
+.dot{width:9px;height:9px;border-radius:50%;margin-top:7px;background:var(--stop)}
+.dot.w{background:var(--warn)} .dot.g{background:var(--go)}
+.find p{font-size:13.5px}
+.src{font-family:var(--f-mono);font-size:11.5px;color:var(--muted);overflow-wrap:anywhere}
+/* phases */
+.phase{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 16px;padding:15px 0;border-top:1px solid var(--line)}
+.phase:first-child{border-top:0;padding-top:4px}
+.num{font-family:var(--f-mono);font-size:22px;font-weight:500;color:var(--muted);font-variant-numeric:tabular-nums;line-height:1.1}
+.phase-body{display:flex;flex-direction:column;gap:9px;min-width:0}
+.head{display:flex;flex-wrap:wrap;gap:8px 11px;align-items:baseline}
+.tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;padding:2px 8px;border-radius:999px;background:var(--sunken);color:var(--muted);white-space:nowrap}
+.tag.go{background:var(--go-soft);color:var(--go)}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.tag.stop{background:var(--stop-soft);color:var(--stop)}
+.gain{font-size:13.5px}
+.gain b{color:var(--go)}
+.opts{display:flex;flex-direction:column;gap:9px;background:var(--sunken);border-radius:8px;padding:12px 14px;margin-top:2px}
+.opt{font-size:13.5px}
+.opt b{display:block}
+/* spare capacity figures */
+.figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.fig{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:13px 15px;display:flex;flex-direction:column;gap:2px}
+.fig b{font-size:22px;font-variant-numeric:tabular-nums;letter-spacing:-.5px}
+.fig span{font-family:var(--f-mono);font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)}
+.fig small{font-size:12.5px;color:var(--muted);line-height:1.45}
+.decide{display:flex;flex-direction:column;gap:11px}
+.decide .row{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:start;font-size:14px}
+.q{font-family:var(--f-mono);font-size:11px;color:var(--muted);background:var(--sunken);border-radius:4px;padding:3px 7px;white-space:nowrap;margin-top:1px}
+footer{border-top:1px solid var(--line);padding-top:16px;display:flex;flex-direction:column;gap:7px}
+</style>
+
+<div class="wrap">
+
+<header style="display:flex;flex-direction:column;gap:11px">
+  <span class="eyebrow">Wealth · after the job queue · 23 Nov 2026</span>
+  <h1>Stock Advisor Roadmap</h1>
+  <p class="muted">The queue work is done and the capacity problem is solved. Reading the code to plan what comes next turned up something bigger: in Production the advisor cannot give advice at all, for a reason that has nothing to do with speed.</p>
+</header>
+
+<section>
+  <h2>Where it stands</h2>
+  <div class="panel" style="display:flex;flex-direction:column;gap:13px">
+
+    <div class="find">
+      <span class="dot"></span>
+      <div>
+        <h3>The evidence gate cannot open in Production</h3>
+        <p>A decision needs verified prices, verified indicators and a verified financial statement. Only a Fincrux snapshot can become a verified statement, and the project's own rule puts that key in Development only. No key, no snapshot, nothing for the NSE period match to verify. Every Production stock ends at DATA REQUIRED — now in no time and at no cost, but still no advice.</p>
+        <p class="src">docs/stock-advisor-free-providers.md:16 · stock-advisor-verify.js → no_fincrux_data</p>
+      </div>
+    </div>
+
+    <div class="find">
+      <span class="dot"></span>
+      <div>
+        <h3>Scheduled research does not finish on its own</h3>
+        <p>A debate step is only ever started by something a person did: opening a run, resuming it, or the progress poll while the page is open. The nightly auto-research creates the runs, then nothing moves them along. Close the tab and the research stops where it was.</p>
+        <p class="src">stock-advisor-debate.js — scheduleWorker called from startDebate, resumeDebate, pumpQueue, getProgress</p>
+      </div>
+    </div>
+
+    <div class="find">
+      <span class="dot w"></span>
+      <div>
+        <h3>The CIO is asked for figures that are always empty</h3>
+        <p>Its instructions demand portfolio concentration, single-name exposure, small-cap share, cash and MTF before it sizes anything. The value handed to it is hard-coded as nothing. The holdings to work it out are already in the database.</p>
+        <p class="src">stock-advisor-debate.js:288 — <code>const concentration = null</code></p>
+      </div>
+    </div>
+
+    <div class="find">
+      <span class="dot w"></span>
+      <div>
+        <h3>Funds and ETFs can never pass</h3>
+        <p>The gate asks every holding for a financial statement and technical indicators, which a mutual fund does not have. Their NAV counts only as a price. So a fund is always DATA REQUIRED, whatever is collected for it.</p>
+        <p class="src">stock-advisor-evidence.js:47</p>
+      </div>
+    </div>
+
+    <div class="find">
+      <span class="dot g"></span>
+      <div>
+        <h3>Capacity is no longer the problem</h3>
+        <p>Work is queued and run one step per call, so nothing is cut off mid-flight and no job blocks another. What is left over waits instead of being lost.</p>
+        <p class="src">5 local commits on claude-dev · 442 tests, 438 pass (4 fail only because this laptop has no network)</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section>
+  <h2>What we have and are not using</h2>
+  <div class="figs">
+    <div class="fig"><span>Spare crons</span><b>95</b><small>Vercel allows 100 a project; we use 5. Each is one more worker call a day.</small></div>
+    <div class="fig"><span>Dead tables</span><b>3</b><small>Predictions, evaluations and data_sources were created and never read or written.</small></div>
+    <div class="fig"><span>Model calls saved</span><b>9</b><small>Per stock with missing evidence. Free again for work that earns them.</small></div>
+    <div class="fig"><span>Also idle</span><b>2</b><small>Redis and Blob storage are set up and unused by the advisor.</small></div>
+  </div>
+</section>
+
+<section>
+  <h2>The plan, in order</h2>
+  <p class="muted small">Each step is worth doing on its own. The order matters: the first one tells us whether the rest is built on anything real.</p>
+
+  <div class="panel" style="padding:4px 18px 10px">
+
+    <div class="phase">
+      <span class="num">0</span>
+      <div class="phase-body">
+        <div class="head"><h3>Measure before building</h3>
+          <div class="tags"><span class="tag go">Small</span><span class="tag">Do first</span></div></div>
+        <p>Deploy, press Run now, read the AI data page. It will say whether NSE answers Vercel's Singapore region at all, whether TejHQ does, and how long a stock really takes. I have never seen this app talk to a provider — every timing I have given you is read off the code, not measured.</p>
+        <p class="gain">Unlocks: <b>knowing which of the steps below are real problems.</b> NSE blocking cloud IPs would change the whole plan.</p>
+      </div>
+    </div>
+
+    <div class="phase">
+      <span class="num">1</span>
+      <div class="phase-body">
+        <div class="head"><h3>Give the queue more windows</h3>
+          <div class="tags"><span class="tag go">Small</span><span class="tag">Config only</span></div></div>
+        <p>Vercel allows a hundred scheduled entries per project and each may fire once a day. Using twenty-four of them, one an hour, turns the queue from four catch-up windows into near-continuous draining. It is a change to one file and costs nothing.</p>
+        <p class="gain">From about <b>4 minutes</b> of guaranteed work a day to about <b>21 minutes</b>, without opening a page.</p>
+      </div>
+    </div>
+
+    <div class="phase">
+      <span class="num">2</span>
+      <div class="phase-body">
+        <div class="head"><h3>Put the debate on the queue</h3>
+          <div class="tags"><span class="tag warn">Medium</span><span class="tag">Biggest functional win</span></div></div>
+        <p>Each of the nine debate steps becomes a queue item, the same way a provider call is now. The nightly research then finishes by itself overnight and the report is waiting in the morning. Today it waits for you to open the page.</p>
+        <p class="gain">Unlocks: <b>research that actually runs unattended</b>, which is the point of scheduling it.</p>
+      </div>
+    </div>
+
+    <div class="phase">
+      <span class="num">3</span>
+      <div class="phase-body">
+        <div class="head"><h3>Open the evidence gate in Production</h3>
+          <div class="tags"><span class="tag stop">Your call</span><span class="tag">Blocks everything downstream</span></div></div>
+        <p>Without this the advisor stays silent in Production no matter what else we build. Three ways, and they are not equally honest:</p>
+        <div class="opts">
+          <div class="opt"><b>Read the actual filing</b> — follow the NSE announcement to the document it links and take the figures from it. True verification, and the queue can afford the fetch. Largest piece of work, and Phase 0 has to show NSE is reachable first.</div>
+          <div class="opt"><b>Accept the announcement itself</b> — treat an official NSE results announcement as the statement, labelled for what it is: the filing was made on this date, the numbers were not read. Small change, honest if the label is shown everywhere the decision is.</div>
+          <div class="opt"><b>Put the Fincrux key in Production</b> — five stocks a day, and it contradicts the rule currently written in the project docs. If you want this, the doc should change with it rather than quietly.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <span class="num">4</span>
+      <div class="phase-body">
+        <div class="head"><h3>Make the advice mean something</h3>
+          <div class="tags"><span class="tag warn">Medium</span></div></div>
+        <p>Work out the real portfolio concentration from the holdings, so the CIO can size a position instead of being asked for a number that is always blank. And give each kind of holding its own evidence list, so a fund is judged on NAV, mandate and costs rather than on quarterly results it will never have.</p>
+        <p class="gain">Unlocks: <b>funds and ETFs stop being permanently stuck</b>, and position sizing stops being guesswork.</p>
+      </div>
+    </div>
+
+    <div class="phase">
+      <span class="num">5</span>
+      <div class="phase-body">
+        <div class="head"><h3>Score the advisor against the market</h3>
+          <div class="tags"><span class="tag warn">Medium</span><span class="tag">Tables already exist</span></div></div>
+        <p>Record every call with its date and the price at the time, then come back later and compare it with the benchmark. The two tables for this were created months ago and have never been written to. Until something like this runs, neither of us can say whether the advisor is any good.</p>
+        <p class="gain">Unlocks: <b>evidence about the advisor itself</b>, instead of trust.</p>
+      </div>
+    </div>
+
+    <div class="phase">
+      <span class="num">6</span>
+      <div class="phase-body">
+        <div class="head"><h3>Clear the unused parts</h3>
+          <div class="tags"><span class="tag go">Small</span></div></div>
+        <p>One table was created for collected data and never used; the code writes somewhere else entirely. Either use it or drop it, rather than leaving two tables that look like they do the same job. Keeping each raw provider response in Blob storage would also give a real audit trail for anything the advisor claims.</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section>
+  <h2>What I need from you</h2>
+  <div class="panel decide">
+    <div class="row"><span class="q">first</span><div><b>Deploy.</b> Nothing above can be confirmed until the app has run once against the real providers. Deploying also applies migrations 0035–0048.</div></div>
+    <div class="row"><span class="q">then</span><div><b>Pick a route for step 3.</b> Read the filings, accept the announcement, or put the key in Production. This is a judgement about how strict the advisor should be, so it is yours, not mine.</div></div>
+    <div class="row"><span class="q">optional</span><div><b>Say whether steps 4 and 5 matter to you.</b> They are what turn it from a machine that collects data into one whose advice can be checked.</div></div>
+  </div>
+</section>
+
+<footer>
+  <p class="small muted">Five commits sit on <code>claude-dev</code> and have not been deployed or pushed to GitHub. The failing tests on this laptop are the four that need network access.</p>
+  <p class="small muted">Timings in this plan are read from the code and from Vercel's published limits. None of them has been measured against a real run.</p>
+</footer>
+
+</div>

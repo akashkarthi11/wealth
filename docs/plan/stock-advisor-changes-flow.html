@@ -1,0 +1,176 @@
+<title>Stock Advisor Changes</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@600;700&display=swap">
+<style>
+/* Layout: one reading column; each diagram sits in its own scrollable box. Green = new, amber = changed, grey = unchanged. */
+:root{--bg:#f5f7fa;--panel:#fff;--fg:#17212b;--muted:#566475;--line:#d9e0e8;--accent:#0f766e;--accent-soft:#dff3f0;--warn:#9a5b00;--warn-soft:#fdf0d8;--f-body:'Inter',system-ui,sans-serif;--f-head:'Space Grotesk','Inter',system-ui,sans-serif}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0e151c;--panel:#151f29;--fg:#e6edf4;--muted:#9bacbd;--line:#26343f;--accent:#4cc9bb;--accent-soft:#12302f;--warn:#f0b955;--warn-soft:#33270f;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0e151c;--panel:#151f29;--fg:#e6edf4;--muted:#9bacbd;--line:#26343f;--accent:#4cc9bb;--accent-soft:#12302f;--warn:#f0b955;--warn-soft:#33270f;color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.6;padding-block:32px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:36px}
+h1,h2{font-family:var(--f-head);line-height:1.2;text-wrap:balance;margin:0}
+h1{font-size:clamp(28px,5vw,38px);letter-spacing:-.5px} h2{font-size:21px}
+p{margin:0} .lede{font-size:17px;color:var(--muted);max-width:62ch}
+.eyebrow{font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent)}
+section{display:flex;flex-direction:column;gap:12px}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+.dia{overflow-x:auto;padding:12px}
+pre.mermaid{margin:0;text-align:center}
+ul.plain{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+.key{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:13px;color:var(--muted)}
+.key b{display:inline-block;padding:1px 9px;border-radius:999px;margin-right:6px;font-weight:600}
+.k-new{background:var(--accent-soft);color:var(--accent)} .k-chg{background:var(--warn-soft);color:var(--warn)}
+code{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;background:var(--line);padding:1px 6px;border-radius:5px}
+</style>
+<div class="wrap">
+<header style="display:flex;flex-direction:column;gap:12px">
+  <span class="eyebrow">Wealth · Stock Advisor · 23 Nov 2026</span>
+  <h1>What I changed in Stock Advisor</h1>
+  <p class="lede">Three changes: every scheduled job now runs through a queue, one step per function call; financial statements can become verified by matching the reporting period with an official NSE announcement; and the AI debate is skipped when critical evidence is missing.</p>
+  <div class="key"><span><b class="k-new">New</b>added by me</span><span><b class="k-chg">Changed</b>existing step now behaves differently</span><span>Unlabelled boxes are unchanged</span></div>
+</header>
+
+<section>
+  <h2>1 · Every job now runs through a queue</h2>
+  <p>Vercel stops any one call after 60 seconds. Before, the daily cron ran every due job inside that single call, so a slow job ate the time of the ones after it and a big collection could be cut off halfway. Now the cron only writes the work down; each step is run on its own.</p>
+  <div class="box dia">
+<pre class="mermaid">
+flowchart TD
+  C1["Daily cron 18:45 IST<br/>/api/jobs/dispatch"] --> Q1{{"NEW: only queues the work<br/>runs nothing itself"}}
+  Q1 --> QA["Interest accrual — 1 item"]
+  Q1 --> QB["Backup — 1 item"]
+  Q1 --> QC["Price refresh — 1 item"]
+  Q1 --> QD["Data collection — one item<br/>PER provider call, per stock"]
+  QA --> QUEUE[("Job queue<br/>priority, then planned order")]
+  QB --> QUEUE
+  QC --> QUEUE
+  QD --> QUEUE
+  QUEUE --> W{{"NEW: worker<br/>/api/jobs/worker"}}
+  W --> W1["Take ONE item that fits<br/>in the time left"]
+  W1 --> W2["Run it, save the result"]
+  W2 --> W3{"Time left?"}
+  W3 -->|"yes"| W1
+  W3 -->|"no"| W4["Stop. The rest stays queued."]
+  W4 --> T1["Hourly worker crons<br/>19:45, 20:45, 21:45, 22:45 IST"]
+  W4 --> T2["Admin opens Scheduled jobs or AI data:<br/>the page keeps the queue moving"]
+  W4 --> T3["Run now"]
+  T1 --> W
+  T2 --> W
+  T3 --> W
+  W2 --> F{"Last item of that job?"}
+  F -->|"yes"| FIN["Close the job run:<br/>Completed / Partly done / Failed"]
+  classDef new fill:#dff3f0,stroke:#0f766e,color:#0b3d38;
+  class Q1,W,QD new;
+</pre>
+  </div>
+  <ul class="plain">
+    <li><b>No step can be cut off by the 60-second limit.</b> Each item is one provider call, and an item is only started when enough time is left for it.</li>
+    <li><b>One slow job no longer blocks the others.</b> Each waits its turn as a separate item.</li>
+    <li><b>Nothing is lost.</b> What is not reached stays queued and runs at the next worker call. A step that fails is tried once more, then recorded as failed.</li>
+    <li><b>Two workers never take the same item</b> — the claim uses <code>FOR UPDATE SKIP LOCKED</code>.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>2 · What the data collection fetches</h2>
+  <div class="box dia">
+<pre class="mermaid">
+flowchart TD
+  J["Data collection, as queued items<br/>one per provider call"] --> P1["TejHQ<br/>NSE end-of-day prices"]
+  J --> P2["MFAPI.in<br/>mutual fund NAV"]
+  J --> P3["NSE RSS<br/>announcements and results"]
+  J --> P4["Fincrux<br/>quarterly and annual financials<br/>needs FINCRUX_API_KEY, 5 a day"]
+  P1 --> DB[("Research sources table<br/>price: verified<br/>indicators: verified<br/>NSE items and Fincrux: unverified")]
+  P2 --> DB
+  P3 --> DB
+  P4 --> DB
+  DB --> V{{"NEW: period match<br/>Fincrux period = NSE results period?"}}
+  V -->|"match"| DB2[("Financial statement: VERIFIED<br/>note: period only, figures not compared")]
+  V -->|"no match"| DB3[("Stays unverified")]
+  DB2 --> R["Research run for one stock<br/>step 0: load the evidence"]
+  DB3 --> R
+  R --> V2["Same period match runs again here,<br/>after the providers"]
+  V2 --> G{"Evidence gate<br/>verified price + financial statement<br/>+ technical indicators?"}
+  G -->|"all three verified"| D["Full debate: 4 rounds<br/>Bull and Bear, 8 model calls"]
+  D --> C["CIO decides with the model:<br/>BUY, HOLD or SELL"]
+  G -->|"something missing"| S{{"CHANGED: skip the debate"}}
+  S --> X["NEW: one CIO result, no AI model<br/>DATA REQUIRED + what is missing + what to do"]
+  C --> REP[("Report saved, run completed")]
+  X --> REP
+  classDef new fill:#dff3f0,stroke:#0f766e,color:#0b3d38;
+  classDef chg fill:#fdf0d8,stroke:#9a5b00,color:#4d2e00;
+  class V,V2,DB2,X new;
+  class S chg;
+</pre>
+  </div>
+  <ul class="plain">
+    <li><b>Before:</b> a stock with missing evidence still went through all 9 model calls and always ended at "DATA REQUIRED". Financial statements could never be verified, so every stock ended there.</li>
+    <li><b>After:</b> a statement can be verified, so the full debate can run. When something is still missing, the answer is saved at once without using the free AI model.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>3 · The period match in detail (new)</h2>
+  <div class="box dia">
+<pre class="mermaid">
+flowchart TD
+  A["Take the ticker's newest Fincrux<br/>financial statement"] --> B{"Already verified<br/>by period match?"}
+  B -->|"yes"| Z1["Nothing to do"]
+  B -->|"no"| C["Read its latest quarter<br/>from the labels and values<br/>e.g. Q2 FY27 = Sep 2026"]
+  C --> D{"Found a period?"}
+  D -->|"no"| Z2["Stays unverified<br/>reason: no period in the data"]
+  D -->|"yes"| E["Look at this company's NSE announcements:<br/>feed Financial results only<br/>published in the last 400 days"]
+  E --> F{"Does one of them mention<br/>the same period?<br/>30-09-2026, Sep 2026, Q2 FY27 ..."}
+  F -->|"no"| Z3["Stays unverified<br/>reason: no matching announcement"]
+  F -->|"yes"| G["Mark the Fincrux statement VERIFIED"]
+  G --> H["Store: rule, period, the NSE link and title, date,<br/>and the note: figures were not compared"]
+  classDef ok fill:#dff3f0,stroke:#0f766e,color:#0b3d38;
+  classDef no fill:#fdf0d8,stroke:#9a5b00,color:#4d2e00;
+  class G,H ok;
+  class Z2,Z3 no;
+</pre>
+  </div>
+  <ul class="plain">
+    <li>It only ever <b>raises</b> a statement to verified. It never changes prices, indicators or NSE items.</li>
+    <li>If the period can't be read, or no NSE announcement matches, it stays unverified. It never guesses.</li>
+    <li>It uses only the database (no extra call to any provider), so it is cheap to run in both places.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>4 · What the skipped debate saves</h2>
+  <div class="box dia">
+<pre class="mermaid">
+flowchart LR
+  subgraph B["Before: stock with missing evidence"]
+    direction LR
+    b1["Collect evidence"] --> b2["8 Bull / Bear model calls<br/>about 100 seconds at 13 s each"] --> b3["CIO model call"] --> b4["DATA REQUIRED"]
+  end
+  subgraph A["After: stock with missing evidence"]
+    direction LR
+    a1["Collect evidence"] --> a2["Gate closed: skip the debate"] --> a3["Save one CIO result<br/>no model call"] --> a4["DATA REQUIRED + how to fix"]
+  end
+  classDef old fill:#fdf0d8,stroke:#9a5b00,color:#4d2e00;
+  classDef nw fill:#dff3f0,stroke:#0f766e,color:#0b3d38;
+  class b2,b3 old;
+  class a2,a3 nw;
+</pre>
+  </div>
+  <ul class="plain">
+    <li><b>Model calls per stock:</b> 9 or more before, 0 after (when evidence is missing).</li>
+    <li><b>Switch back:</b> set <code>STOCK_ADVISOR_ALWAYS_DEBATE=true</code> to run the full debate even when evidence is missing.</li>
+  </ul>
+</section>
+
+<section class="box">
+  <h2>Files</h2>
+  <ul class="plain" style="margin-top:8px">
+    <li><b>New:</b> <code>api/_lib/job-queue.js</code> (queue, claim, run one item, close a run, clean up), <code>api/_routes/jobs-worker.js</code>, migration <code>0048_job_queue.sql</code></li>
+    <li><b>New:</b> <code>api/_lib/stock-advisor-verify.js</code> (the period match)</li>
+    <li><b>New:</b> <code>api/_routes/ai-data.js</code> and the admin <b>AI data</b> menu</li>
+    <li><b>Changed:</b> <code>api/_lib/scheduled-jobs.js</code> (the dispatch queues instead of running), <code>api/_lib/stock-advisor-data-collection.js</code> (split into tasks), <code>api/_lib/stock-advisor-debate.js</code>, <code>vercel.json</code> (four worker crons)</li>
+    <li><b>Tests:</b> <code>ai-data.test.mjs</code>, <code>stock-advisor-verify.test.mjs</code>, <code>stock-advisor-skip-debate.test.mjs</code></li>
+    <li>Local commits on <code>claude-dev</code>. Not deployed and not on GitHub yet.</li>
+  </ul>
+</section>
+</div>

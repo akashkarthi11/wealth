@@ -9,10 +9,10 @@ export default async function handler(req,res){
  if(!sql)return json(res,503,{error:'Database is not configured'});
  const job=await startJob('stock-advisor-data-collection');
  try{
-  const result=await runStockAdvisorDataCollection(sql);
-  await finishJob(job,result.status,{run_id:result.run_id,instruments:result.instruments,nav_updated:result.nav_updated,market_data_updated:result.market_data_updated,financials_unverified:result.financials_unverified,announcements:result.announcements,failed:result.failed,skipped:result.skipped,feeds:result.feeds});
+  const result=await runStockAdvisorDataCollection(sql,{deadlineAt:req.deadlineAt});
+  await finishJob(job,result.status,{run_id:result.run_id,instruments:result.instruments,nav_updated:result.nav_updated,market_data_updated:result.market_data_updated,financials_unverified:result.financials_unverified,announcements:result.announcements,failed:result.failed,skipped:result.skipped,skipped_for_time:result.skipped_for_time,feeds:result.feeds});
   return json(res,200,{ok:result.status==='succeeded',schedule:'daily 18:30 Asia/Kolkata',...result,
-   limitations:['NSE RSS entries are stored as unverified listings until linked filing contents are fetched and validated.','Optional Fincrux financial snapshots are limited to five requests per IST day and remain unverified until corroborated against official filings.','General business-news feeds and automatic filing-document extraction are not included.','Only active instruments with saved price-source symbols are processed.']});
+   limitations:['NSE RSS entries are stored as unverified listings until linked filing contents are fetched and validated.','Optional Fincrux financial snapshots are limited to five requests per IST day and remain unverified until corroborated against official filings.','General business-news feeds and automatic filing-document extraction are not included.','Only active instruments with saved price-source symbols are processed.','A run stops starting new provider calls when about 13 seconds of the 60-second function limit remain; stocks not reached are collected first in the next run.']});
  }catch(error){
   await finishJob(job,'failed',{error:String(error?.message||error).slice(0,300)});
   console.error('[stock-advisor-data-collection]',error?.message||error);
