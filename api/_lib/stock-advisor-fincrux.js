@@ -151,6 +151,12 @@ export async function collectFincruxFinancials({ instrument, db } = {}) {
   let lastError = null, lastPayload = null, successful = null;\n  const rateLimitedKeys = [];
   const startedAt = Date.now();
   for (const key of keys) {
+    const cooldown = await getKeyRateLimit(db, key.id);
+    if (cooldown) {
+      rateLimitedKeys.push({ label: key.label, until: cooldown.until_at, retry_seconds: Number(cooldown.retry_seconds || 0) });
+      result.reason = 'A Fincrux key is temporarily rate-limited until ' + cooldown.until_at + '; continuing with other enabled keys.';
+      continue;
+    }
     const reservationUrl = sourceUrl + '#key-' + encodeURIComponent(key.id);
     const reservationId = await reserveDailySlot(db, ticker, reservationUrl, dateKey, encodeURIComponent(key.id));
     if (!reservationId) {
