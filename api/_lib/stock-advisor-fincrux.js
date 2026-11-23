@@ -194,10 +194,17 @@ export async function collectFincruxFinancials({ instrument, db, manual = false 
       return result;
     }
   }
+  const explicitlyAssigned = keys.filter(key => Array.isArray(key.assigned_tickers) && key.assigned_tickers.length && key.assigned_tickers.includes(ticker));
+  const eligibleKeys = explicitlyAssigned.length ? explicitlyAssigned : keys.filter(key => !Array.isArray(key.assigned_tickers) || !key.assigned_tickers.length);
+  if (!eligibleKeys.length) {
+    result.status = 'skipped';
+    result.reason = 'No enabled Fincrux key is assigned to this ticker.';
+    return result;
+  }
   let lastError = null, lastPayload = null, successful = null;
   const rateLimitedKeys = [];
   const startedAt = Date.now();
-  for (const key of keys) {
+  for (const key of eligibleKeys) {
     const cooldown = await getKeyRateLimit(db, key.id);
     if (cooldown) {
       rateLimitedKeys.push({ label: key.label, until: cooldown.until_at, retry_seconds: Number(cooldown.retry_seconds || 0) });
@@ -216,7 +223,7 @@ export async function collectFincruxFinancials({ instrument, db, manual = false 
     let payload = null, responseStatus = null;
     try {
       const response = await fetch(sourceUrl + '?api_key=' + encodeURIComponent(key.value), {
-        headers: { Accept: 'application/json', 'User-Agent': 'WealthPersonalStockResearch/1.0' },
+        headers: { Accept: 'application/json', 'User-Agent': String(key.user_agent || 'WealthPersonalStockResearch/1.0').slice(0, 200) },
         signal: timeout(12000)
       });
       responseStatus = response.status;
@@ -273,7 +280,7 @@ export async function collectFincruxFinancials({ instrument, db, manual = false 
     provider: SOURCE, endpoint: sourceUrl, ticker: normalized.ticker, company: normalized.company, about: normalized.about,
     last_updated_at: normalized.last_updated_at, financials: normalized.financials,
     statement_row_count: normalized.statement_row_count, retrieved_at: retrievedAt,
-    key_source: key.source, key_label: key.label,
+    key_source: key.source, key_label: key.label, key_user_agent: key.user_agent || 'WealthPersonalStockResearch/1.0',
     verification_note: 'Third-party structured financial data. Stored as unverified until key figures are checked against the linked official exchange/company filings. Must not satisfy the verified financial_statement evidence gate.'
   };
   const excerpt = [
