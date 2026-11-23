@@ -2,6 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { nextJobRun } from '../../api/_lib/scheduled-job-time.js';
 
+test('the nightly route owns interest and backup at 01:30 IST; dispatcher excludes legacy duplicates',()=>{
+  const vercel=JSON.parse(readFileSync(new URL('../../vercel.json',import.meta.url),'utf8'));
+  assert.ok(vercel.crons.some(c=>c.path==='/api/nightly'&&c.schedule==='0 20 * * *'));
+  const jobs=readFileSync(new URL('../../api/_lib/scheduled-jobs.js',import.meta.url),'utf8');
+  assert.match(jobs,/handler_key NOT IN \('interest-accrual','backup'\)/);
+  const nightly=readFileSync(new URL('../../api/_routes/nightly.js',import.meta.url),'utf8');
+  assert.match(nightly,/runAccrual/);
+  assert.match(nightly,/runBackup/);
+});
+
 test('daily schedule is calculated in Asia/Kolkata, not UTC',()=>{
   const next=nextJobRun(new Date('2026-11-22T11:00:00.000Z'),'18:30','daily');
   assert.equal(next.toISOString(),'2026-11-22T13:00:00.000Z');
