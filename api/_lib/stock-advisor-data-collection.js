@@ -1,4 +1,4 @@
-import { collectFincruxFinancials } from './stock-advisor-fincrux.js';
+import { collectFincruxFinancials, releaseAbandonedReservations } from './stock-advisor-fincrux.js';
 import { collectNseNewsBatch, NSE_FEED_LABELS } from './stock-advisor-live-evidence.js';
 import { collectMutualFundEvidence } from './stock-advisor-mfapi.js';
 import { collectTejHqEquityEvidence } from './stock-advisor-tejhq.js';
@@ -74,6 +74,9 @@ export async function planCollection(db) {
   // Context figures for the analysts. No key and no quota, and never promoted to verified.
   for (const e of xbrlHoldings) add('yahoo_financials', { instrument: slim(e) });
   if (equities.length) {
+    // Free any abandoned placeholder first, so the day's five requests can reach tickers that are otherwise locked out.
+    const released = await releaseAbandonedReservations(db).catch(() => []);
+    if (released.length) tasks.push({ task: 'fincrux_skip', payload: { reason: 'Released ' + released.length + ' abandoned reservation(s) so these tickers can be requested again: ' + released.join(', ') + '.' }, priority: TASKS.fincrux_skip.priority, min_budget_ms: 1000 });
     if (String(process.env.FINCRUX_API_KEY || '').trim()) {
       const [quota] = await db.query(`SELECT count(*)::int AS used
        FROM wealth_stock_advisor_research_sources
