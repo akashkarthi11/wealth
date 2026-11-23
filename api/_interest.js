@@ -316,6 +316,7 @@ export async function postFdCredits(db, uid, l, totals, through, actor = 'cron')
 // Run every linked source for one user, through yesterday (IST). Idempotent: unique keys make re-runs no-ops.
 // accountId: run only that account (used right after the owner sets an account up, so the list fills at once).
 export async function runAccrual(uid, { db = sql, now = Date.now(), dryRun = false, actor = 'cron', accountId = null } = {}) {
+  if (!dryRun && actor !== 'cron') throw new Error('Interest accrual is owned exclusively by the nightly /api/nightly job.');
   const through = addDays(istDay(now), -1);
   // How the interest is paid can be set per account (link); otherwise the product's (catalogue) value applies.
   const linkQuery = cols => db.query(`SELECT l.account_id, l.partition_key, a.account_key, a.bank_name, a.account_name, a.subtype_code,
