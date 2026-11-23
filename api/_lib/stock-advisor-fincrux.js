@@ -69,7 +69,7 @@ async function getKeyRateLimit(db, keyId) {
 
 function retryAfterSeconds(payload) {
   const raw = String(payload?.retry_in || payload?.retry_after || '').trim();
-  const match = raw.match(/(\\d+(?:\\.\\d+)?)/);
+  const match = raw.match(/(\d+(?:\.\d+)?)/);
   if (match) return Math.max(1, Math.ceil(Number(match[1])));
   return null;
 }
