@@ -15,8 +15,8 @@ async function mapLimit(items,limit,fn) {
 async function tickersForUser(uid,settings) {
   const selected=Array.isArray(settings.selected_tickers)?settings.selected_tickers:(typeof settings.selected_tickers==='string'?JSON.parse(settings.selected_tickers||'[]'):[]);
   const rows=settings.mode==='manual'&&selected.length
-    ?await sql.query("SELECT DISTINCT upper(ticker) AS ticker FROM wealth_positions WHERE user_id=$1 AND category='INVESTMENT' AND record_type IN ('EQUITY','ETF') AND currency='INR' AND upper(ticker)=ANY($2::text[]) ORDER BY 1",[uid,selected])
-    :await sql.query("SELECT DISTINCT upper(ticker) AS ticker FROM wealth_positions WHERE user_id=$1 AND category='INVESTMENT' AND record_type IN ('EQUITY','ETF') AND currency='INR' AND ticker IS NOT NULL ORDER BY 1",[uid]);
+    ?await sql.query("SELECT DISTINCT upper(ticker) AS ticker FROM wealth_positions WHERE user_id=$1::uuid AND category='INVESTMENT' AND record_type IN ('EQUITY','ETF') AND currency='INR' AND upper(ticker)=ANY($2::text[]) ORDER BY 1",[uid,selected])
+    :await sql.query("SELECT DISTINCT upper(ticker) AS ticker FROM wealth_positions WHERE user_id=$1::uuid AND category='INVESTMENT' AND record_type IN ('EQUITY','ETF') AND currency='INR' AND ticker IS NOT NULL ORDER BY 1",[uid]);
   return rows.map(r=>String(r.ticker||'').trim().toUpperCase()).filter(Boolean).slice(0,30);
 }
 async function runTicker(uid,sessionVersion,ticker,idempotencyKey,executionId) {
@@ -32,12 +32,12 @@ async function runTicker(uid,sessionVersion,ticker,idempotencyKey,executionId) {
   return {ticker,run_id:payload.run?.id||null,message_count:payload.messageCount||0,status:payload.run?.status==='completed'?'completed':'queued'};
 }
 export async function executeUserResearch({uid,sessionVersion,settings,executionId,executionKey,runType='manual',scheduledDate=null,now=new Date()}) {
-  await sql.query("UPDATE wealth_stock_advisor_schedule_runs SET status='running',started_at=COALESCE(started_at,now()),attempt_count=attempt_count+1,updated_at=now() WHERE id=$1 AND user_id=$2",[executionId,uid]);
+  await sql.query("UPDATE wealth_stock_advisor_schedule_runs SET status='running',started_at=COALESCE(started_at,now()),attempt_count=attempt_count+1,updated_at=now() WHERE id=$1 AND user_id=$2::uuid",[executionId,uid]);
   try {
     const tickers=await tickersForUser(uid,settings);
     if(!tickers.length) {
       await sql.query("UPDATE wealth_stock_advisor_schedule_runs SET status='skipped',finished_at=now(),last_error='No eligible Indian equity or ETF holdings were found.',updated_at=now() WHERE id=$1",[executionId]);
-      if(runType==='scheduled')await sql.query("UPDATE wealth_stock_advisor_settings SET last_run_at=now(),last_scheduled_date=$2,last_status='skipped',last_error='No eligible Indian equity or ETF holdings were found.',next_run_at=$3,updated_at=now() WHERE user_id=$1",[uid,scheduledDate,nextScheduledAt(now,settings.schedule_time||DEFAULT_SCHEDULE_TIME,settings.schedule_frequency||'daily',SCHEDULE_TIMEZONE).toISOString()]);
+      if(runType==='scheduled')await sql.query("UPDATE wealth_stock_advisor_settings SET last_run_at=now(),last_scheduled_date=$2,last_status='skipped',last_error='No eligible Indian equity or ETF holdings were found.',next_run_at=$3,updated_at=now() WHERE user_id=$1::uuid",[uid,scheduledDate,nextScheduledAt(now,settings.schedule_time||DEFAULT_SCHEDULE_TIME,settings.schedule_frequency||'daily',SCHEDULE_TIMEZONE).toISOString()]);
       return {status:'skipped',tickers:0,results:[]};
     }
     const localDate=scheduledDate||getLocalDateTime(now,SCHEDULE_TIMEZONE).date;
@@ -49,12 +49,12 @@ export async function executeUserResearch({uid,sessionVersion,settings,execution
     const error=results.filter(r=>r.error).map(r=>r.ticker+': '+r.error).join(' | ').slice(0,1000)||null;
     await sql.query("UPDATE wealth_stock_advisor_schedule_runs SET status=$2,finished_at=now(),tickers_total=$3,tickers_submitted=$4,tickers_failed=$5,result_json=$6::jsonb,last_error=$7,updated_at=now() WHERE id=$1",[executionId,status,tickers.length,completed+queued,failed,JSON.stringify(results),error]);
     const next=nextScheduledAt(now,settings.schedule_time||DEFAULT_SCHEDULE_TIME,settings.schedule_frequency||'daily',SCHEDULE_TIMEZONE).toISOString();
-    await sql.query("UPDATE wealth_stock_advisor_settings SET last_run_at=now(),last_success_at=CASE WHEN $2 IN ('submitted','completed') THEN now() ELSE last_success_at END,last_scheduled_date=CASE WHEN $3='scheduled' AND $2 IN ('submitted','completed') THEN $4::date ELSE last_scheduled_date END,last_status=$2,last_error=$5,next_run_at=$6,updated_at=now() WHERE user_id=$1",[uid,status,runType,scheduledDate,error,next]);
+    await sql.query("UPDATE wealth_stock_advisor_settings SET last_run_at=now(),last_success_at=CASE WHEN $2 IN ('submitted','completed') THEN now() ELSE last_success_at END,last_scheduled_date=CASE WHEN $3='scheduled' AND $2 IN ('submitted','completed') THEN $4::date ELSE last_scheduled_date END,last_status=$2,last_error=$5,next_run_at=$6,updated_at=now() WHERE user_id=$1::uuid",[uid,status,runType,scheduledDate,error,next]);
     return {status,tickers:tickers.length,completed,queued,failed,results};
   } catch(error) {
     const message=String(error?.message||error).slice(0,1000);
     await sql.query("UPDATE wealth_stock_advisor_schedule_runs SET status='failed',finished_at=now(),last_error=$2,updated_at=now() WHERE id=$1",[executionId,message]).catch(()=>{});
-    await sql.query("UPDATE wealth_stock_advisor_settings SET last_status='failed',last_error=$2,updated_at=now() WHERE user_id=$1",[uid,message]).catch(()=>{});
+    await sql.query("UPDATE wealth_stock_advisor_settings SET last_status='failed',last_error=$2,updated_at=now() WHERE user_id=$1::uuid",[uid,message]).catch(()=>{});
     throw error;
   }
 }
@@ -71,11 +71,11 @@ export async function runScheduledTick(now=new Date()) {
     for(const dateKey of dueDates) {
       const scheduledFor=zonedDateTimeToUtc({year:Number(dateKey.slice(0,4)),month:Number(dateKey.slice(5,7)),day:Number(dateKey.slice(8,10)),hour:Number(user.schedule_time.slice(0,2)),minute:Number(user.schedule_time.slice(3,5))},timezone);
       const executionKey='scheduled:'+dateKey;
-      const inserted=await sql.query("INSERT INTO wealth_stock_advisor_schedule_runs (user_id,execution_key,run_type,scheduled_date,scheduled_for,status,created_at,updated_at) VALUES ($1,$2,'scheduled',$3::date,$4,'queued',now(),now()) ON CONFLICT (user_id,execution_key) DO UPDATE SET status='queued',last_error=NULL,updated_at=now() WHERE wealth_stock_advisor_schedule_runs.status IN ('failed','partial') AND wealth_stock_advisor_schedule_runs.attempt_count<3 RETURNING id",[user.user_id,executionKey,dateKey,scheduledFor.toISOString()]);
+      const inserted=await sql.query("INSERT INTO wealth_stock_advisor_schedule_runs (user_id,execution_key,run_type,scheduled_date,scheduled_for,status,created_at,updated_at) VALUES ($1::uuid,$2,'scheduled',$3::date,$4,'queued',now(),now()) ON CONFLICT (user_id,execution_key) DO UPDATE SET status='queued',last_error=NULL,updated_at=now() WHERE wealth_stock_advisor_schedule_runs.status IN ('failed','partial') AND wealth_stock_advisor_schedule_runs.attempt_count<3 RETURNING id",[user.user_id,executionKey,dateKey,scheduledFor.toISOString()]);
       if(!inserted.length) {
-        const [prior]=await sql.query('SELECT status,attempt_count FROM wealth_stock_advisor_schedule_runs WHERE user_id=$1 AND execution_key=$2',[user.user_id,executionKey]);
+        const [prior]=await sql.query('SELECT status,attempt_count FROM wealth_stock_advisor_schedule_runs WHERE user_id=$1::uuid AND execution_key=$2',[user.user_id,executionKey]);
         if(prior?.status==='failed' && Number(prior.attempt_count||0)>=3) {
-          await sql.query("UPDATE wealth_stock_advisor_settings SET last_scheduled_date=$2::date,last_status='failed',last_error='Scheduled run reached its retry limit; moving to the next eligible date.',updated_at=now() WHERE user_id=$1",[user.user_id,dateKey]);
+          await sql.query("UPDATE wealth_stock_advisor_settings SET last_scheduled_date=$2::date,last_status='failed',last_error='Scheduled run reached its retry limit; moving to the next eligible date.',updated_at=now() WHERE user_id=$1::uuid",[user.user_id,dateKey]);
         }
         continue;
       }
