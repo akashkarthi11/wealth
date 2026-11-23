@@ -1927,3 +1927,49 @@ b.pj-medium{color:#f5c26b}
  .advisor-key-add input{box-sizing:border-box;width:100%;min-width:0}
  .advisor-key-add button{width:100%}
 }
+
+
+/* Compact AI data filters and dense provider overview */
+.aid-filters-compact{grid-template-columns:repeat(4,minmax(0,1fr)) auto auto;gap:7px;padding:9px;border:1px solid var(--line);border-radius:11px;background:var(--panel,#161c24)}
+.aid-filters-compact label{font-size:10px}
+.aid-filters-compact input,.aid-filters-compact select{min-height:34px;padding:6px 8px;font-size:12px}
+.aid-filters-compact button{min-height:34px;padding:6px 10px;font-size:12px;white-space:nowrap}
+.au-page{gap:9px}
+.au-overview{gap:6px}
+.au-overview>div{padding:8px 10px;border-radius:10px}
+.au-overview b{font-size:17px;margin-top:3px}
+.au-toolbar{grid-template-columns:minmax(140px,2fr) repeat(3,minmax(110px,1fr)) auto;gap:6px;padding:8px;border-radius:10px}
+.au-toolbar input,.au-toolbar select{min-height:34px;margin-top:3px;padding:6px 8px;font-size:12px}
+.au-toolbar .au-reset{min-height:34px;padding:6px 9px;font-size:12px}
+.au-list{grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:7px}
+.au-card{padding:9px 10px;border-radius:10px;gap:5px}
+.au-head{gap:6px}
+.au-head h4{font-size:13px}
+.au-head small{font-size:10px;line-height:1.3}
+.au-count b{font-size:16px}
+.au-count small,.au-meta,.au-note{font-size:10px;line-height:1.35}
+.au-health{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.au-card .jobs-status{font-size:10px;padding:3px 6px}
+.au-bar{height:4px}
+.au-audit summary{font-size:11px}
+.au-shape{font-size:10px}
+@media(max-width:620px){
+ .aid-filters-compact{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .aid-filters-compact button{width:100%}
+ .au-overview{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+ .au-overview>div{padding:7px 6px}
+ .au-overview small{font-size:9px;line-height:1.2}
+ .au-overview b{font-size:15px}
+ .au-toolbar{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:8px}
+ .au-search{grid-column:1/-1}
+ .au-toolbar .au-reset{grid-column:1/-1}
+ .au-list{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+ .au-card{padding:8px;gap:4px}
+ .au-head{flex-direction:column}
+ .au-count{text-align:left}
+ .au-count b{font-size:15px;display:inline}
+ .au-count small{display:inline;margin-left:4px}
+ .au-note{display:none}
+ .au-card .au-audit{margin-top:2px}
+}
+@media(max-width:360px){.au-list{grid-template-columns:1fr}.au-overview b{font-size:14px}}
