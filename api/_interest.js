@@ -657,7 +657,20 @@ export async function interestOverview(uid, { db = sql, now = Date.now() } = {})
     .catch(e => { if (e?.code === '42703') return query(`p.credit_frequency, NULL::text AS credit_anchor, NULL::int AS balance_max_age_days, false AS paused, false AS own, 'month' AS record_mode, NULL::uuid AS payout_account_id, NULL::text AS payout_account, NULL::text AS link_frequency`); throw e; });
   // Periodic accounts: the open period, what it has earned so far and when it is paid.
   for (const s of sources) {
-    if (s.subtype_code === 'fixed_deposit') {
+    const fd = interestAccountKind(s) === 'fd';
+    const completeFdTerms = Number(s.fd_principal) > 0 && !!s.fd_booked_on && !!s.fd_maturity_on && !!s.fd_payout;
+    if (fd && !completeFdTerms) {
+      // Do not display legacy estimates as earned interest when the deposit terms are not verified.
+      s.status = 'pending_terms';
+      s.last_accrual = null;
+      s.accrued_month = 0;
+      s.accrued_total = 0;
+      s.period = null;
+      s.next_credit = null;
+      s.period_accrued = null;
+      continue;
+    }
+    if (fd) {
       // FD: paid out every N months from the booking date (the last period ends the day before maturity), or all at maturity.
       s.max_age_days = null;
       const n = s.link_frequency && s.fd_payout !== 'cumulative' ? FREQ_MONTHS[s.fd_payout] : undefined;
