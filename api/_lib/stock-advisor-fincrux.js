@@ -63,7 +63,7 @@ async function reserveDailySlot(db, ticker, url, dateKey, keyId) {
     )
     INSERT INTO wealth_stock_advisor_research_sources
       (run_id,ticker,source_type,title,url,publisher,retrieved_at,excerpt,evidence,verification_status)
-    SELECT NULL,$1,'financial_statement',$4,$2,'Fincrux',now(),
+    SELECT NULL,$1,'financial_statement',$5,$2,'Fincrux',now(),
       'Reserved daily free-tier request; response validation pending.',
       jsonb_build_object('provider','Fincrux','request_date_ist',$3,'reservation',true,'account_key_id',$4),
       'unverified'
