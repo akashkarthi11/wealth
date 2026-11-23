@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 const BASE = 'https://api.fincrux.org/api/financials';
 const SOURCE = 'Fincrux';
 const MAX_DAILY_REQUESTS = 5;
@@ -85,7 +86,7 @@ async function reserveDailySlot(db, ticker, url, dateKey, keyId) {
       WHERE publisher='Fincrux'
         AND retrieved_at >= (date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata')
         AND retrieved_at < ((date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') + interval '1 day') AT TIME ZONE 'Asia/Kolkata')
-        AND right(url, length($4) + 5) = '#key-' || $4
+        AND evidence->>'account_key_id' = $4
     )
     INSERT INTO wealth_stock_advisor_research_sources
       (run_id,ticker,source_type,title,url,publisher,retrieved_at,excerpt,evidence,verification_status)
@@ -141,7 +142,7 @@ export async function collectFincruxFinancials({ instrument, db, manual = false 
     "SELECT retrieved_at FROM wealth_stock_advisor_research_sources WHERE run_id IS NULL AND upper(ticker)=upper($1) AND publisher='Fincrux' AND source_type='financial_statement' AND verification_status IN ('unverified','verified') ORDER BY retrieved_at DESC LIMIT 1",
     [ticker]
   );
-  if (cached?.retrieved_at && Date.now() - Date.parse(cached.retrieved_at) < 30 * 86400000) {
+  if (!manual && cached?.retrieved_at && Date.now() - Date.parse(cached.retrieved_at) < 30 * 86400000) {
     result.status = 'skipped';
     result.reason = 'A Fincrux financial snapshot was already collected within the last 30 days.';
     return result;
@@ -175,7 +176,7 @@ export async function collectFincruxFinancials({ instrument, db, manual = false 
       result.reason = 'A Fincrux key is temporarily rate-limited until ' + cooldown.until_at + '; continuing with other enabled keys.';
       continue;
     }
-    const reservationUrl = sourceUrl + '#key-' + encodeURIComponent(key.id);
+    const reservationUrl = sourceUrl + '#key-' + encodeURIComponent(key.id) + (manual ? '-manual-' + randomUUID() : '');
     const reservationId = await reserveDailySlot(db, ticker, reservationUrl, dateKey, encodeURIComponent(key.id));
     if (!reservationId) {
       result.reason = 'This Fincrux API key has used its five-request daily allowance, or this ticker was already attempted with this key today. Other enabled keys are checked independently.';
