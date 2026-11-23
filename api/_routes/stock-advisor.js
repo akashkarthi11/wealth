@@ -79,6 +79,51 @@ function cleanMessages(input){
 
 
 
+async function loadResearchHealth(uid,holdings){
+ const tickers=[...new Set((holdings||[]).filter(h=>h.currency==='INR'&&['EQUITY','ETF'].includes(String(h.record_type||'').toUpperCase())).map(h=>String(h.ticker||'').trim().toUpperCase()).filter(Boolean))];
+ const providers=[
+  {key:'tejhq',name:'TejHQ',status:'available',detail:'NSE end-of-day prices · no API key'},
+  {key:'mfapi',name:'MFAPI.in',status:'available',detail:'Indian mutual-fund NAV · no API key'},
+  {key:'nse',name:'NSE disclosures',status:'available',detail:'Official RSS listings · filing content still needs verification'},
+  {key:'fincrux',name:'Fincrux',status:String(process.env.FINCRUX_API_KEY||'').trim()?'configured':'needs_key',detail:'Five free requests per IST day · unverified until official cross-check'},
+  {key:'nemotron',name:'Nemotron Free',status:String(process.env.AI_GATEWAY_API_KEY||'').trim()?'configured':'needs_key',detail:'Primary free AI model through Vercel AI Gateway'},
+  {key:'groq',name:'Groq Free',status:String(process.env.GROQ_API_KEY||'').trim()?(String(process.env.GROQ_ZERO_DATA_RETENTION_CONFIRMED||'').toLowerCase()==='true'?'configured':'blocked'):'needs_key',detail:'Fallback requires API key and confirmed Zero Data Retention'}
+ ];
+ if(!tickers.length)return {status:'ok',eligible_equities:0,coverage:{},providers,last_collection:null,evidence_summary:[]};
+ try{
+  const [coverageRows,evidenceRows,collectionRows]=await Promise.all([
+   sql.query(`SELECT
+     count(DISTINCT upper(ticker)) FILTER (WHERE source_type='market_price' AND verification_status='verified' AND retrieved_at>now()-interval '36 hours')::int AS verified_prices,
+     count(DISTINCT upper(ticker)) FILTER (WHERE source_type='technical_indicator' AND verification_status='verified' AND retrieved_at>now()-interval '36 hours')::int AS verified_technicals,
+     count(DISTINCT upper(ticker)) FILTER (WHERE source_type='financial_statement' AND verification_status='verified' AND retrieved_at>now()-interval '400 days')::int AS verified_financials,
+     count(DISTINCT upper(ticker)) FILTER (WHERE source_type='financial_statement' AND verification_status='unverified' AND retrieved_at>now()-interval '400 days')::int AS unverified_financials
+    FROM wealth_stock_advisor_research_sources
+    WHERE run_id IS NULL AND upper(ticker)=ANY($1::text[])`,[tickers]),
+   sql.query(`SELECT publisher,source_type,verification_status,count(*)::int AS records,max(retrieved_at) AS latest_retrieved
+    FROM wealth_stock_advisor_research_sources
+    WHERE run_id IS NULL AND upper(ticker)=ANY($1::text[])
+    GROUP BY publisher,source_type,verification_status
+    ORDER BY publisher,source_type,verification_status`,[tickers]),
+   sql.query('SELECT id,started_at,finished_at,status,summary,error FROM wealth_stock_advisor_data_collection_runs ORDER BY started_at DESC LIMIT 1')
+  ]);
+  const coverage=coverageRows[0]||{};
+  return {
+   status:'ok',eligible_equities:tickers.length,
+   coverage:{
+    verified_prices:Number(coverage.verified_prices||0),
+    verified_technicals:Number(coverage.verified_technicals||0),
+    verified_financials:Number(coverage.verified_financials||0),
+    unverified_financials:Number(coverage.unverified_financials||0)
+   },
+   providers,
+   last_collection:collectionRows[0]||null,
+   evidence_summary:evidenceRows
+  };
+ }catch(error){
+  return {status:'unavailable',eligible_equities:tickers.length,coverage:{},providers,last_collection:null,evidence_summary:[],error:String(error?.message||error).slice(0,180)};
+ }
+}
+
 async function getAutoResearchSettings(uid){
  const rows=await sql.query('SELECT enabled,mode,selected_tickers,schedule_timezone,schedule_time,schedule_frequency,last_run_at,last_success_at,last_scheduled_date,next_run_at,last_status,last_error FROM wealth_stock_advisor_settings WHERE user_id=$1',[uid]);
  const settings=rows[0]||{enabled:false,mode:'all',selected_tickers:[],schedule_timezone:SCHEDULE_TIMEZONE,schedule_time:DEFAULT_SCHEDULE_TIME,schedule_frequency:'daily',last_run_at:null,last_success_at:null,last_scheduled_date:null,next_run_at:null,last_status:'not_configured',last_error:null};
@@ -242,7 +287,8 @@ export default async function handler(req,res){
    messages=result[1];bullBearCases=result[2];
   }
   if(requestedRun&&!run)return json(res,404,{error:'Advisor run not found.'});
-  return json(res,200,{report,run,runs,messages,bull_bear_cases:bullBearCases,holdings,settings});
+  const research_health=await loadResearchHealth(uid,holdings);
+  return json(res,200,{report,run,runs,messages,bull_bear_cases:bullBearCases,holdings,settings,research_health});
  }catch(e){
   if(e?.status===400)return json(res,400,{error:e.message});
   console.error('[wealth-stock-advisor]',e?.message||e);

@@ -16,12 +16,13 @@ test('MFAPI collector stores dated NAV history as one provider evidence record',
  globalThis.fetch=async url=>({ok:true,status:200,json:async()=>({meta:{scheme_name:'Example Direct Growth',fund_house:'Example AMC',scheme_type:'Open Ended',scheme_category:'Equity'},data:[{date:'22-11-2026',nav:'125.50'},{date:'21-11-2026',nav:'124.75'}]})});
  const db={query:async(sql,params)=>{calls.push({sql,params});return [{id:'source-1'}]}};
  try{
-  const result=await collectMutualFundEvidence({ticker:'MF119551',name:'119551',schemeCode:'119551',runId:'run-1',db});
+  const result=await collectMutualFundEvidence({ticker:'MF119551',name:'119551',schemeCode:'119551',instrumentId:'instrument-1',runId:'run-1',db});
   assert.equal(result.status,'ok');
   assert.equal(result.observations,2);
   assert.equal(result.stored,1);
-  assert.equal(calls.length,1);
-  const evidence=JSON.parse(calls[0].params[7]);
+  assert.equal(calls.length,3,'two NAV price-history upserts plus one shared research record');
+  assert.equal(calls.filter(x=>x.sql.includes('INSERT INTO wealth_instrument_prices')).length,2);
+  const evidence=JSON.parse(calls.at(-1).params[7]);
   assert.equal(evidence.nav_observations.length,2);
   assert.equal(evidence.nav_observations[0].nav,125.5);
  }finally{globalThis.fetch=originalFetch}
