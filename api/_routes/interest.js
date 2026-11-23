@@ -3,8 +3,8 @@ import { submitRate, interestOverview, saveInterestAccount } from '../_interest.
 
 // GET  /api/interest           interest view: sources, current rates, accrued and credited (TR3-3.7, owner)
 // POST /api/interest/rates     verified rate period (TR3-3.2, agent or owner; ?dryRun=1)
-// POST /api/interest/run       accrue through yesterday IST, idempotent (TR3-3.5, cron / agent / owner; ?dryRun=1)
-// POST /api/interest/credits   actual credit with bank evidence (TR3-3.6, owner or agent; unique reference)
+// POST /api/interest/run       retired (410): only /api/nightly may accrue interest
+// POST /api/interest/credits   retired (410): the nightly job owns interest income rows
 // POST /api/interest/accounts   set up an account: rate per year, how the interest is paid, period start, pause (any signed-in user, own accounts)
 const AUTH = { 'interest': { user: true }, 'interest/accounts': { user: true, ingest: false }, 'interest/rates': {}, 'interest/run': { cron: true }, 'interest/credits': {} };
 
