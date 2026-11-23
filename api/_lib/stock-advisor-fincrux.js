@@ -48,23 +48,24 @@ export function normalizeFincruxFinancials(payload, expectedTicker) {
   };
 }
 
-async function reserveDailySlot(db, ticker, url, dateKey) {
+async function reserveDailySlot(db, ticker, url, dateKey, keyId) {
   const title = 'Financial statement API request — ' + ticker + ' — ' + dateKey;
   const rows = await db.query(`
     WITH quota_lock AS MATERIALIZED (
-      SELECT pg_advisory_xact_lock(hashtext('wealth-fincrux-daily:' || $3::text))
+      SELECT pg_advisory_xact_lock(hashtext('wealth-fincrux-daily:' || $3::text || ':' || $4::text))
     ), quota AS (
       SELECT count(*)::int AS used
       FROM wealth_stock_advisor_research_sources, quota_lock
       WHERE publisher='Fincrux'
         AND retrieved_at >= (date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata')
         AND retrieved_at < ((date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') + interval '1 day') AT TIME ZONE 'Asia/Kolkata')
+        AND right(url, length($4) + 5) = '#key-' || $4
     )
     INSERT INTO wealth_stock_advisor_research_sources
       (run_id,ticker,source_type,title,url,publisher,retrieved_at,excerpt,evidence,verification_status)
     SELECT NULL,$1,'financial_statement',$4,$2,'Fincrux',now(),
       'Reserved daily free-tier request; response validation pending.',
-      jsonb_build_object('provider','Fincrux','request_date_ist',$3,'reservation',true),
+      jsonb_build_object('provider','Fincrux','request_date_ist',$3,'reservation',true,'account_key_id',$4),
       'unverified'
     FROM quota WHERE used < ${MAX_DAILY_REQUESTS}
     ON CONFLICT (ticker,url) WHERE run_id IS NULL DO UPDATE
@@ -72,7 +73,7 @@ async function reserveDailySlot(db, ticker, url, dateKey) {
           evidence=EXCLUDED.evidence,verification_status='unverified'
       WHERE wealth_stock_advisor_research_sources.retrieved_at < (date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata')
     RETURNING id
-  `, [ticker, url, dateKey, title]);
+  `, [ticker, url, dateKey, keyId, title]);
   return rows[0]?.id || null;
 }
 
@@ -104,6 +105,7 @@ export async function collectFincruxFinancials({ instrument, db } = {}) {
     result.reason = 'No Fincrux keys are configured. Add keys in Provider Health or set FINCRUX_API_KEY in the environment.';
     return result;
   }
+  result.request_limit_per_ist_day = MAX_DAILY_REQUESTS * keys.length;
   if (!/^[A-Z0-9&.-]{1,30}$/.test(ticker)) {
     result.status = 'failed';
     result.error = 'Invalid NSE ticker.';
@@ -124,11 +126,10 @@ export async function collectFincruxFinancials({ instrument, db } = {}) {
   const startedAt = Date.now();
   for (const key of keys) {
     const reservationUrl = sourceUrl + '#key-' + encodeURIComponent(key.id);
-    const reservationId = await reserveDailySlot(db, ticker, reservationUrl, dateKey);
+    const reservationId = await reserveDailySlot(db, ticker, reservationUrl, dateKey, key.id);
     if (!reservationId) {
-      result.status = 'skipped';
-      result.reason = 'Daily Fincrux request allowance is exhausted, or this key already attempted this ticker today.';
-      break;
+      result.reason = 'This Fincrux account has used its five-request daily allowance, or this ticker was already attempted with this account today.';
+      continue;
     }
     result.attempted_keys++;
     let payload = null, responseStatus = null;
@@ -175,7 +176,7 @@ export async function collectFincruxFinancials({ instrument, db } = {}) {
   if (!successful) {
     result.status = lastError ? 'failed' : 'skipped';
     result.error = lastError || null;
-    result.reason = lastError ? 'All available Fincrux keys failed; tried ' + result.attempted_keys + ' key(s). Last error: ' + lastError : result.reason;
+    result.reason = lastError ? 'All available Fincrux accounts failed; tried ' + result.attempted_keys + ' account key(s). Last error: ' + lastError : result.reason || 'All configured Fincrux accounts have exhausted their daily allowances.';
     result.response_keys = lastPayload && typeof lastPayload === 'object' ? Object.keys(lastPayload).slice(0, 20) : [];
     result.data_keys = lastPayload?.data && typeof lastPayload.data === 'object' && !Array.isArray(lastPayload.data) ? Object.keys(lastPayload.data).slice(0, 30) : [];
     return result;
