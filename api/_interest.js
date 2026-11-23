@@ -549,8 +549,8 @@ export async function saveInterestAccount(uid, b, { db = sql, actor = 'user', no
     }
   }
   await withActor(db, actor, stmts);
-  // Work the interest out at once, so the list shows it without waiting for the night.
-  const run = paused ? null : await runAccrual(uid, { db, now, actor, accountId: a.id }).catch(e => ({ error: String(e?.message || e) }));
+  // Preview only. The nightly /api/nightly job is the sole writer of interest ledger and income rows.
+  const run = paused ? null : await runAccrual(uid, { db, now, actor, accountId: a.id, dryRun: true }).catch(e => ({ error: String(e?.message || e) }));
   return { accountId: a.id, productKey, created, rateChange, run: run && run.accounts ? run.accounts[0] || null : run };
 }
 
