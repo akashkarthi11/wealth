@@ -8,7 +8,7 @@ test('the nightly route owns interest and backup at 01:30 IST; dispatcher exclud
   assert.ok(vercel.crons.some(c=>c.path==='/api/nightly'&&c.schedule==='0 20 * * *'));
   const jobs=readFileSync(new URL('../../api/_lib/scheduled-jobs.js',import.meta.url),'utf8');
   assert.match(jobs,/handler_key NOT IN \('interest-accrual','backup'\)/);
-  assert.match(jobs,/job.handler_key==='interest-accrual'.*status:'blocked'/);
+  assert.match(jobs,/\['interest-accrual','backup'\]\.includes\(job\.handler_key\).*status:'blocked'/);
   const nightly=readFileSync(new URL('../../api/_routes/nightly.js',import.meta.url),'utf8');
   const migration=readFileSync(new URL('../migrations/0049_scheduled_job_skipped_status.sql',import.meta.url),'utf8');
   assert.match(migration,/CHECK \(status IN \('running','succeeded','partial','failed','skipped'\)\)/);
