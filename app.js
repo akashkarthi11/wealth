@@ -592,7 +592,7 @@ async function loadJobs(){
 }
 
 // ---- AI data (admin): what the scheduled Stock Advisor data collection fetched, how long each call took, and what is stored. ----
-let aiDataState={run:'',ticker:'',provider:''},aiDataTimer=null,jobPumpBusy=false;
+let aiDataState={run:'',ticker:'',provider:'',verification:'',source_type:''},aiDataTimer=null,jobPumpBusy=false;
 // While an admin has the Scheduled jobs or AI data page open and steps are waiting in the job queue, ask the worker to run some of them, then look again.
 async function pumpJobQueue(view,reload){
  if(jobPumpBusy)return;
@@ -625,7 +625,7 @@ function aiDataHtml(d){
  const stored=(d.stored||[]).length?'<div class="aid-table">'+d.stored.map(r=>'<div class="aid-row"><span class="aid-what"><b>'+esc(r.publisher)+'</b><small>'+esc(String(r.source_type).replace(/_/g,' '))+'</small></span><span class="aid-mid">'+aiChip(r.verification_status)+'</span><span class="aid-end"><b>'+r.n+'</b><small>'+r.tickers+' stock'+(r.tickers===1?'':'s')+' · '+esc(fmtJobDate(r.last_retrieved))+'</small></span></div>').join('')+'</div>':'<p class="muted">Nothing is stored yet.</p>';
  const missing=(d.not_collected||[]).length?'<details class="jobs-history"><summary>Holdings the job cannot collect for <span>'+d.not_collected.length+'</span></summary><div class="jobs-history-list">'+d.not_collected.map(r=>'<div><span><b>'+esc(r.name||r.symbol||'Unnamed')+'</b><small>'+esc(r.reason)+(r.symbol?' · '+esc(r.symbol):'')+'</small></span></div>').join('')+'</div></details>':'';
  const f=d.filter||{};
- const records='<div class="aid-filters"><label>Stock<input data-aidata-ticker value="'+esc(f.ticker||aiDataState.ticker)+'" placeholder="e.g. TCS" maxlength="40"></label><label>Provider<select data-aidata-provider><option value="">All</option>'+(d.providers||[]).map(p=>'<option'+(p===(f.provider||aiDataState.provider)?' selected':'')+'>'+esc(p)+'</option>').join('')+'</select></label><button type="button" class="ghost" data-aidata-apply>Show</button></div>'+
+ const records='<div class="aid-filters aid-filters-compact"><label>Stock<input data-aidata-ticker value="'+esc(f.ticker||aiDataState.ticker)+'" placeholder="Ticker" maxlength="40"></label><label>Provider<select data-aidata-provider><option value="">All</option>'+(d.providers||[]).map(p=>'<option'+(p===(f.provider||aiDataState.provider)?' selected':'')+'>'+esc(p)+'</option>').join('')+'</select></label><label>Status<select data-aidata-verification><option value="">All</option>'+(d.verification_statuses||[]).map(p=>'<option value="'+esc(p)+'"'+(p===(f.verification||aiDataState.verification)?' selected':'')+'>'+esc(String(p).replace(/_/g,' '))+'</option>').join('')+'</select></label><label>Data type<select data-aidata-type><option value="">All</option>'+(d.source_types||[]).map(p=>'<option value="'+esc(p)+'"'+(p===(f.source_type||aiDataState.source_type)?' selected':'')+'>'+esc(String(p).replace(/_/g,' '))+'</option>').join('')+'</select></label><button type="button" class="ghost" data-aidata-apply>Apply</button><button type="button" class="ghost" data-aidata-reset>Reset</button></div>'+
   ((d.sources||[]).length?'<div class="aid-table">'+d.sources.map(s=>'<div class="aid-row"><span class="aid-what"><b>'+esc(s.ticker)+' · '+esc(s.publisher||'')+'</b><small>'+(s.url?'<a href="'+esc(s.url)+'" target="_blank" rel="noopener noreferrer">'+esc(s.title)+'</a>':esc(s.title))+'</small>'+(s.excerpt?'<small>'+esc(s.excerpt)+'</small>':'')+'</span><span class="aid-end">'+aiChip(s.verification_status)+'<small>'+esc(String(s.source_type).replace(/_/g,' '))+'</small><small>fetched '+esc(fmtJobDate(s.retrieved_at))+'</small></span></div>').join('')+'</div><p class="muted">Latest 100 records.</p>':'<p class="muted">No stored records match.</p>');
  return '<section class="jobs-page"><div class="jobs-page-head"><div><h4>AI data</h4><p>What the daily “Stock Advisor data collection” job fetched for the advisor: every provider call with its time, and what is stored now.</p></div><button type="button" class="primary" data-queue-run>▶ Run queue now</button> <button type="button" class="ghost" data-aidata-refresh>↻ Refresh</button></div>'+
   picker+tiles+warn+
@@ -637,7 +637,7 @@ async function loadAiData(){
  const box=document.getElementById('aiDataBox');if(!box)return;
  clearTimeout(aiDataTimer);
  try{
-  const q=new URLSearchParams();if(aiDataState.run)q.set('run',aiDataState.run);if(aiDataState.ticker)q.set('ticker',aiDataState.ticker);if(aiDataState.provider)q.set('provider',aiDataState.provider);
+  const q=new URLSearchParams();if(aiDataState.run)q.set('run',aiDataState.run);if(aiDataState.ticker)q.set('ticker',aiDataState.ticker);if(aiDataState.provider)q.set('provider',aiDataState.provider);if(aiDataState.verification)q.set('verification',aiDataState.verification);if(aiDataState.source_type)q.set('source_type',aiDataState.source_type);
   const d=await api('/api/ai-data'+(q.toString()?'?'+q:''));
   box.innerHTML=aiDataHtml(d);
   if(d.queue?.waiting>0)pumpJobQueue('ai-data',loadAiData);
@@ -772,7 +772,7 @@ document.addEventListener('click',async e=>{
 document.addEventListener('click',e=>{
  if(e.target.closest('[data-apiusage-refresh]')){loadApiUsage();return}
  if(e.target.closest('[data-aidata-refresh]')){loadAiData();return}
- if(e.target.closest('[data-aidata-apply]')){const box=document.getElementById('aiDataBox');aiDataState.ticker=(box.querySelector('[data-aidata-ticker]')?.value||'').trim();aiDataState.provider=box.querySelector('[data-aidata-provider]')?.value||'';loadAiData()}
+ if(e.target.closest('[data-aidata-apply]')){const box=document.getElementById('aiDataBox');aiDataState.ticker=(box.querySelector('[data-aidata-ticker]')?.value||'').trim();aiDataState.provider=box.querySelector('[data-aidata-provider]')?.value||'';aiDataState.verification=box.querySelector('[data-aidata-verification]')?.value||'';aiDataState.source_type=box.querySelector('[data-aidata-type]')?.value||'';loadAiData();return}if(e.target.closest('[data-aidata-reset]')){aiDataState={run:aiDataState.run,ticker:'',provider:'',verification:'',source_type:''};loadAiData()}
 });
 document.addEventListener('change',e=>{const r=e.target.closest('[data-aidata-run]');if(r){aiDataState.run=r.value;loadAiData()}});
 
