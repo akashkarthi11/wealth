@@ -3,6 +3,7 @@ import { collectNseNewsBatch, NSE_FEED_LABELS } from './stock-advisor-live-evide
 import { collectMutualFundEvidence } from './stock-advisor-mfapi.js';
 import { collectTejHqEquityEvidence } from './stock-advisor-tejhq.js';
 import { collectNseXbrlFinancialStatement } from './stock-advisor-nse-xbrl.js';
+import { collectYahooFinancials } from './stock-advisor-yahoo-financials.js';
 export { cleanNseFeedItemMatches } from './stock-advisor-live-evidence.js';
 
 // Stock Advisor data collection, as small TASKS. The scheduled job puts one task per provider call on the job queue (api/_lib/job-queue.js), so
@@ -15,11 +16,12 @@ export const TASKS = Object.freeze({
   fund: { provider: 'MFAPI.in', priority: 41, name: 'Fund NAV' },
   equity: { provider: 'TejHQ', priority: 42, name: 'Prices and technical indicators' },
   nse_xbrl: { provider: 'NSE XBRL', priority: 43, name: 'Filed financial statements' },
-  fincrux: { provider: 'Fincrux', priority: 44, name: 'Secondary financial data (unverified)' },
-  fincrux_skip: { provider: 'Fincrux', priority: 44, name: 'Secondary financial data (unverified)' },
-  verify: { provider: 'Fincrux', priority: 45, name: 'Legacy verification disabled' },
+  yahoo_financials: { provider: 'Yahoo Finance fundamentals', priority: 44, name: 'Secondary quarterly figures (unverified)' },
+  fincrux: { provider: 'Fincrux', priority: 45, name: 'Secondary financial data (unverified)' },
+  fincrux_skip: { provider: 'Fincrux', priority: 45, name: 'Secondary financial data (unverified)' },
+  verify: { provider: 'Fincrux', priority: 46, name: 'Legacy verification disabled' },
 });
-const DEFERRABLE = new Set(['fund', 'equity', 'fincrux', 'nse_xbrl']);
+const DEFERRABLE = new Set(['fund', 'equity', 'fincrux', 'nse_xbrl', 'yahoo_financials']);
 
 const errorText = e => typeof e === 'string' ? e : e && typeof e === 'object' ? [e.ticker, e.feed, e.error].filter(Boolean).join(': ') : String(e ?? '');
 const note = r => String(r?.reason || r?.error || (Array.isArray(r?.errors) && r.errors.length ? r.errors.map(errorText).join('; ') : '') || '').slice(0, 180);
@@ -69,6 +71,8 @@ export async function planCollection(db) {
   // Duplicate instrument rows for the same ticker share one NSE filing and therefore one queue item.
   const xbrlHoldings = [...new Map(xbrlEquities.map(e => [String(e.symbol || '').toUpperCase(), e])).values()];
   for (const e of xbrlHoldings) add('nse_xbrl', { instrument: slim(e) });
+  // Context figures for the analysts. No key and no quota, and never promoted to verified.
+  for (const e of xbrlHoldings) add('yahoo_financials', { instrument: slim(e) });
   if (equities.length) {
     if (String(process.env.FINCRUX_API_KEY || '').trim()) {
       const [quota] = await db.query(`SELECT count(*)::int AS used
@@ -113,6 +117,10 @@ export async function runCollectionTask(db, task, payload = {}, { deadlineAt = n
       const r = await collectTejHqEquityEvidence({ ticker: i.symbol, name: i.name, db });
       return { ...base, status: r.status, note: note(r), detail: [r] };
     }
+    if (task === 'yahoo_financials') {
+      const r = await collectYahooFinancials({ instrument: i, db });
+      return { ...base, status: r.status, note: note(r), detail: [r] };
+    }
     if (task === 'fincrux') {
       const r = await collectFincruxFinancials({ instrument: i, db });
       return { ...base, status: r.status, note: note(r), detail: [r] };
@@ -140,7 +148,7 @@ export function foldTaskResult(summary, task, r) {
   else if (task === 'fund') { if (r.status === 'ok') summary.nav_updated++; else if (r.status === 'unavailable' || r.status === 'failed') summary.failed++; else summary.skipped++; }
   else if (task === 'equity') { if (r.status === 'ok') summary.market_data_updated++; else if (r.status === 'unavailable' || r.status === 'market_data_failed') summary.failed++; }
   else if (task === 'nse_xbrl') { if (r.status === 'verified' || r.status === 'already_present') summary.financials_verified++; else if (['failed','unparsed','period_mismatch','ticker_mismatch','announcement_company_mismatch'].includes(r.status)) summary.failed++; else { summary.financials_missing++; summary.skipped++; } }
-  else if (task === 'fincrux') { if (r.status === 'stored_unverified') summary.financials_unverified++; else if (r.status === 'failed') summary.failed++; else summary.skipped++; }
+  else if (task === 'yahoo_financials' || task === 'fincrux') { if (r.status === 'stored_unverified') summary.financials_unverified++; else if (r.status === 'failed') summary.failed++; else summary.skipped++; }
   else if (task === 'verify') summary.skipped++;
 }
 
