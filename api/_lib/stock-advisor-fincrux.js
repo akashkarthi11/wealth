@@ -5,6 +5,25 @@ const MAX_DAILY_REQUESTS = 5;
 import { recordApiCall } from './api-audit.js';
 import { loadFincruxApiKeys } from './provider-api-keys.js';
 const timeout = ms => AbortSignal.timeout(ms);
+
+// Per-isolate working counter. It is seeded from today's persisted attempts, incremented immediately
+// after each successful reservation, and cleared when the collection run is finalized. The database
+// reservation remains authoritative across separate serverless isolates.
+let dailyUsageMemory = null;
+async function dailyFincruxUsage(db, dateKey) {
+  if (!dailyUsageMemory || dailyUsageMemory.dateKey !== dateKey) {
+    const [row] = await db.query(`
+      SELECT count(*)::int AS used
+      FROM wealth_stock_advisor_research_sources
+      WHERE publisher='Fincrux'
+        AND retrieved_at >= (date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata')
+        AND retrieved_at < ((date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') + interval '1 day') AT TIME ZONE 'Asia/Kolkata')
+    `);
+    dailyUsageMemory = { dateKey, used: Number(row?.used || 0) };
+  }
+  return dailyUsageMemory;
+}
+export function clearFincruxDailyUsageMemory() { dailyUsageMemory = null; }
 const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
 const safeDate = value => {
   if (!value) return null;
@@ -149,6 +168,16 @@ export async function collectFincruxFinancials({ instrument, db, manual = false 
   }
   const dateKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   const sourceUrl = BASE + '/' + encodeURIComponent(ticker);
+  const usageMemory = await dailyFincruxUsage(db, dateKey);
+  const totalDailyLimit = MAX_DAILY_REQUESTS * keys.length;
+  result.daily_records_at_start = usageMemory.used;
+  result.daily_records_in_memory = usageMemory.used;
+  result.daily_limit_all_accounts = totalDailyLimit;
+  if (usageMemory.used >= totalDailyLimit) {
+    result.status = 'skipped';
+    result.reason = 'All configured Fincrux accounts have used their combined daily allowance.';
+    return result;
+  }
   if (!manual) {
     const [todayAttempt] = await db.query(`
       SELECT id, retrieved_at, verification_status, evidence->>'reservation' AS reservation
@@ -183,6 +212,8 @@ export async function collectFincruxFinancials({ instrument, db, manual = false 
       continue;
     }
     result.attempted_keys++;
+    usageMemory.used++;
+    result.daily_records_in_memory = usageMemory.used;
     let payload = null, responseStatus = null;
     try {
       const response = await fetch(sourceUrl + '?api_key=' + encodeURIComponent(key.value), {
