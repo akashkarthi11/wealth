@@ -82,7 +82,12 @@ export async function adoptStrandedDebates(db, limit = 25) {
   return adopted;
 }
 
-const mapRunStatus = (http, payload) => http >= 500 || http === 401 || (payload?.ok === false && payload?.status === 'failed') ? 'failed' : payload?.ok === false ? 'partial' : 'succeeded';
+const mapRunStatus = (http, payload) => {
+  if (http >= 400 || payload?.status === 'failed' || payload?.failed > 0 || payload?.instruments?.failed > 0) return 'failed';
+  if (payload?.status === 'partial' || payload?.ok === false || payload?.instruments?.failed > 0) return 'partial';
+  if (payload?.status === 'skipped' || payload?.outcome === 'no_work_due') return 'skipped';
+  return 'succeeded';
+};
 
 export async function finishJobRun(db, { runId, jobId, status, http = null, payload = {}, error = null }) {
   const done = await db.query(`UPDATE wealth_scheduled_job_runs SET status=$2,finished_at=now(),http_status=$3,result=$4::jsonb,error=$5 WHERE id=$1 AND status='running' RETURNING id`,
@@ -135,9 +140,12 @@ export async function runItem(db, item, { runHandler, deadlineAt }) {
     }
     else if (item.handler_key === 'stock-advisor-data-collection' && TASKS[item.task]) result = await runCollectionTask(db, item.task, obj(item.payload), { deadlineAt });
     else { const r = await runHandler(item.handler_key, deadlineAt); result = { http_status: r.http_status, payload: r.payload }; }
-    await db.query(`UPDATE wealth_job_queue SET status='done',result=$2::jsonb,finished_at=now(),locked_until=NULL WHERE id=$1`, [item.id, JSON.stringify(result)]);
+    const payload = result?.payload || result || {};
+    const businessOutcome = String(payload?.status || (payload?.ok === false ? 'partial' : 'succeeded'));
+    const executionStatus = ['failed','error'].includes(businessOutcome) ? 'failed' : 'done';
+    await db.query(`UPDATE wealth_job_queue SET status=$2,result=$3::jsonb,finished_at=now(),locked_until=NULL WHERE id=$1`, [item.id, executionStatus, JSON.stringify(result)]);
     await settle(db, item.job_run_id);
-    return { id: item.id, task: item.task, status: 'done' };
+    return { id: item.id, task: item.task, status: executionStatus, outcome: businessOutcome };
   } catch (e) {
     const message = String(e?.message || e).slice(0, 500);
     if (Number(item.attempts) < Number(item.max_attempts)) {
