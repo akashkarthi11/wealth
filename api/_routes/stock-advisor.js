@@ -87,7 +87,7 @@ async function loadResearchHealth(uid,holdings){
   {key:'tejhq',name:'TejHQ',status:'available',detail:'NSE end-of-day prices · no API key'},
   {key:'mfapi',name:'MFAPI.in',status:'available',detail:'Indian mutual-fund NAV · no API key'},
   {key:'nse',name:'NSE disclosures',status:'available',detail:'Official RSS listings · filing content still needs verification'},
-  {key:'fincrux',name:'Fincrux',status:fincruxKeys.total_enabled?'configured':'needs_key',detail:fincruxKeys.total_enabled+' active key(s) · automatic fallback · unverified until official cross-check'},
+  {key:'fincrux',name:'Fincrux',status:fincruxKeys.total_enabled?'configured':'needs_key',detail:'5 requests per account/day · '+(5*Number(fincruxKeys.total_enabled||0))+' total/day across '+fincruxKeys.total_enabled+' active account key(s) · automatic fallback · unverified until official cross-check'},
   {key:'nemotron',name:'Nemotron Free',status:String(process.env.AI_GATEWAY_API_KEY||'').trim()?'configured':'needs_key',detail:'Primary free AI model through Vercel AI Gateway'},
   {key:'groq',name:'Groq Free',status:String(process.env.GROQ_API_KEY||'').trim()?(String(process.env.GROQ_ZERO_DATA_RETENTION_CONFIRMED||'').toLowerCase()==='true'?'configured':'blocked'):'needs_key',detail:'Fallback requires API key and confirmed Zero Data Retention'}
  ];
