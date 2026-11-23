@@ -13,7 +13,7 @@ export const MAX_CATCH_UP_DAYS = 90, CORRECTION_WINDOW_DAYS = 30, FD_MAX_DAYS = 
 // This prevents an aggregate FD linked under a generic savings subtype from accruing against a savings balance.
 export function interestAccountKind(link = {}) {
   const descriptor = [link.subtype_code, link.product_key, link.account_name].filter(Boolean).join(' ').toLowerCase();
-  return link.subtype_code === 'fixed_deposit' || /\\bfixed[\\s_-]*deposit\\b|\\bfd\\b/.test(descriptor) ? 'fd' : 'savings';
+  return link.subtype_code === 'fixed_deposit' || /\bfixed[\s_-]*deposit\b|\bfd\b/.test(descriptor) ? 'fd' : 'savings';
 }
 
 export const istDay = (ms = Date.now()) => new Date(ms + IST_MS).toISOString().slice(0, 10);
