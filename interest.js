@@ -25,7 +25,7 @@ function inSourceHtml(s) {
   else lines.push('This month so far <b>' + esc(inRs(s.accrued_month)) + '</b>');
   if (s.balance != null) lines.push('Balance ' + esc(inRs(s.balance)) + (s.balance_as_of ? ' <small>as of ' + esc(inDay(new Date(new Date(s.balance_as_of).getTime() + 5.5 * 3600e3).toISOString())) + '</small>' : ''));
   lines.push('<small>Last worked out ' + esc(s.last_accrual ? inDay(s.last_accrual) : 'not yet') + ' · paid so far ' + esc(inRs(s.credited_total)) + (fd ? '' : ' · uses a balance up to ' + esc(String(s.max_age_days)) + ' days old') + '</small>');
-  if (fd && !s.fd_principal) lines.push('<small class="in-warn">Deposit terms are missing: tap Edit to add the amount and dates.</small>');
+  if (fd && s.status === 'pending_terms') lines.push('<small class="in-warn">Deposit terms are incomplete: tap Edit to check the deposit amount, start date, maturity date and payout method.</small>');
   const editable = true;
   return '<article class="in-card' + (s.paused ? ' off' : '') + '"><div class="in-card-top"><div><h4>' + esc(inAcct(s)) + '</h4><small>' + esc(inPct(s.rate)) + ' a year' + (s.own ? '' : ' · bank rate') + ' · ' + esc(paid) + (s.rate_from ? ' · rate since ' + esc(inDay(s.rate_from)) : '') + '</small></div>'
     + '<b class="in-amt">' + esc(inRs(fd ? (s.period_accrued != null ? s.period_accrued : s.accrued_month) : s.credit_frequency && IN_MONTHS[s.credit_frequency] ? s.period_accrued : s.accrued_month)) + '</b></div>'
@@ -180,10 +180,14 @@ async function inSave() {
         balanceMaxAgeDays: f.balanceMaxAgeDays === '' ? undefined : Number(f.balanceMaxAgeDays), paused: f.paused };
   if (s.own) { body.annualRatePercent = Number(f.ratePercent); if (s.editing && s.origRate != null && Number(f.ratePercent) !== s.origRate) body.effectiveFrom = f.effectiveFrom; }
   try {
-    await api('/api/interest/accounts', { method: 'POST', body: JSON.stringify(body) });
+    const saved = await api('/api/interest/accounts', { method: 'POST', body: JSON.stringify(body) });
+    const preview = saved && saved.run;
+    const previewWarning = preview && (preview.error || (['pending_terms', 'no_rate', 'stale_balance'].includes(preview.status)
+      ? 'Calculation status: ' + preview.status : ''));
     inClose();
     try { await loadDashboard(); } catch { }
     if (typeof loadInterestSources === 'function') await loadInterestSources();
+    if (previewWarning) alert('Interest settings were saved, but the preview needs attention: ' + previewWarning + '. Actual accrual and credits are handled by the nightly job.');
   } catch (e) { s.busy = false; s.err = String((e && e.message) || e); inRender(); }
 }
 document.addEventListener('click', async e => {
