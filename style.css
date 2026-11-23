@@ -1244,8 +1244,11 @@ b.pj-medium{color:#f5c26b}
 .act-row.inactive{opacity:.55}
 .act-row.inactive .act-amt{text-decoration:line-through}
 .act-tag.inactive{color:#c8d3e6;border-color:#4a5a73;background:#1b2638}
+.interest-fd-asof{display:block;margin-top:2px;color:#7f93ad;font-size:12px}
 /* Cashback: the account that receives it */
 .pd-recv,.of-recv{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:4px 0 8px 44px;color:var(--muted);font-size:12px}
+.pd-target b{color:#e9f2ff}
+.of-recv b{color:#e9f2ff}
 .pd-recv select,.of-recv select{min-height:36px;max-width:100%;font-size:13px}
 .of-txline .of-recv{margin:6px 0 0}
 /* Interest on your accounts (2026-11-14) */

@@ -73,10 +73,10 @@ test('FD box: both FDs (incl. the screenshot-imported Angel One FD), app-reporte
   ];
   const fdRows = rows.map(r => r.product_key === 'slice-fd' ? { ...r, account_key: 'slice-fixed_deposit-slice-fd' } : r.product_key === 'angel-one-fd' ? { ...r, account_key: 'angel-one-fixed_deposit-angel-one-fd-aggregate-' } : r);
   const html = page({ rows: fdRows, positions }).interestViewHtml();
-  assert.match(html, /<span>Slice FD<small>INR 3005\.04 now · INR 3001\.00 invested · app calculated INR 1\.27<\/small><\/span><b>INR 4\.04<\/b>/);
-  assert.match(html, /<span>Angel One FD \(aggregate\)<small>INR 1001\.30 now · INR 1000\.00 invested · app calculated INR 0\.44<\/small><\/span><b>INR 1\.30<\/b>/);
+  assert.match(html, /<span>Slice FD<small>INR 3005\.04 now · INR 3001\.00 invested · app calculated INR 1\.27<\/small><small class="interest-fd-asof">App calculation to \d+ \w+ \d{4}<\/small><\/span><b>INR 4\.04<\/b>/);
+  assert.match(html, /<span>Angel One FD \(aggregate\)<small>INR 1001\.30 now · INR 1000\.00 invested · app calculated INR 0\.44<\/small><small class="interest-fd-asof">App calculation to \d+ \w+ \d{4}<\/small><\/span><b>INR 1\.30<\/b>/);
   assert.match(html, /<strong>INR 5\.34<\/strong>/);
-  assert.match(html, /calculated by this app since start INR 1\.71/);
+  assert.match(html, /calculated by this app since start INR 1\.71 · last updated \d+ \w+ \d{4}/, 'the block says when it was last updated');
 });
 
 test('two FDs: daily list and chart legend show the split per FD', () => {
