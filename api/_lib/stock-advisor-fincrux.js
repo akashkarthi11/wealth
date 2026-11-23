@@ -54,6 +54,26 @@ export function normalizeFincruxFinancials(payload, expectedTicker) {
   };
 }
 
+async function getKeyRateLimit(db, keyId) {
+  const [row] = await db.query(`
+    SELECT evidence->>'rate_limited_until' AS until_at,
+           evidence->>'rate_limit_retry_seconds' AS retry_seconds
+    FROM wealth_stock_advisor_research_sources
+    WHERE publisher='Fincrux' AND source_type='financial_statement'
+      AND evidence->>'attempted_key'=$1
+      AND NULLIF(evidence->>'rate_limited_until','')::timestamptz > now()
+    ORDER BY retrieved_at DESC LIMIT 1
+  `, [String(keyId)]);
+  return row || null;
+}
+
+function retryAfterSeconds(payload) {
+  const raw = String(payload?.retry_in || payload?.retry_after || '').trim();
+  const match = raw.match(/(\\d+(?:\\.\\d+)?)/);
+  if (match) return Math.max(1, Math.ceil(Number(match[1])));
+  return null;
+}
+
 async function reserveDailySlot(db, ticker, url, dateKey, keyId) {
   const title = 'Financial statement API request — ' + ticker + ' — ' + dateKey;
   const rows = await db.query(`
@@ -128,7 +148,7 @@ export async function collectFincruxFinancials({ instrument, db } = {}) {
   }
   const dateKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   const sourceUrl = BASE + '/' + encodeURIComponent(ticker);
-  let lastError = null, lastPayload = null, successful = null;
+  let lastError = null, lastPayload = null, successful = null;\n  const rateLimitedKeys = [];
   const startedAt = Date.now();
   for (const key of keys) {
     const reservationUrl = sourceUrl + '#key-' + encodeURIComponent(key.id);
@@ -155,10 +175,10 @@ export async function collectFincruxFinancials({ instrument, db } = {}) {
       successful = { key, reservationId, normalized };
       break;
     } catch (error) {
-      lastError = String(error?.message || error).slice(0, 240);
+      lastError = String(error?.message || error).slice(0, 240);\n      const retrySeconds = responseStatus === 429 ? retryAfterSeconds(payload) : null;\n      const rateLimitedUntil = retrySeconds ? new Date(Date.now() + retrySeconds * 1000).toISOString() : null;\n      if (responseStatus === 429) rateLimitedKeys.push({ label: key.label, until: rateLimitedUntil, retry_seconds: retrySeconds });
       await recordApiCall(db, { provider: SOURCE, endpoint: sourceUrl, ticker, httpStatus: responseStatus, ok: false,
         durationMs: Date.now() - startedAt, payload, bytes: payload ? JSON.stringify(payload).length : null, usable: false, error: lastError });
-      const salvage = { provider: SOURCE, request_date_ist: dateKey, request_failed: true, attempted_key: key.id, error: lastError,
+      const salvage = { provider: SOURCE, request_date_ist: dateKey, request_failed: true, attempted_key: key.id, error: lastError,\n        ...(retrySeconds ? { rate_limit_retry_seconds: retrySeconds, rate_limited_until: rateLimitedUntil } : {}),
         response_keys: payload && typeof payload === 'object' ? Object.keys(payload).slice(0, 20) : [],
         data_keys: payload?.data && typeof payload.data === 'object' && !Array.isArray(payload.data) ? Object.keys(payload.data).slice(0, 30) : [],
         partial: {} };
@@ -215,7 +235,7 @@ export async function collectFincruxFinancials({ instrument, db } = {}) {
   result.statement_rows = normalized.statement_row_count;
   result.last_updated_at = normalized.last_updated_at;
   result.source_url = sourceUrl;
-  result.key_label = key.label;
+  result.key_label = key.label;\n  result.rate_limited_keys = rateLimitedKeys;
   result.attempted_keys = result.attempted_keys;
   return result;
 }
