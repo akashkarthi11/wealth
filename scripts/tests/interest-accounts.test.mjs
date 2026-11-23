@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { migratedDb } from './helpers/pglite.mjs';
 import { createAccount, recordBalance } from '../../api/_ingest.js';
-import { addMonthsISO, creditPeriods, periodHolding, planAccrual, runAccrual, saveInterestAccount, interestOverview } from '../../api/_interest.js';
+import { addMonthsISO, creditPeriods, periodHolding, planAccrual, runAccrual, saveInterestAccount, interestOverview, interestAccountKind } from '../../api/_interest.js';
 
 const NOW = Date.parse('2026-11-14T10:00:00Z');     // through = 2026-11-13 (yesterday IST)
 const read = p => readFileSync(new URL('../../' + p, import.meta.url), 'utf8');
@@ -22,6 +22,15 @@ async function setup({ balance = 100000, asOf = '2026-09-30T18:30:00Z' } = {}) {
   return { a, uid: u.id, other: o.id, acc, interestRows, latest };
 }
 const r2 = x => Math.round(x * 100) / 100;
+
+test('an FD account or linked FD product is never classified as a savings source',()=>{
+  assert.equal(interestAccountKind({subtype_code:'fixed_deposit',product_key:'angel-one-fd'}),'fd');
+  assert.equal(interestAccountKind({subtype_code:'savings',product_key:'angel-one-fd',account_name:'Angel One FD (aggregate)'}),'fd');
+  assert.equal(interestAccountKind({subtype_code:'savings',product_key:'slice-savings',account_name:'Slice Savings'}),'savings');
+  const pending=planAccrual({kind:interestAccountKind({subtype_code:'savings',product_key:'angel-one-fd'}),terms:{principal:null,bookedOn:null,payout:null},balances:[{as_of:'2026-11-01T00:00:00Z',balance:100000,status:'verified'}],rates:[{id:'r',annual_rate:0.08,effective_from:'2026-01-01',effective_to:null}],through:'2026-11-13'});
+  assert.equal(pending.status,'pending_terms');
+  assert.equal(pending.rows.length,0);
+});
 
 test('periods: months are added on the calendar, cut to the month end; periods every N months from the start', () => {
   assert.equal(addMonthsISO('2026-01-31', 1), '2026-02-28');
