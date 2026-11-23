@@ -231,10 +231,12 @@ export async function runStockAdvisorDataCollection(db, { deadlineAt: givenDeadl
     const status = runStatus(summary);
     summary.duration_ms = Date.now() - began;
     await db.query('UPDATE wealth_stock_advisor_data_collection_runs SET finished_at=now(),status=$2,summary=$3::jsonb WHERE id=$1', [runId, status, JSON.stringify(summary)]);
+    clearFincruxDailyUsageMemory();
     return { run_id: runId, status, ...summary };
   } catch (error) {
     summary.duration_ms = Date.now() - began;
     await db.query('UPDATE wealth_stock_advisor_data_collection_runs SET finished_at=now(),status=\'failed\',error=$2,summary=$3::jsonb WHERE id=$1', [runId, String(error?.message || error).slice(0, 500), JSON.stringify(summary)]).catch(() => {});
+    clearFincruxDailyUsageMemory();
     throw error;
   }
 }
