@@ -169,7 +169,7 @@ export async function drainQueue({ db, runHandler, deadlineAt = Date.now() + DIS
     if (!item) break;
     ran.push(await runItem(db, item, { runHandler, deadlineAt }));
   }
-  return { processed: ran.length, items: ran.map(x => x.task + ':' + x.status), queue: await queueCounts(db) };
+  return { processed: ran.length, items: ran.map(x => x.task + ':' + x.status + (x.outcome ? ':' + x.outcome : '')), outcomes: ran.map(x => ({ task: x.task, execution: x.status, outcome: x.outcome || null })), queue: await queueCounts(db) };
 }
 
 // Clean up after calls that were cut off: items out of attempts are failed, runs with nothing left to do are closed (a run with no items at
