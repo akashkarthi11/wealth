@@ -671,43 +671,91 @@ function auAudit(a){
   '<p class="au-meta">'+esc(fmtJobDate(a.created_at))+(a.bytes?' · '+a.bytes+' bytes':'')+(a.duration_ms?' · '+aiMs(a.duration_ms):'')+'</p>'+
   '</details>';
 }
+let apiUsageState={query:'',group:'all',health:'all',sort:'usage'};
+function apiUsageMatches(p){
+ const q=apiUsageState.query.trim().toLowerCase();
+ const text=[p.name,p.key,p.purpose,p.note,p.status,p.key_env].join(' ').toLowerCase();
+ if(q&&!text.includes(q))return false;
+ const group=p.key==='fincrux'||p.key==='tejhq'||p.key==='mfapi'||p.key==='nse'||p.key==='period-match'?'data':p.key==='free-model'||p.key==='groq'?'ai':'other';
+ if(apiUsageState.group!=='all'&&group!==apiUsageState.group)return false;
+ const needsAttention=['needs_key','blocked'].includes(p.status)||(Number.isFinite(p.limit)&&p.limit>0&&p.remaining===0)||Number(p.failed||0)>0;
+ if(apiUsageState.health==='attention'&&!needsAttention)return false;
+ if(apiUsageState.health==='ready'&&needsAttention)return false;
+ return true;
+}
 function apiUsageHtml(d){
- const rows=(d.providers||[]).map(p=>{
+ const all=d.providers||[];
+ const configured=all.filter(p=>['configured','available'].includes(p.status)).length;
+ const failed=all.reduce((n,p)=>n+Number(p.failed||0),0);
+ const limited=all.filter(p=>Number.isFinite(p.limit)&&p.limit>0);
+ const left=limited.reduce((n,p)=>n+Number(p.remaining||0),0);
+ const providers=all.filter(apiUsageMatches).sort((a,b)=>{
+  if(apiUsageState.sort==='name')return String(a.name).localeCompare(String(b.name));
+  if(apiUsageState.sort==='failures')return Number(b.failed||0)-Number(a.failed||0)||String(a.name).localeCompare(String(b.name));
+  if(apiUsageState.sort==='remaining')return (Number.isFinite(a.limit)?Number(a.remaining||0):999999)-(Number.isFinite(b.limit)?Number(b.remaining||0):999999);
+  const ap=Number.isFinite(a.limit)&&a.limit>0?Number(a.used||0)/a.limit:Number(a.calls||a.used||0);
+  const bp=Number.isFinite(b.limit)&&b.limit>0?Number(b.used||0)/b.limit:Number(b.calls||b.used||0);
+  return bp-ap;
+ });
+ const rows=providers.map(p=>{
   const limited=Number.isFinite(p.limit)&&p.limit>0;
-  const headline=limited?p.used+' of '+p.limit:(p.used||0)+'';
-  const left=limited?(p.remaining===0?'none left today':p.remaining+' left'):'no published limit';
+  const headline=limited?p.used+' / '+p.limit:(p.used||0)+'';
+  const left=limited?(p.remaining===0?'Limit reached':p.remaining+' remaining'):'no published limit';
   const bits=[];
-  if(p.calls!=null&&!limited)bits.push(p.calls+' call'+(p.calls===1?'':'s')+' today');
+  if(p.calls!=null&&!limited)bits.push(p.calls+' calls today');
   if(p.failed)bits.push(p.failed+' failed');
   if(p.skipped)bits.push(p.skipped+' skipped');
-  if(p.total_ms)bits.push(aiMs(p.total_ms)+' spent');
-  if(p.without_model)bits.push(p.without_model+' answered with no model');
+  if(p.total_ms)bits.push(aiMs(p.total_ms)+' total time');
+  if(p.without_model)bits.push(p.without_model+' no-model replies');
   if(p.prompt_tokens||p.completion_tokens)bits.push(((p.prompt_tokens||0)+(p.completion_tokens||0)).toLocaleString('en-IN')+' tokens');
-  if(p.pacing_ms)bits.push('one call per '+Math.round(p.pacing_ms/1000)+'s');
-  if(p.next_slot_in_ms)bits.push('next slot in '+aiMs(p.next_slot_in_ms));
+  if(p.pacing_ms)bits.push('1 call / '+Math.round(p.pacing_ms/1000)+' sec');
+  if(p.next_slot_in_ms)bits.push('next slot '+aiMs(p.next_slot_in_ms));
   return '<article class="au-card'+(limited&&p.remaining===0?' spent':'')+'">'+
    '<div class="au-head"><div><h4>'+esc(p.name)+'</h4><small>'+esc(p.purpose||'')+'</small></div>'+
    '<div class="au-count"><b>'+esc(headline)+'</b><small>'+esc(left)+'</small></div></div>'+
    '<div class="au-health">'+auHealth(p)+(p.key_env?'<code>'+esc(p.key_env)+'</code>':'')+'</div>'+
    (p.detail?'<p class="au-meta">'+esc(p.detail)+'</p>':'')+
-   auAudit(p.audit)+
-   auBar(p.used||0,limited?p.limit:0)+
-   '<p class="au-meta">'+esc(bits.join(' · ')||'nothing used today')+'</p>'+
-   (p.resets_at_ist?'<p class="au-meta">Resets at '+esc(p.resets_at_ist)+'</p>':'')+
+   auAudit(p.audit)+auBar(p.used||0,limited?p.limit:0)+
+   '<p class="au-meta">'+esc(bits.join(' · ')||'No activity recorded today')+'</p>'+
+   (p.resets_at_ist?'<p class="au-meta">Resets '+esc(p.resets_at_ist)+'</p>':'')+
    '<p class="au-note">'+esc(p.note||'')+'</p>'+
    (p.last_at?'<p class="au-meta">Last used '+esc(fmtJobDate(p.last_at))+'</p>':'')+
   '</article>';
  }).join('');
- return '<section class="jobs-page"><div class="jobs-page-head"><div><h4>API usage</h4><p>What each outside provider allows, what today has used and what is left. Counted for the Indian day, which starts at midnight IST.</p></div><button type="button" class="ghost" data-apiusage-refresh>↻ Refresh</button></div>'+
-  '<div class="au-list">'+(rows||'<p class="muted">No provider activity recorded yet.</p>')+'</div>'+
+ return '<section class="jobs-page au-page">'+
+  '<div class="jobs-page-head"><div><h4>API usage</h4><p>Monitor provider activity, quota, connection health and the actual response received. All daily usage is measured in IST.</p></div><button type="button" class="ghost" data-apiusage-refresh>↻ Refresh</button></div>'+
+  '<div class="au-overview">'+
+   '<div><small>Providers ready</small><b>'+configured+' / '+all.length+'</b></div>'+
+   '<div><small>Failed calls today</small><b class="'+(failed?'warn':'')+'">'+failed+'</b></div>'+
+   '<div><small>Limited requests left</small><b>'+left+'</b></div>'+
+   '<div><small>Providers shown</small><b>'+providers.length+'</b></div>'+
+  '</div>'+
+  '<div class="au-toolbar"><label class="au-search"><span>Search</span><input type="search" data-au-query value="'+esc(apiUsageState.query)+'" placeholder="Provider, purpose or status…"></label>'+
+   '<label><span>Category</span><select data-au-group><option value="all"'+(apiUsageState.group==='all'?' selected':'')+'>All providers</option><option value="data"'+(apiUsageState.group==='data'?' selected':'')+'>Market & financial data</option><option value="ai"'+(apiUsageState.group==='ai'?' selected':'')+'>AI models</option><option value="other"'+(apiUsageState.group==='other'?' selected':'')+'>Other</option></select></label>'+
+   '<label><span>Health</span><select data-au-health><option value="all"'+(apiUsageState.health==='all'?' selected':'')+'>All statuses</option><option value="attention"'+(apiUsageState.health==='attention'?' selected':'')+'>Needs attention</option><option value="ready"'+(apiUsageState.health==='ready'?' selected':'')+'>Ready</option></select></label>'+
+   '<label><span>Sort by</span><select data-au-sort><option value="usage"'+(apiUsageState.sort==='usage'?' selected':'')+'>Most used</option><option value="failures"'+(apiUsageState.sort==='failures'?' selected':'')+'>Most failures</option><option value="remaining"'+(apiUsageState.sort==='remaining'?' selected':'')+'>Quota remaining</option><option value="name"'+(apiUsageState.sort==='name'?' selected':'')+'>Name A–Z</option></select></label>'+
+   '<button type="button" class="ghost au-reset" data-au-reset>Reset filters</button></div>'+
+  '<div class="au-results-head"><b>'+providers.length+' provider'+(providers.length===1?'':'s')+'</b><small>Latest usage snapshot · '+esc(fmtJobDate(d.generated_at))+'</small></div>'+
+  '<div class="au-list">'+(rows||'<div class="au-empty">No providers match these filters. Try clearing a filter.</div>')+'</div>'+
   (d.config_note?'<p class="jobs-footnote">'+esc(d.config_note)+'</p>':'')+
-  '<p class="jobs-footnote">A limit is shown only where the provider publishes one and this app enforces it. Where none is shown, none is published — not that calls are unlimited.</p></section>';
+  '<p class="jobs-footnote">A missing quota means the provider has not published a limit we enforce; it does not mean unlimited usage.</p></section>';
 }
 async function loadApiUsage(){
  const box=document.getElementById('apiUsageBox');if(!box)return;
- try{box.innerHTML=apiUsageHtml(await api('/api/api-usage'))}
+ try{const d=await api('/api/api-usage');window.__apiUsageLast=d;box.innerHTML=apiUsageHtml(d)}
  catch(e){box.innerHTML='<section class="chart-card"><h4>API usage unavailable</h4><p class="error">'+esc(e.message)+'</p></section>'}
 }
+document.addEventListener('input',e=>{if(e.target.matches('[data-au-query]')){apiUsageState.query=e.target.value;const box=document.getElementById('apiUsageBox');if(box)box.innerHTML=apiUsageHtml(window.__apiUsageLast||{providers:[]})}});
+document.addEventListener('change',e=>{
+ const field=e.target.closest('[data-au-group],[data-au-health],[data-au-sort]');
+ if(!field)return;
+ if(field.matches('[data-au-group]'))apiUsageState.group=field.value;
+ if(field.matches('[data-au-health]'))apiUsageState.health=field.value;
+ if(field.matches('[data-au-sort]'))apiUsageState.sort=field.value;
+ if(window.__apiUsageLast){const box=document.getElementById('apiUsageBox');if(box)box.innerHTML=apiUsageHtml(window.__apiUsageLast)}
+});
+document.addEventListener('click',e=>{if(e.target.closest('[data-au-reset]')){apiUsageState={query:'',group:'all',health:'all',sort:'usage'};loadApiUsage()}});
+
 // Run the job queue now instead of waiting for a cron. It also adopts research runs that have nothing queued yet.
 document.addEventListener('click',async e=>{
  const runQueue=e.target.closest('[data-queue-run]');
