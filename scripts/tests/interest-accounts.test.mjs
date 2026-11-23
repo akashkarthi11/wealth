@@ -30,6 +30,9 @@ test('an FD account or linked FD product is never classified as a savings source
   const pending=planAccrual({kind:interestAccountKind({subtype_code:'savings',product_key:'angel-one-fd'}),terms:{principal:null,bookedOn:null,payout:null},balances:[{as_of:'2026-11-01T00:00:00Z',balance:100000,status:'verified'}],rates:[{id:'r',annual_rate:0.08,effective_from:'2026-01-01',effective_to:null}],through:'2026-11-13'});
   assert.equal(pending.status,'pending_terms');
   assert.equal(pending.rows.length,0);
+  const missingMaturity=planAccrual({kind:'fd',terms:{principal:100000,bookedOn:'2026-01-01',maturityOn:null,payout:'monthly'},balances:[{as_of:'2026-11-01T00:00:00Z',balance:100000,status:'verified'}],rates:[{id:'r',annual_rate:0.08,effective_from:'2026-01-01',effective_to:null}],through:'2026-11-13'});
+  assert.equal(missingMaturity.status,'pending_terms');
+  assert.equal(missingMaturity.rows.length,0);
 });
 
 test('periods: months are added on the calendar, cut to the month end; periods every N months from the start', () => {
