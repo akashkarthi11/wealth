@@ -81,6 +81,16 @@ test('Run Now has a database lock and a recent-run duplicate guard',()=>{
   assert.match(route,/created_at>now\(\)-interval '15 minutes'/);
   assert.match(route,/reused:true/);
 });
+test('submitted work is not counted as a successful completed research run',()=>{
+  assert.match(service,/last_success_at=CASE WHEN \$2='completed' THEN now\(\) ELSE last_success_at END/);
+  assert.doesNotMatch(service,/last_success_at=CASE WHEN \$2 IN \('submitted','completed'\)/);
+});
+test('empty scheduler windows are explicitly reported as no work due',()=>{
+  assert.match(cron,/researchLaunched=result\.results\.some/);
+  assert.match(cron,/researchLaunched\?'succeeded':'skipped'/);
+  assert.match(cron,/outcome:researchLaunched\?'research_submitted_or_completed':'no_work_due'/);
+});
+
 test('scheduled executions use per-user per-date idempotency and retry failed runs',()=>{
   assert.match(service,/executionKey='scheduled:'\+dateKey/);
   assert.match(service,/ON CONFLICT \(user_id,execution_key\)/);
