@@ -1,4 +1,5 @@
 import { sql, schema, json, sessionUser, cacheGet, cacheSet } from '../_lib.js';
+import { addFincruxApiKey, listFincruxKeyMetadata } from '../_lib/provider-api-keys.js';
 
 const EXA_URL = 'https://api.exa.ai/search';
 const MASSIVE_BASE = 'https://api.massive.com';
