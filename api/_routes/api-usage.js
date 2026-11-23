@@ -13,6 +13,26 @@ async function adminUser(req) {
   return user?.role === 'admin' ? uid : null;
 }
 const num = v => Number(v || 0);
+// Whether a provider is usable at all. Only the PRESENCE of a key is ever read, never its value, and the names below
+// are the environment variables to set in the Vercel project — they cannot be set from the app.
+const set = name => String(process.env[name] || '').trim().length > 0;
+function health(key) {
+  if (key === 'fincrux') return set('FINCRUX_API_KEY')
+    ? { status: 'configured', detail: 'Key present in this environment.' , key_env: 'FINCRUX_API_KEY' }
+    : { status: 'needs_key', detail: 'No key in this environment, so no request is attempted.', key_env: 'FINCRUX_API_KEY' };
+  if (key === 'free-model') {
+    if (set('AI_GATEWAY_API_KEY')) return { status: 'configured', detail: 'Vercel AI Gateway key present.', key_env: 'AI_GATEWAY_API_KEY' };
+    if (set('VERCEL_OIDC_TOKEN')) return { status: 'configured', detail: 'No gateway key; falling back to the deployment OIDC token.', key_env: 'AI_GATEWAY_API_KEY' };
+    return { status: 'needs_key', detail: 'No gateway key and no OIDC token, so no model call can be made.', key_env: 'AI_GATEWAY_API_KEY' };
+  }
+  if (key === 'groq') {
+    if (!set('GROQ_API_KEY')) return { status: 'needs_key', detail: 'Optional fallback model; no key set.', key_env: 'GROQ_API_KEY' };
+    return String(process.env.GROQ_ZERO_DATA_RETENTION_CONFIRMED || '').toLowerCase() === 'true'
+      ? { status: 'configured', detail: 'Key set and zero-data-retention confirmed.', key_env: 'GROQ_API_KEY' }
+      : { status: 'blocked', detail: 'Key is set but GROQ_ZERO_DATA_RETENTION_CONFIRMED is not true, so it stays unused.', key_env: 'GROQ_ZERO_DATA_RETENTION_CONFIRMED' };
+  }
+  return { status: 'available', detail: 'Open data; no key needed.', key_env: null };
+}
 
 export default async function handler(req, res) {
   try {
@@ -60,7 +80,7 @@ export default async function handler(req, res) {
         key: 'fincrux', name: 'Fincrux', purpose: 'Company financial statements',
         limit: 5, limit_window: 'per day (IST)', used: num(fincrux?.used), remaining: Math.max(0, 5 - num(fincrux?.used)),
         resets_at_ist: 'midnight IST', last_at: fincrux?.last_at || null,
-        ...fromSteps('Fincrux', {}),
+        ...fromSteps('Fincrux', {}), ...health('fincrux'),
         note: 'A free-tier key. Each request is reserved in the database before it is sent, so the limit holds even with several runs at once.',
       },
       {
@@ -68,20 +88,32 @@ export default async function handler(req, res) {
         limit: null, limit_window: 'no daily cap published', pacing_ms: FREE_MODEL_PACING_MS,
         used: num(model?.calls), calls: num(model?.calls), failed: 0, skipped: 0,
         without_model: num(model?.without_model), prompt_tokens: num(model?.prompt_tokens), completion_tokens: num(model?.completion_tokens),
-        next_slot_in_ms: waitMs, last_at: model?.last_at || null,
+        next_slot_in_ms: waitMs, last_at: model?.last_at || null, ...health('free-model'),
         note: 'Paced to one call every 13 seconds (five a minute) across all runs. Calls answered without the model, such as the evidence-gate result, are counted separately.',
       },
-      { key: 'tejhq', name: 'TejHQ', purpose: 'NSE end-of-day prices and indicators', limit: null, limit_window: 'no published limit', ...fromSteps('TejHQ'), used: num((byProvider.get('TejHQ') || {}).calls),
+      { key: 'tejhq', name: 'TejHQ', purpose: 'NSE end-of-day prices and indicators', limit: null, limit_window: 'no published limit', ...fromSteps('TejHQ'), used: num((byProvider.get('TejHQ') || {}).calls), ...health('tejhq'),
         note: 'One request per holding per run. No quota is published, so none is enforced here.' },
-      { key: 'mfapi', name: 'MFAPI.in', purpose: 'Mutual fund NAV', limit: null, limit_window: 'no published limit', ...fromSteps('MFAPI.in'), used: num((byProvider.get('MFAPI.in') || {}).calls),
+      { key: 'mfapi', name: 'MFAPI.in', purpose: 'Mutual fund NAV', limit: null, limit_window: 'no published limit', ...fromSteps('MFAPI.in'), used: num((byProvider.get('MFAPI.in') || {}).calls), ...health('mfapi'),
         note: 'One request per fund per run.' },
-      { key: 'nse', name: 'NSE', purpose: 'Announcements, results and the company lists', limit: null, limit_window: 'no published limit', ...fromSteps('NSE RSS'), used: num((byProvider.get('NSE RSS') || {}).calls),
+      { key: 'nse', name: 'NSE', purpose: 'Announcements, results and the company lists', limit: null, limit_window: 'no published limit', ...fromSteps('NSE RSS'), used: num((byProvider.get('NSE RSS') || {}).calls), ...health('nse'),
         note: 'Six announcement feeds per run, plus the symbol lists, which are downloaded once and reused for six hours.' },
-      { key: 'period-match', name: 'Period match with NSE', purpose: 'Verifying a statement against a filing', limit: null, limit_window: 'database only', ...fromSteps('Period match with NSE'), used: num((byProvider.get('Period match with NSE') || {}).calls),
+      { key: 'groq', name: 'Groq Free', purpose: 'Optional fallback model', limit: null, limit_window: 'no published limit', used: 0, calls: 0, ...health('groq'),
+        note: 'Used only if the Vercel gateway fails and zero-data-retention has been confirmed.' },
+      { key: 'period-match', name: 'Period match with NSE', purpose: 'Verifying a statement against a filing', limit: null, limit_window: 'database only', ...fromSteps('Period match with NSE'), used: num((byProvider.get('Period match with NSE') || {}).calls), ...health('period-match'),
         note: 'Reads what is already stored. It calls no outside service.' },
     ];
 
-    return json(res, 200, { day: 'today, IST', providers, generated_at: new Date().toISOString() });
+    // The latest audited response per provider: what the outside service actually returned, shape and all.
+    const audit = await sql.query(`SELECT DISTINCT ON (provider) provider, ticker, endpoint, http_status, ok, usable,
+        duration_ms, bytes, response_keys, data_keys, section_counts, sample, error, created_at
+      FROM wealth_api_audit ORDER BY provider, created_at DESC`).catch(() => []);
+    const auditByProvider = new Map(audit.map(a => [a.provider, a]));
+    for (const p of providers) {
+      const a = auditByProvider.get(p.name) || auditByProvider.get(p.key);
+      if (a) p.audit = a;
+    }
+    return json(res, 200, { day: 'today, IST', providers, audit, generated_at: new Date().toISOString(),
+      config_note: 'Keys are environment variables in the Vercel project. They are never shown here and cannot be changed from the app.' });
   } catch (error) {
     console.error('[api-usage]', error?.message || error);
     return json(res, 500, { error: 'Could not load API usage.' });

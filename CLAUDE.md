@@ -43,5 +43,12 @@ Never use `git push`, `git pull` or `git fetch` against GitHub, never ask the ow
   Contents read-and-write on `akashkarthi11/wealth`: ask the owner for a new one in that Vercel project; do not ask for the token itself.
 - **Report** the commit link the script prints. The result on GitHub is one combined commit per push, not the individual local commits.
 
+## Tests run here, not on Vercel
+The Vercel build is `validate-homepage && migrate-db` only. The test suite was taken out of it because 35 of the 66
+test files start a real Postgres (PGlite) and replay all the migrations, which pushed deploys past ten minutes.
+**So the build no longer catches a failing test: nothing stops a broken commit from reaching Production.**
+Run `node scripts/run-tests.mjs` in Docker and read the totals **before every push and every deploy**, and say the
+numbers in the report. Two failures are expected on this laptop (Redis and the Preview-migration checks need network).
+
 ## Reading large files
 - Never read `app.js` whole. Search it (Grep) or read only the line range you need (Read with offset/limit).

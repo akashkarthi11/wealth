@@ -1,5 +1,6 @@
 import {sql,json,invalidateUserCaches} from '../_lib.js';
 import {startJob,finishJob} from '../_jobs.js';
+import {usdInrRate} from '../_lib/fx-rate.js';
 
 // Daily price refresh (Vercel Cron). Writes:
 //   v1: wealth_market_prices, the latest price per legacy asset (updated in place; read by the v1 dashboard)
@@ -143,7 +144,9 @@ export default async function handler(req,res){
   if(!secret||req.headers.authorization!=='Bearer '+secret)return json(res,401,{error:'Unauthorized'});
   if(!sql)throw new Error('Database is not configured');
   run=await startJob('price-refresh');
-  const fx=await yahooQuote('INR=X').catch(e=>{console.warn('[market-price-refresh:fx]',e?.message||e);return null});
+  // The published daily rate first; Yahoo's undocumented INR=X only if that is unavailable.
+  const fx=await usdInrRate({db:sql})
+    || await yahooQuote('INR=X').then(q=>({...q,source:'Yahoo Finance INR=X'})).catch(e=>{console.warn('[market-price-refresh:fx]',e?.message||e);return null});
   const price=makePricer(fx);
   const legacy=await refreshLegacy(price);
   const v2=await refreshInstruments(price);
@@ -153,7 +156,7 @@ export default async function handler(req,res){
   await Promise.all([...affected].map(uid=>invalidateUserCaches(uid)));
   const count=(rs,s)=>rs.filter(x=>x.status===s).length;
   const failed=count(legacy.results,'error')+count(v2.results,'error'),updated=count(legacy.results,'updated')+count(v2.results,'updated');
-  await finishJob(run,!fx||failed?(updated?'partial':'failed'):'succeeded',{fx:fx?.price||null,updated,failed,instrumentsUpdated:count(v2.results,'updated')});
+  await finishJob(run,!fx||failed?(updated?'partial':'failed'):'succeeded',{fx:fx?.price||null,fx_source:fx?.source||null,updated,failed,instrumentsUpdated:count(v2.results,'updated')});
   return json(res,200,{
    fx:fx?{rate:fx.price,asOf:fx.asOf.toISOString()}:null,
    updated:count(legacy.results,'updated'),failed:count(legacy.results,'error'),results:legacy.results,

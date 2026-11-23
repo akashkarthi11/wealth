@@ -19,7 +19,7 @@ export default async function handler(req,res) {
         j.last_run_at,j.last_status,j.last_error,
         (SELECT count(*)::int FROM wealth_job_queue q WHERE q.job_id=j.id AND q.status IN ('pending','running')) AS queued,
         (SELECT json_agg(x ORDER BY x.created_at DESC) FROM
-          (SELECT id,trigger_type,status,started_at,finished_at,http_status,error,created_at
+          (SELECT id,trigger_type,status,started_at,finished_at,http_status,error,result,created_at
            FROM wealth_scheduled_job_runs r WHERE r.job_id=j.id ORDER BY r.created_at DESC LIMIT 10) x) AS recent_runs
         FROM wealth_scheduled_jobs j ORDER BY j.schedule_time,j.name`);
       return json(res,200,{jobs,queue:await queueCounts(sql)});
