@@ -13,7 +13,7 @@ const METAL_FUTURES=new Set(['GC=F','SI=F']);
 const MAX_SOURCE_AGE_MS=7*24*60*60*1000;
 export function sourceFreshness(asOf,now=Date.now(),maxAgeMs=MAX_SOURCE_AGE_MS){
  const timestamp=asOf instanceof Date?asOf.getTime():new Date(asOf).getTime();
- if(!Number.isFinite(timestamp))return {fresh:false,ageMs:null,reason:'Source timestamp is missing or invalid'};
+ if(asOf==null||asOf===' '||!Number.isFinite(timestamp))return {fresh:false,ageMs:null,reason:'Source timestamp is missing or invalid'};
  const ageMs=now-timestamp;
  if(ageMs < -5*60*1000)return {fresh:false,ageMs,reason:'Source timestamp is in the future'};
  if(ageMs>maxAgeMs)return {fresh:false,ageMs,reason:'Source observation is older than the allowed freshness window'};
