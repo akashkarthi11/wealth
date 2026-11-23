@@ -67,4 +67,6 @@ test('wiring: the providers record their calls and the page shows the shape', ()
   assert.match(read('app.js'), /function auAudit\(a\)/);
   assert.match(read('app.js'), /Came back empty/, 'fields that returned nothing are called out');
   assert.match(read('scripts/migrations/0049_api_audit.sql'), /CREATE TABLE IF NOT EXISTS wealth_api_audit/);
+  assert.ok(read('api/_lib/api-audit.js').includes("WITH actor AS MATERIALIZED (SELECT set_config('wealth.actor', 'agent', true))"),
+    'the audit insert sets the required actor in the same write statement');
 });

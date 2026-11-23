@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic banking-taxonomy NSE XBRL fixture; not a real issuer filing. -->
+<xbrli:xbrl xmlns:xbrli="http://www.xbrl.org/2003/instance" xmlns:in-capmkt="http://www.nseindia.com/xbrl/banking">
+  <xbrli:context id="OneD"><xbrli:entity><xbrli:identifier scheme="http://www.nseindia.com">BANKCO</xbrli:identifier></xbrli:entity><xbrli:period><xbrli:startDate>2026-07-01</xbrli:startDate><xbrli:endDate>2026-09-30</xbrli:endDate></xbrli:period></xbrli:context>
+  <xbrli:context id="OneI"><xbrli:entity><xbrli:identifier scheme="http://www.nseindia.com">BANKCO</xbrli:identifier></xbrli:entity><xbrli:period><xbrli:instant>2026-09-30</xbrli:instant></xbrli:period></xbrli:context>
+  <in-capmkt:Symbol contextRef="OneD">BANKCO</in-capmkt:Symbol>
+  <in-capmkt:InterestEarned contextRef="OneD" unitRef="INR" decimals="-3">1000000</in-capmkt:InterestEarned>
+  <in-capmkt:ProfitBeforeTax contextRef="OneD" unitRef="INR" decimals="-3">300000</in-capmkt:ProfitBeforeTax>
+  <in-capmkt:ProfitLossForThePeriod contextRef="OneD" unitRef="INR" decimals="-3">220000</in-capmkt:ProfitLossForThePeriod>
+  <in-capmkt:BasicEarningsLossPerShareFromContinuingAndDiscontinuedOperations contextRef="OneD" unitRef="INR" decimals="2">4.2</in-capmkt:BasicEarningsLossPerShareFromContinuingAndDiscontinuedOperations>
+  <in-capmkt:Assets contextRef="OneI" unitRef="INR" decimals="-3">10000000</in-capmkt:Assets>
+  <in-capmkt:Equity contextRef="OneI" unitRef="INR" decimals="-3">1500000</in-capmkt:Equity>
+</xbrli:xbrl>

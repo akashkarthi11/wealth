@@ -53,9 +53,10 @@ export async function recordApiCall(db, { provider, endpoint, ticker = null, htt
   try {
     const top = isPlainObject(payload) ? payload : null;
     const data = isPlainObject(top?.data) ? top.data : null;
-    await db.query(`INSERT INTO wealth_api_audit
+    await db.query(`WITH actor AS MATERIALIZED (SELECT set_config('wealth.actor', 'agent', true))
+      INSERT INTO wealth_api_audit
       (provider,endpoint,ticker,http_status,ok,duration_ms,bytes,response_keys,data_keys,section_counts,sample,usable,error)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8::text[],$9::text[],$10::jsonb,$11::jsonb,$12,$13)`,
+      SELECT $1,$2,$3,$4,$5,$6,$7,$8::text[],$9::text[],$10::jsonb,$11::jsonb,$12,$13 FROM actor`,
       [String(provider || 'unknown').slice(0, 80), safeEndpoint(endpoint), ticker ? String(ticker).toUpperCase().slice(0, 40) : null,
         httpStatus, !!ok, durationMs, bytes,
         top ? Object.keys(top).slice(0, MAX_KEYS) : [],

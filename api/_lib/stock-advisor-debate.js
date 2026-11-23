@@ -5,7 +5,6 @@ import { collectMutualFundEvidence } from './stock-advisor-mfapi.js';
 import { collectNseNews } from './stock-advisor-live-evidence.js';
 import { collectTejHqEquityEvidence } from './stock-advisor-tejhq.js';
 import { collectFincruxFinancials } from './stock-advisor-fincrux.js';
-import { verifyFinancialStatements } from './stock-advisor-verify.js';
 
 export const FREE_AI_MODEL = 'nvidia/nemotron-3.5-lightning-free';
 export const DEBATE_SEQUENCE = Object.freeze([
@@ -431,8 +430,8 @@ async function processStep(req, runId) {
       }
       // NSE announcement discovery remains an independent, low-cost refresh.
       refreshes.nse_news=await collectNseNews({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
-      // A Fincrux statement whose period matches an official NSE results announcement is verified here (period match only).
-      refreshes.financial_verification=await verifyFinancialStatements(sql,run.ticker,{name:run.stock_name}).catch(e=>({status:'failed',error:String(e?.message||e).slice(0,160)}));
+      // Fincrux is retained as secondary unverified evidence. Only the queued NSE filed-XBRL task may verify financial statements.
+      refreshes.financial_verification={status:'handled_by_nse_xbrl_queue',note:'Fincrux remains unverified; NSE filed XBRL is the verified financial source.'};
       evidence=await loadEvidence(run.user_id,holdingRows[0],run.asset_type,run.id);
     }
     evidence.provider_refreshes=refreshes;

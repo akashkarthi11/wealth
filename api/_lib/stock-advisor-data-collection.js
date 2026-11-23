@@ -1,23 +1,25 @@
 import { collectFincruxFinancials } from './stock-advisor-fincrux.js';
-import { collectNseNewsBatch, NSE_FEED_LABELS, nseSymbolNames } from './stock-advisor-live-evidence.js';
+import { collectNseNewsBatch, NSE_FEED_LABELS } from './stock-advisor-live-evidence.js';
 import { collectMutualFundEvidence } from './stock-advisor-mfapi.js';
 import { collectTejHqEquityEvidence } from './stock-advisor-tejhq.js';
-import { verifyFinancialStatements } from './stock-advisor-verify.js';
+import { collectNseXbrlFinancialStatement } from './stock-advisor-nse-xbrl.js';
 export { cleanNseFeedItemMatches } from './stock-advisor-live-evidence.js';
 
 // Stock Advisor data collection, as small TASKS. The scheduled job puts one task per provider call on the job queue (api/_lib/job-queue.js), so
 // the work is shared over as many function calls as it needs. runStockAdvisorDataCollection runs the same tasks one after another inside one
 // call (used by the direct route); both fold the task results into the same summary.
 const CALL_MS = 13000; // the slowest provider call waits 12 s
+const XBRL_CALL_MS = 26000; // three audited NSE requests, each with an 8 s timeout
 export const TASKS = Object.freeze({
   nse: { provider: 'NSE RSS', priority: 40 },
   fund: { provider: 'MFAPI.in', priority: 41, name: 'Fund NAV' },
   equity: { provider: 'TejHQ', priority: 42, name: 'Prices and technical indicators' },
-  fincrux: { provider: 'Fincrux', priority: 43, name: 'Financial statements' },
-  fincrux_skip: { provider: 'Fincrux', priority: 43, name: 'Financial statements' },
-  verify: { provider: 'Period match with NSE', priority: 44, name: 'Verify financial statement period' },
+  nse_xbrl: { provider: 'NSE XBRL', priority: 43, name: 'Filed financial statements' },
+  fincrux: { provider: 'Fincrux', priority: 44, name: 'Secondary financial data (unverified)' },
+  fincrux_skip: { provider: 'Fincrux', priority: 44, name: 'Secondary financial data (unverified)' },
+  verify: { provider: 'Fincrux', priority: 45, name: 'Legacy verification disabled' },
 });
-const DEFERRABLE = new Set(['fund', 'equity', 'fincrux']);
+const DEFERRABLE = new Set(['fund', 'equity', 'fincrux', 'nse_xbrl']);
 
 const errorText = e => typeof e === 'string' ? e : e && typeof e === 'object' ? [e.ticker, e.feed, e.error].filter(Boolean).join(': ') : String(e ?? '');
 const note = r => String(r?.reason || r?.error || (Array.isArray(r?.errors) && r.errors.length ? r.errors.map(errorText).join('; ') : '') || '').slice(0, 180);
@@ -31,6 +33,13 @@ export async function startCollectionRun(db) {
 
 // Active holdings with a symbol and a price-source symbol, the stocks collected longest ago first (so a run that does not get through all of
 // them never starves the same stocks).
+async function loadXbrlInstruments(db) {
+  return db.query(`SELECT DISTINCT i.id,i.asset_class,i.symbol,i.name,i.price_source_symbol
+   FROM wealth_instruments i JOIN wealth_holdings h ON h.instrument_id=i.id
+   WHERE h.status='active' AND i.asset_class='indian_equity' AND i.symbol IS NOT NULL
+   ORDER BY i.symbol LIMIT 250`);
+}
+
 async function loadInstruments(db) {
   const instruments = await db.query(`SELECT DISTINCT i.id,i.asset_class,i.symbol,i.name,i.price_source_symbol
    FROM wealth_instruments i JOIN wealth_holdings h ON h.instrument_id=i.id
@@ -50,11 +59,16 @@ async function loadInstruments(db) {
 // The tasks of one collection, in the order they should run. Fincrux is limited to five requests a day, so only that many are planned.
 export async function planCollection(db) {
   const { instruments, funds, equities } = await loadInstruments(db);
+  const xbrlEquities = await loadXbrlInstruments(db);
   const tasks = [];
-  const add = (task, payload = {}) => tasks.push({ task, payload, priority: TASKS[task].priority, min_budget_ms: task === 'verify' || task === 'fincrux_skip' ? 1000 : CALL_MS });
+  const add = (task, payload = {}) => tasks.push({ task, payload, priority: TASKS[task].priority, min_budget_ms: task === 'nse_xbrl' ? XBRL_CALL_MS : task === 'fincrux_skip' ? 1000 : CALL_MS });
   for (const feed of NSE_FEED_LABELS) if (equities.length) add('nse', { feed });
   for (const f of funds) add('fund', { instrument: slim(f) });
   for (const e of equities) add('equity', { instrument: slim(e) });
+  // XBRL covers every active Indian equity with a symbol, even if the price-source symbol is not configured.
+  // Duplicate instrument rows for the same ticker share one NSE filing and therefore one queue item.
+  const xbrlHoldings = [...new Map(xbrlEquities.map(e => [String(e.symbol || '').toUpperCase(), e])).values()];
+  for (const e of xbrlHoldings) add('nse_xbrl', { instrument: slim(e) });
   if (equities.length) {
     if (String(process.env.FINCRUX_API_KEY || '').trim()) {
       const [quota] = await db.query(`SELECT count(*)::int AS used
@@ -73,7 +87,6 @@ export async function planCollection(db) {
         for (const c of candidates.slice(0, remaining)) add('fincrux', { instrument: slim(c) });
       } else add('fincrux_skip', { reason: 'Five free-tier requests already reserved today (IST).' });
     } else add('fincrux_skip', { reason: 'FINCRUX_API_KEY is not configured; no paid or unauthenticated request attempted.' });
-    for (const e of equities) add('verify', { instrument: slim(e) });
   }
   return { instruments: instruments.length, tasks };
 }
@@ -105,13 +118,12 @@ export async function runCollectionTask(db, task, payload = {}, { deadlineAt = n
       return { ...base, status: r.status, note: note(r), detail: [r] };
     }
     if (task === 'fincrux_skip') return { ...base, status: 'skipped', note: payload.reason, detail: [{ provider: 'Fincrux', status: 'skipped', reason: payload.reason }] };
-    // verify: a Fincrux statement whose reporting period matches an official NSE results announcement becomes verified (database only, no provider call).
-    // The announcement is titled with the registered company name, so use that when the saved name is only the symbol.
-    // The lists are worth a download, but not when the call is about to be cut off.
-    const names = await nseSymbolNames({ cachedOnly: !!deadlineAt && deadlineAt - Date.now() < CALL_MS });
-    const registered = names.map?.get(String(i.symbol || '').toUpperCase()) || '';
-    const v = await verifyFinancialStatements(db, i.symbol, { name: registered || i.name });
-    return { ...base, status: v.status, note: '', detail: v.status === 'verified' ? [{ provider: 'Period match with NSE', ...v }] : [] };
+    if (task === 'nse_xbrl') {
+      const r = await collectNseXbrlFinancialStatement({ instrument: i, db });
+      return { ...base, status: r.status, note: note(r), detail: [{ provider: 'NSE XBRL', ...r }] };
+    }
+    if (task === 'verify') return { ...base, status: 'skipped', note: 'Legacy Fincrux period verification is disabled; Fincrux remains unverified.', detail: [] };
+    return { ...base, status: 'failed', note: 'Task implementation is missing.', detail: [] };
   } catch (e) {
     const message = String(e?.message || e).slice(0, 180);
     const status = task === 'equity' ? 'market_data_failed' : 'failed';
@@ -119,7 +131,7 @@ export async function runCollectionTask(db, task, payload = {}, { deadlineAt = n
   }
 }
 
-export const newSummary = () => ({ instruments: 0, nav_updated: 0, market_data_updated: 0, financials_unverified: 0, financials_verified: 0, announcements: 0, failed: 0, skipped: 0, feeds: 0, results: [], steps: [] });
+export const newSummary = () => ({ instruments: 0, nav_updated: 0, market_data_updated: 0, financials_unverified: 0, financials_verified: 0, financials_missing: 0, announcements: 0, failed: 0, skipped: 0, feeds: 0, results: [], steps: [] });
 
 // Add one task result to the summary counters.
 export function foldTaskResult(summary, task, r) {
@@ -127,13 +139,14 @@ export function foldTaskResult(summary, task, r) {
   if (task === 'nse') { summary.feeds += r.feeds_checked || 0; summary.announcements += r.stored || 0; if (['unavailable', 'partial', 'failed'].includes(r.status)) summary.failed++; }
   else if (task === 'fund') { if (r.status === 'ok') summary.nav_updated++; else if (r.status === 'unavailable' || r.status === 'failed') summary.failed++; else summary.skipped++; }
   else if (task === 'equity') { if (r.status === 'ok') summary.market_data_updated++; else if (r.status === 'unavailable' || r.status === 'market_data_failed') summary.failed++; }
+  else if (task === 'nse_xbrl') { if (r.status === 'verified' || r.status === 'already_present') summary.financials_verified++; else if (['failed','unparsed','period_mismatch','ticker_mismatch','announcement_company_mismatch'].includes(r.status)) summary.failed++; else { summary.financials_missing++; summary.skipped++; } }
   else if (task === 'fincrux') { if (r.status === 'stored_unverified') summary.financials_unverified++; else if (r.status === 'failed') summary.failed++; else summary.skipped++; }
-  else if (task === 'verify') { if (r.status === 'verified') summary.financials_verified++; }
+  else if (task === 'verify') summary.skipped++;
 }
 
 export function runStatus(summary) {
   const successful = summary.nav_updated + summary.market_data_updated + summary.financials_unverified + summary.financials_verified + summary.announcements;
-  const incomplete = summary.failed + (summary.skipped_for_time || 0);
+  const incomplete = summary.failed + (summary.skipped_for_time || 0) + (summary.financials_missing || 0);
   return incomplete ? (successful ? 'partial' : 'failed') : 'succeeded';
 }
 
@@ -189,7 +202,8 @@ export async function runStockAdvisorDataCollection(db, { deadlineAt: givenDeadl
     for (const t of plan.tasks) {
       const meta = TASKS[t.task], i = t.payload?.instrument, at = Date.now();
       const step = { provider: meta.provider, ticker: i?.symbol, name: meta.name || '', status: 'running', started_at: new Date(at).toISOString() };
-      if (DEFERRABLE.has(t.task) && deadlineAt - Date.now() < CALL_MS) {
+      const minimumBudget = t.task === 'nse_xbrl' ? XBRL_CALL_MS : CALL_MS;
+      if (DEFERRABLE.has(t.task) && deadlineAt - Date.now() < minimumBudget) {
         summary.skipped_for_time = (summary.skipped_for_time || 0) + 1;
         summary.steps.push({ ...step, status: 'skipped', note: 'Time limit reached; collected first in the next run.', ms: 0 });
         continue;
