@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { migratedDb } from './helpers/pglite.mjs';
-import { queueCounts, enqueueDebateStep, DEBATE_HANDLER } from '../../api/_lib/job-queue.js';
+import { queueCounts, enqueueDebateStep, claimNext, DEBATE_HANDLER } from '../../api/_lib/job-queue.js';
 
 const read = p => readFileSync(new URL('../../' + p, import.meta.url), 'utf8');
 
@@ -61,4 +61,10 @@ test('provider health sits with the usage, and no key value is ever exposed', ()
   const app = read('app.js');
   assert.match(app, /Needs a key/);
   assert.match(app, /function auHealth\(p\)/);
+});
+
+
+test('claimNext executes its SQL successfully when the queue is empty', async () => {
+  const { a } = await migratedDb();
+  assert.equal(await claimNext(a, 10000), null);
 });
