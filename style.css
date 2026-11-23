@@ -1973,3 +1973,28 @@ b.pj-medium{color:#f5c26b}
  .au-card .au-audit{margin-top:2px}
 }
 @media(max-width:360px){.au-list{grid-template-columns:1fr}.au-overview b{font-size:14px}}
+
+
+/* Fincrux key settings stay out of the list until Edit is tapped */
+.advisor-key-row{position:relative}
+.advisor-key-row .advisor-key-config{display:none!important}
+.advisor-key-editor[hidden]{display:none!important}
+.advisor-key-editor{position:fixed;inset:0;z-index:10050;display:grid;place-items:center;padding:16px;box-sizing:border-box}
+.advisor-key-editor-backdrop{position:absolute;inset:0;background:rgba(2,8,18,.78);backdrop-filter:blur(5px)}
+.advisor-key-editor-panel{position:relative;z-index:1;width:min(100%,440px);max-height:min(82dvh,680px);overflow:auto;display:grid;gap:18px;padding:20px;border:1px solid #344963;border-radius:18px;background:#101d30;box-shadow:0 24px 80px rgba(0,0,0,.5);color:var(--text)}
+.advisor-key-editor-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.advisor-key-editor-head>div{display:grid;gap:4px}
+.advisor-key-editor-head small{font-size:10px;letter-spacing:1px;color:var(--muted)}
+.advisor-key-editor-head b{font-size:18px}
+.advisor-key-editor-panel>label{display:grid;gap:8px;font-size:13px;font-weight:700}
+.advisor-key-editor-panel input{width:100%;min-width:0;box-sizing:border-box;padding:13px;border:1px solid #405571;border-radius:11px;background:#0a1524;color:var(--text);font:inherit;font-size:14px}
+.advisor-key-editor-panel .advisor-key-routing{padding:12px;border:1px solid #304660;border-radius:11px;background:#14263b}
+.advisor-key-editor-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.advisor-key-editor-actions button{min-height:44px}
+@media(max-width:620px){
+ .advisor-key-row{grid-template-columns:minmax(0,1fr) auto!important;align-items:center!important}
+ .advisor-key-actions{justify-content:flex-end!important;flex-wrap:nowrap!important}
+ .advisor-key-actions button{flex:0 1 auto!important;min-width:0;padding:7px 9px!important;font-size:11px!important}
+ .advisor-key-editor{align-items:end;padding:0}
+ .advisor-key-editor-panel{width:100%;max-height:78dvh;border-radius:20px 20px 0 0;padding:20px 18px calc(22px + env(safe-area-inset-bottom))}
+}
