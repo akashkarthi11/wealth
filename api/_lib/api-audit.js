@@ -43,8 +43,26 @@ export function sampleOf(value) {
     else if (typeof item === 'string' && item.length <= 120) out[key] = item;
     else if (typeof item === 'number' || typeof item === 'boolean') out[key] = item;
   }
+  // Preserve provider quota diagnostics even when the full response shape is large.
+  for (const key of ['message', 'retry_in', 'retry_after', 'success']) {
+    const item = value[key];
+    if (item !== undefined && item !== null && typeof item !== 'object') out[key] = String(item).slice(0, 160);
+  }
+  if (isPlainObject(value.available_plans)) {
+    out.available_plans = Object.fromEntries(Object.entries(value.available_plans).slice(0, 8).map(([key, item]) =>
+      [key, isPlainObject(item) ? Object.keys(item).slice(0, 12) : Array.isArray(item) ? item.length : String(item).slice(0, 120)]));
+  } else if (Array.isArray(value.available_plans)) {
+    out.available_plans = value.available_plans.slice(0, 5).map(item => isPlainObject(item)
+      ? Object.fromEntries(Object.entries(item).slice(0, 8).map(([key, val]) => [key, typeof val === 'object' ? '[structured]' : String(val).slice(0, 100)]))
+      : String(item).slice(0, 100));
+  }
   const text = JSON.stringify(out);
-  return text.length <= MAX_SAMPLE_CHARS ? out : { note: 'sample too large', fields: Object.keys(out).slice(0, 12) };
+  return text.length <= MAX_SAMPLE_CHARS ? out : {
+    note: 'sample trimmed',
+    fields: Object.keys(out).slice(0, 12),
+    ...(out.retry_in ? { retry_in: out.retry_in } : {}),
+    ...(out.message ? { message: out.message } : {})
+  };
 }
 
 // Record one call. Never throws: an audit failure must not break a collection run.
