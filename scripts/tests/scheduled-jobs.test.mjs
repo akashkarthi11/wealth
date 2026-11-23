@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { nextJobRun } from '../../api/_lib/scheduled-job-time.js';
