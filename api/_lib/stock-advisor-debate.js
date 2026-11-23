@@ -333,7 +333,7 @@ async function startDebate(req,res) {
   const rows=await sql.query("INSERT INTO wealth_stock_advisor_runs (user_id,run_key,run_at,status,agent_count,ticker,stock_name,asset_type,idempotency_key,total_steps,next_step,progress_json) VALUES ($1,$2,now(),'queued',9,$3,$4,$5,$6,9,0,'{}'::jsonb) ON CONFLICT (user_id,run_key) DO NOTHING RETURNING id,run_key,run_at,status,agent_count,ticker,stock_name,asset_type,next_step,total_steps",[uid,runKey,ticker,holding.name,assetType,idempotency]);
   const run=rows[0] || (await sql.query('SELECT id,run_key,run_at,status,agent_count,ticker,stock_name,asset_type,next_step,total_steps FROM wealth_stock_advisor_runs WHERE user_id=$1 AND run_key=$2',[uid,runKey]))[0];
   if (!run) return json(res,500,{error:'Could not create debate run.'});
-  await sql.query("INSERT INTO wealth_stock_advisor_run_jobs (run_id,stage,status,step_no,step_attempts,max_attempts,idempotency_key,payload) VALUES ($1,'debate','pending',0,0,3,$2,$3::jsonb) ON CONFLICT (run_id,stage) DO NOTHING",[run.id,'debate:'+run.id,JSON.stringify({ticker,asset_type:assetType})]);
+  await sql.query("INSERT INTO wealth_stock_advisor_run_jobs (run_id,stage,status,step_no,step_attempts,max_attempts,idempotency_key,payload) VALUES ($1,'debate','pending',0,0,3,$2,$3::jsonb) ON CONFLICT (run_id,stage) DO UPDATE SET payload=EXCLUDED.payload",[run.id,'debate:'+run.id,JSON.stringify({ticker,asset_type:assetType,schedule_execution_id:String(input.schedule_execution_id||'')||null})]);
   if (run.status === 'partially_completed' || run.status === 'failed') {
     await sql.query("UPDATE wealth_stock_advisor_run_jobs SET status='pending',step_attempts=0,available_at=now(),last_error=NULL,locked_at=NULL,updated_at=now() WHERE run_id=$1 AND stage='debate' AND status='failed'",[run.id]);
     await sql.query("UPDATE wealth_stock_advisor_runs SET status='running',last_error=NULL,updated_at=now() WHERE id=$1",[run.id]);
@@ -484,6 +484,29 @@ async function processStep(req, runId) {
   return {advanced:true,step,decision};
 }
 
+async function settleScheduledExecution(executionId) {
+  if (!executionId) return;
+  const [execution] = await sql.query('SELECT id,user_id,result_json FROM wealth_stock_advisor_schedule_runs WHERE id=$1', [executionId]);
+  if (!execution) return;
+  let entries = execution.result_json;
+  if (typeof entries === 'string') { try { entries = JSON.parse(entries); } catch { entries = []; } }
+  const runIds = [...new Set((Array.isArray(entries) ? entries : []).map(x => String(x?.run_id || '')).filter(x => /^[0-9a-f-]{36}$/i.test(x)))];
+  if (!runIds.length) return;
+  const states = await sql.query('SELECT id,status,last_error FROM wealth_stock_advisor_runs WHERE id=ANY($1::uuid[])', [runIds]);
+  if (states.length !== runIds.length || states.some(x => !['completed','failed','partially_completed'].includes(x.status))) return;
+  const completed = states.filter(x => x.status === 'completed').length;
+  const failed = states.length - completed;
+  const status = failed ? (completed ? 'partial' : 'failed') : 'completed';
+  const error = states.filter(x => x.last_error).map(x => String(x.last_error)).join(' | ').slice(0, 1000) || null;
+  await sql.query("UPDATE wealth_stock_advisor_schedule_runs SET status=$2,finished_at=now(),tickers_failed=$3,last_error=$4,updated_at=now() WHERE id=$1", [executionId, status, failed, error]);
+  await sql.query("UPDATE wealth_stock_advisor_settings SET last_run_at=now(),last_success_at=CASE WHEN $2='completed' THEN now() ELSE last_success_at END,last_status=$2,last_error=$3,updated_at=now() WHERE user_id=$1::uuid", [execution.user_id, status, error]);
+}
+
+async function settleScheduledExecutionForRun(runId) {
+  const [job] = await sql.query("SELECT payload->>'schedule_execution_id' AS execution_id FROM wealth_stock_advisor_run_jobs WHERE run_id=$1 AND stage='debate'", [runId]);
+  if (job?.execution_id) await settleScheduledExecution(job.execution_id);
+}
+
 async function advanceStep(jobId,runId,step,plan,message,cio=null) {
   const next=step+1;
   await sql.query("UPDATE wealth_stock_advisor_runs SET next_step=$2,last_completed_round=$3,last_completed_speaker=$4,status='running',updated_at=now(),last_error=NULL WHERE id=$1",[runId,next,plan.round,plan.speaker]);
@@ -502,6 +525,7 @@ async function advanceStep(jobId,runId,step,plan,message,cio=null) {
     await sql.query("INSERT INTO wealth_stock_advisor_reports (user_id,run_id,run_at,report_text,report_json) VALUES ($1,$2,now(),$3,$4::jsonb) ON CONFLICT (run_id) WHERE run_id IS NOT NULL DO UPDATE SET run_at=EXCLUDED.run_at,report_text=EXCLUDED.report_text,report_json=EXCLUDED.report_json",[run.user_id,runId,summary,JSON.stringify(reportJson)]);
     await sql.query("UPDATE wealth_stock_advisor_runs SET status='completed',next_step=9,updated_at=now(),last_error=NULL WHERE id=$1",[runId]);
     await sql.query("UPDATE wealth_stock_advisor_run_jobs SET status='completed',locked_at=NULL,completed_at=now(),step_no=9,step_attempts=0,last_error=NULL,updated_at=now() WHERE id=$1",[jobId]);
+    await settleScheduledExecutionForRun(runId);
   } else {
     await sql.query("UPDATE wealth_stock_advisor_run_jobs SET status='pending',locked_at=NULL,step_no=$2,step_attempts=0,available_at=now(),updated_at=now(),last_error=NULL WHERE id=$1",[jobId,next]);
   }
@@ -537,6 +561,7 @@ async function handleWorker(req,res) {
       : Math.min(60000,Math.max(1000,Number(error?.retryAfterMs)||Math.pow(2,Math.max(0,Number(job?.step_attempts||1)-1))*3000));
     await sql.query("UPDATE wealth_stock_advisor_run_jobs SET status=$2,step_attempts=CASE WHEN $5 THEN GREATEST(step_attempts-1,0) ELSE step_attempts END,locked_at=NULL,available_at=now()+($3::text||' milliseconds')::interval,last_error=$4,updated_at=now() WHERE run_id=$1 AND stage='debate'",[runId,exhausted?'failed':'pending',delay,deferred?null:String(error?.message||error).slice(0,1000),deferred]);
     await sql.query("UPDATE wealth_stock_advisor_runs SET status=$2,last_error=$3,updated_at=now() WHERE id=$1",[runId,exhausted?finalStatus:'running',deferred?null:String(error?.message||error).slice(0,1000)]);
+    if(exhausted) await settleScheduledExecutionForRun(runId).catch(settleError=>console.error('[stock-advisor-debate:schedule-settle]',settleError?.message||settleError));
     console.error('[stock-advisor-debate:step]',runId,job?.step_no,error?.message||error);
     return json(res,202,{ok:false,status:exhausted?finalStatus:deferred?'queued':'retrying',step:job?.step_no||0,error:exhausted?'A debate step failed after its retry limit.':deferred?'Waiting for the shared AI provider slot.':'A transient error occurred; the step will be retried.'});
   }
