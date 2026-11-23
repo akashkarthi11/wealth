@@ -490,14 +490,15 @@ async function settleScheduledExecution(executionId) {
   if (!execution) return;
   let entries = execution.result_json;
   if (typeof entries === 'string') { try { entries = JSON.parse(entries); } catch { entries = []; } }
-  const runIds = [...new Set((Array.isArray(entries) ? entries : []).map(x => String(x?.run_id || '')).filter(x => /^[0-9a-f-]{36}$/i.test(x)))];
+  const rows = Array.isArray(entries) ? entries : [];
+  const runIds = [...new Set(rows.map(x => String(x?.run_id || '')).filter(x => /^[0-9a-f-]{36}$/i.test(x)))];
   if (!runIds.length) return;
   const states = await sql.query('SELECT id,status,last_error FROM wealth_stock_advisor_runs WHERE id=ANY($1::uuid[])', [runIds]);
   if (states.length !== runIds.length || states.some(x => !['completed','failed','partially_completed'].includes(x.status))) return;
   const completed = states.filter(x => x.status === 'completed').length;
-  const failed = states.length - completed;
+  const failed = rows.length - completed;
   const status = failed ? (completed ? 'partial' : 'failed') : 'completed';
-  const error = states.filter(x => x.last_error).map(x => String(x.last_error)).join(' | ').slice(0, 1000) || null;
+  const error = [...rows.filter(x => x.status === 'failed').map(x => String(x.error || (x.ticker + ': submission failed'))), ...states.filter(x => x.last_error).map(x => String(x.last_error))].join(' | ').slice(0, 1000) || null;
   await sql.query("UPDATE wealth_stock_advisor_schedule_runs SET status=$2,finished_at=now(),tickers_failed=$3,last_error=$4,updated_at=now() WHERE id=$1", [executionId, status, failed, error]);
   await sql.query("UPDATE wealth_stock_advisor_settings SET last_run_at=now(),last_success_at=CASE WHEN $2='completed' THEN now() ELSE last_success_at END,last_status=$2,last_error=$3,updated_at=now() WHERE user_id=$1::uuid", [execution.user_id, status, error]);
 }
