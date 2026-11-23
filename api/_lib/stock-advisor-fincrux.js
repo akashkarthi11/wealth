@@ -3,7 +3,7 @@ const BASE = 'https://api.fincrux.org/api/financials';
 const SOURCE = 'Fincrux';
 const MAX_DAILY_REQUESTS = 5;
 import { recordApiCall } from './api-audit.js';
-import { loadFincruxApiKeys } from './provider-api-keys.js';
+import { loadFincruxApiKeys, selectFincruxKeysForTicker } from './provider-api-keys.js';
 const timeout = ms => AbortSignal.timeout(ms);
 
 // Per-isolate set of unique tickers attempted today (IST). It is seeded from today's
@@ -194,8 +194,7 @@ export async function collectFincruxFinancials({ instrument, db, manual = false 
       return result;
     }
   }
-  const explicitlyAssigned = keys.filter(key => Array.isArray(key.assigned_tickers) && key.assigned_tickers.length && key.assigned_tickers.includes(ticker));
-  const eligibleKeys = explicitlyAssigned.length ? explicitlyAssigned : keys.filter(key => !Array.isArray(key.assigned_tickers) || !key.assigned_tickers.length);
+  const eligibleKeys = selectFincruxKeysForTicker(keys, ticker);
   if (!eligibleKeys.length) {
     result.status = 'skipped';
     result.reason = 'No enabled Fincrux key is assigned to this ticker.';
