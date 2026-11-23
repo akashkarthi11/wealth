@@ -745,10 +745,10 @@ async function loadApiUsage(){
  try{const d=await api('/api/api-usage');window.__apiUsageLast=d;box.innerHTML=apiUsageHtml(d)}
  catch(e){box.innerHTML='<section class="chart-card"><h4>API usage unavailable</h4><p class="error">'+esc(e.message)+'</p></section>'}
 }
-document.addEventListener('input',e=>{if(e.target.matches('[data-au-query]')){apiUsageState.query=e.target.value;const box=document.getElementById('apiUsageBox');if(box)box.innerHTML=apiUsageHtml(window.__apiUsageLast||{providers:[]})}});
 document.addEventListener('change',e=>{
- const field=e.target.closest('[data-au-group],[data-au-health],[data-au-sort]');
+ const field=e.target.closest('[data-au-query],[data-au-group],[data-au-health],[data-au-sort]');
  if(!field)return;
+ if(field.matches('[data-au-query]'))apiUsageState.query=field.value;
  if(field.matches('[data-au-group]'))apiUsageState.group=field.value;
  if(field.matches('[data-au-health]'))apiUsageState.health=field.value;
  if(field.matches('[data-au-sort]'))apiUsageState.sort=field.value;
