@@ -1880,3 +1880,11 @@ b.pj-medium{color:#f5c26b}
 .au-empty{grid-column:1/-1;border:1px dashed var(--line);border-radius:13px;padding:24px;text-align:center;color:var(--muted)}
 @media(max-width:760px){.au-overview{grid-template-columns:repeat(2,minmax(0,1fr))}.au-toolbar{grid-template-columns:repeat(2,minmax(0,1fr))}.au-search{grid-column:1/-1}.au-toolbar .au-reset{grid-column:1/-1}}
 @media(max-width:420px){.au-toolbar{grid-template-columns:1fr}.au-search,.au-toolbar .au-reset{grid-column:auto}.au-results-head{align-items:flex-start;flex-direction:column}}
+
+/* Per-key Fincrux request identity and ticker routing */
+.advisor-key-config{display:grid;grid-template-columns:1fr;gap:8px;width:100%;margin-top:10px;padding:12px;border:1px solid var(--line,#ddd);border-radius:12px;background:var(--surface-soft,rgba(127,127,127,.06))}
+.advisor-key-config label{display:grid;gap:5px;font-size:12px;font-weight:600}
+.advisor-key-config label small{font-weight:400;opacity:.75}
+.advisor-key-config input{width:100%;min-width:0;padding:9px 10px;border:1px solid var(--line,#ccc);border-radius:8px;background:var(--surface,#fff);color:inherit}
+.advisor-key-config button{justify-self:start}
+@media(min-width:700px){.advisor-key-config{grid-template-columns:1fr 1fr auto;align-items:end}.advisor-key-config button{margin-bottom:1px}}
