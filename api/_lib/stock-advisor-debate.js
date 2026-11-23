@@ -5,6 +5,7 @@ import { collectMutualFundEvidence } from './stock-advisor-mfapi.js';
 import { collectNseNews } from './stock-advisor-live-evidence.js';
 import { collectTejHqEquityEvidence } from './stock-advisor-tejhq.js';
 import { collectFincruxFinancials } from './stock-advisor-fincrux.js';
+import { verifyFinancialStatements } from './stock-advisor-verify.js';
 
 export const FREE_AI_MODEL = 'nvidia/nemotron-3.5-lightning-free';
 export const DEBATE_SEQUENCE = Object.freeze([
@@ -344,6 +345,39 @@ async function startDebate(req,res) {
   return json(res,202,{saved:true,queued:true,run,messageCount:0,progress:{completed:0,total:9,current_round:1,current_speaker:'Bull Analyst'}});
 }
 
+const HOW_TO_FIX = {
+  market_price: 'Run Data collection so TejHQ end-of-day prices (shares) or MFAPI.in NAV (funds) are stored.',
+  technical_indicator: 'Needs the stored TejHQ price history; Data collection calculates SMA, RSI and MACD from it.',
+  financial_statement: 'Needs a Fincrux snapshot (FINCRUX_API_KEY, 5 requests a day) and an official NSE results announcement for the same reporting period; they are matched automatically by Data collection.'
+};
+export function shouldSkipDebate(evidence, env = process.env) {
+  if (String(env?.STOCK_ADVISOR_ALWAYS_DEBATE || '').trim().toLowerCase() === 'true') return false;
+  return !!evidence && evidence.action_gate !== 'EVIDENCE_READY';
+}
+// The CIO result saved without any model call when the evidence gate is closed.
+export function dataRequiredResult({ evidence, ticker, name }) {
+  const missing = Array.isArray(evidence?.missing_evidence_types) ? evidence.missing_evidence_types : [];
+  const label = String(name || ticker || 'This investment');
+  const main_reason = 'Critical evidence is missing, so no BUY, HOLD or SELL view is given for ' + label + '.';
+  const biggest_risk = 'Acting without verified ' + (missing.join(', ') || 'evidence') + ' would rely on unverified data.';
+  const change_conditions = missing.map(t => String(t).replace(/_/g, ' ') + ': ' + (HOW_TO_FIX[t] || 'No automatic source exists yet for this evidence.'));
+  const summary = ('Decision: DATA REQUIRED. Main reason: ' + main_reason + ' Biggest risk: ' + biggest_risk + ' Missing evidence: ' + (missing.join('; ') || 'none listed') + '. This decision changes if: verified evidence for these gaps is stored.').slice(0, 900);
+  const message = 'Evidence check for ' + label + ' (' + ticker + '). The debate was not run because critical evidence is missing. Missing: ' + (missing.join(', ') || 'none listed') + '.' + '\n\n' + change_conditions.map(x => '• ' + x).join('\n');
+  return { decision:'DATA REQUIRED', main_reason, biggest_risk, missing_evidence:missing, change_conditions, summary, message,
+    parsed:{ decision:'DATA REQUIRED', main_reason, biggest_risk, missing_evidence:missing, change_conditions, summary } };
+}
+async function finishWithDataRequired(job, run, evidence) {
+  const plan = DEBATE_SEQUENCE[8], r = dataRequiredResult({ evidence, ticker:run.ticker, name:run.stock_name });
+  const meta = { model:null, provider:'evidence-gate', no_model:true, skipped_debate:true, usage:{prompt_tokens:0,completion_tokens:0}, parse_valid:true, summary_retry_used:false, summary_fallback:false,
+    current_position:'DATA REQUIRED', main_risk:r.biggest_risk, missing_evidence:r.missing_evidence, change_conditions:r.change_conditions, evidence_gate:evidence.action_gate,
+    missing_evidence_types:evidence.missing_evidence_types, evidence_refs:evidence.evidence_refs, evidence_package_hash:evidence.package_hash, idempotency_key:'debate:'+run.id+':8' };
+  await sql.query('INSERT INTO wealth_stock_advisor_messages (run_id,sequence_no,round_no,speaker,agent_key,message_type,content,summary,metadata,ticker,asset_type,evidence_refs,idempotency_key,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12::jsonb,$13,now()) ON CONFLICT DO NOTHING',
+    [run.id,8,plan.round,'Chief Investment Officer · Evidence check (no AI model used)','cio-evidence-gate',plan.type,JSON.stringify({message:r.message,...r.parsed,no_model:true}),r.summary,JSON.stringify(meta),run.ticker,run.asset_type,JSON.stringify(evidence.evidence_refs),'debate:'+run.id+':8']);
+  const [message] = await sql.query('SELECT id,sequence_no,round_no,speaker,agent_key,message_type,summary,metadata,evidence_refs,created_at FROM wealth_stock_advisor_messages WHERE run_id=$1 AND sequence_no=8',[run.id]);
+  await advanceStep(job.id, run.id, 8, plan, message, { decision:'DATA REQUIRED', summary:r.summary, parsed:r.parsed, evidenceGate:evidence.action_gate });
+  return { advanced:true, step:8, decision:'DATA REQUIRED', skipped_debate:true };
+}
+
 export function cioReady(prior) { return Array.isArray(prior) && Array.from({length:8},(_,i)=>prior.some(m=>Number(m.sequence_no)===i)).every(Boolean); }
 
 async function processStep(req, runId) {
@@ -397,6 +431,8 @@ async function processStep(req, runId) {
       }
       // NSE announcement discovery remains an independent, low-cost refresh.
       refreshes.nse_news=await collectNseNews({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
+      // A Fincrux statement whose period matches an official NSE results announcement is verified here (period match only).
+      refreshes.financial_verification=await verifyFinancialStatements(sql,run.ticker,{name:run.stock_name}).catch(e=>({status:'failed',error:String(e?.message||e).slice(0,160)}));
       evidence=await loadEvidence(run.user_id,holdingRows[0],run.asset_type,run.id);
     }
     evidence.provider_refreshes=refreshes;
@@ -404,6 +440,9 @@ async function processStep(req, runId) {
     evidence.package_hash=createHash('sha256').update(JSON.stringify(evidence)).digest('hex');
     await sql.query("UPDATE wealth_stock_advisor_runs SET progress_json=jsonb_set(coalesce(progress_json,'{}'::jsonb),'{evidence_package}',$2::jsonb,true),updated_at=now() WHERE id=$1",[run.id,JSON.stringify(evidence)]);
   }
+  // Owner's rule (2026-11-23): when critical evidence is missing the answer is already DATA REQUIRED, so the eight Bull/Bear model calls are
+  // skipped. One clear CIO result is saved instead, listing what is missing and what to do. STOCK_ADVISOR_ALWAYS_DEBATE=true restores the full debate.
+  if(step===0 && shouldSkipDebate(evidence,process.env)) return await finishWithDataRequired(job,run,evidence);
   if(step===8 && !cioReady(prior)) throw new Error('CIO adjudication is blocked until all eight analyst messages are persisted.');
   const prompt=step===8?cioPrompt(prior,evidence,run.asset_type):rolePrompt(step,prior,evidence,run.asset_type);
   const model=await callFreeModel([{role:'system',content:prompt.system},{role:'user',content:prompt.user}]);

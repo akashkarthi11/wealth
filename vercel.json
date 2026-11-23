@@ -124,6 +124,22 @@
     {
       "path": "/api/jobs/dispatch",
       "schedule": "15 13 * * *"
+    },
+    {
+      "path": "/api/jobs/worker",
+      "schedule": "15 14 * * *"
+    },
+    {
+      "path": "/api/jobs/worker",
+      "schedule": "15 15 * * *"
+    },
+    {
+      "path": "/api/jobs/worker",
+      "schedule": "15 16 * * *"
+    },
+    {
+      "path": "/api/jobs/worker",
+      "schedule": "15 17 * * *"
     }
   ]
 }

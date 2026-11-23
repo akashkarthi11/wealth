@@ -1,5 +1,5 @@
 import { sql, json, sessionUser } from '../_lib.js';
-import { executeJob } from '../_lib/scheduled-jobs.js';
+import { runJobNow } from '../_lib/scheduled-jobs.js';
 export default async function handler(req,res) {
   if(req.method!=='POST')return json(res,405,{error:'Method not allowed'});
   const uid=await sessionUser(req);
@@ -10,6 +10,6 @@ export default async function handler(req,res) {
   let body={};try{body=JSON.parse(raw||'{}')}catch{return json(res,400,{error:'Invalid JSON'})}
   const [job]=await sql.query('SELECT * FROM wealth_scheduled_jobs WHERE id=$1',[String(body.id||'')]);
   if(!job)return json(res,404,{error:'Job not found'});
-  try{return json(res,200,await executeJob(job,'manual'))}
+  try{return json(res,200,await runJobNow(job))}
   catch(error){return json(res,502,{error:String(error?.message||error).slice(0,300)})}
 }

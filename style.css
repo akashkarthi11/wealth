@@ -1797,3 +1797,20 @@ b.pj-medium{color:#f5c26b}
  .advisor-coverage-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
  .advisor-provider-card{min-height:105px}
 }
+
+/* AI data page (admin): run timeline and stored-data rows */
+.aid-pick{display:grid;gap:4px;font-size:12px;color:var(--muted);max-width:520px}
+.aid-pick select,.aid-filters input,.aid-filters select{width:100%;min-width:0}
+.aid-table{display:grid;gap:0;margin-top:10px}
+.aid-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:start;padding:9px 0;border-top:1px solid #2b3b52;min-width:0}
+.aid-row:first-child{border-top:0}
+.aid-row.aid-t{grid-template-columns:auto minmax(0,1fr) auto}
+.aid-when{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:52px}
+.aid-what{display:grid;gap:2px;min-width:0;overflow-wrap:anywhere}
+.aid-what small,.aid-end small{color:var(--muted);font-size:12px;line-height:1.4}
+.aid-what a{color:inherit;text-decoration:underline}
+.aid-end{display:grid;gap:3px;justify-items:end;text-align:right}
+.aid-mid{justify-self:start}
+.aid-filters{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;margin-top:10px}
+.aid-filters label{display:grid;gap:4px;font-size:12px;color:var(--muted);min-width:0}
+@media (max-width:560px){.aid-filters{grid-template-columns:1fr 1fr}.aid-filters button{grid-column:1/3}}
