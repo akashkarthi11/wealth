@@ -81,6 +81,7 @@ function cleanMessages(input){
 
 
 async function loadResearchHealth(uid,holdings){
+ const fincruxKeys=await listFincruxKeyMetadata(sql,uid);
  const tickers=[...new Set((holdings||[]).filter(h=>h.currency==='INR'&&['EQUITY','ETF'].includes(String(h.record_type||'').toUpperCase())).map(h=>String(h.ticker||'').trim().toUpperCase()).filter(Boolean))];
  const providers=[
   {key:'tejhq',name:'TejHQ',status:'available',detail:'NSE end-of-day prices · no API key'},
