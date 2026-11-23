@@ -1,4 +1,4 @@
-const APP_BUILD_ID='20261123-jobs-ops';
+const APP_BUILD_ID='20261123-provider-health-menu-1';
 (function promptForUpdatedApp(){
   try {
     const key='wealth-ledger:app-build';
@@ -1208,7 +1208,7 @@ $('viewContent').addEventListener('click',async e=>{
    await api('/api/providers',{method:'POST',body:JSON.stringify({action:'fincrux_key_update',id:toggle.dataset.fincruxKeyToggle,enabled})});
    setStatus(enabled?'Key enabled.':'Key disabled.');
   }
-  await loadStockAdvisor(advisorSelectedRunId);
+  if(activeView==='provider-health')await loadProviderHealth();else await loadStockAdvisor(advisorSelectedRunId);
  }catch(err){setStatus(err.message||'Could not update Fincrux keys.',true)}
  finally{buttons.forEach(b=>b.disabled=false)}
 });
