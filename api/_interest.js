@@ -157,7 +157,7 @@ export function planAccrual({ kind, balances = [], rates = [], terms = null, led
   // 1. New days: from the day after the last accrual (or the first possible day) through `through`.
   let from;
   if (kind === 'fd') {
-    if (!terms?.principal || !terms?.bookedOn || !terms?.payout) return { status: 'pending_terms', rows, skipped, last };
+    if (!terms?.principal || !terms?.bookedOn || !terms?.maturityOn || !terms?.payout) return { status: 'pending_terms', rows, skipped, last };
     from = last ? addDays(last, 1) : terms.bookedOn;
     if (addDays(through, -FD_MAX_DAYS) > from) from = addDays(through, -FD_MAX_DAYS);
   } else {
