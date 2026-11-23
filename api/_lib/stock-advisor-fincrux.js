@@ -75,6 +75,23 @@ async function reserveDailySlot(db, ticker, url, dateKey) {
   return rows[0]?.id || null;
 }
 
+// A reservation row is written before the request is sent. If the request then failed to record its outcome, the row
+// is left looking like a stored snapshot with no figures in it, and the 30-day freshness check honours it — which is
+// how five tickers were locked out until 23 December 2026. Release any such abandoned placeholder from an earlier IST
+// day: it holds no data, so rejecting it loses nothing and lets the ticker be tried again.
+export async function releaseAbandonedReservations(db) {
+  const released = await db.query(`UPDATE wealth_stock_advisor_research_sources
+    SET verification_status='rejected',
+        evidence = evidence || jsonb_build_object('released', true,
+          'released_reason', 'Reservation placeholder with no figures; released so the ticker can be requested again.')
+    WHERE run_id IS NULL AND publisher=$1 AND source_type='financial_statement'
+      AND verification_status IN ('unverified','verified')
+      AND evidence ? 'reservation' AND NOT (evidence ? 'financials')
+      AND retrieved_at < (date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata')
+    RETURNING upper(ticker) AS ticker`, [SOURCE]);
+  return released.map(r => r.ticker);
+}
+
 export async function collectFincruxFinancials({ instrument, db } = {}) {
   const ticker = clean(instrument?.symbol).toUpperCase();
   const result = {
