@@ -22,7 +22,7 @@ function normalizeRow(row) {
   const open = finite(row.open), high = finite(row.high), low = finite(row.low);
   const close = finite(row.close ?? row.adj_close ?? row.adjusted_close);
   const volume = finite(row.volume ?? row.total_traded_quantity);
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date) || ![open, high, low, close].every(v => v != null && v > 0)) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || ![open, high, low, close].every(v => v != null && v > 0)) return null;
   return { date, open, high, low, close, volume };
 }
 function sma(values, period) {

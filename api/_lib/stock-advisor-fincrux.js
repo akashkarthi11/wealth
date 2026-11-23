@@ -21,7 +21,7 @@ export function normalizeFincruxFinancials(payload, expectedTicker) {
   }
   const data = payload?.data;
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    throw new Error('Fincrux returned no structured financial data.');
+    throw new Error('Fincrux returned no structured financial data. Response keys: ' + Object.keys(payload || {}).slice(0, 12).join(', '));
   }
   const financials = {
     quarterly_results: rows(data.quarterly_results || data.quaterly_results).slice(0, 20),
@@ -35,7 +35,7 @@ export function normalizeFincruxFinancials(payload, expectedTicker) {
   };
   const statementRows = financials.quarterly_results.length + financials.profit_and_loss.length
     + financials.balance_sheet.length + financials.cash_flows.length;
-  if (!statementRows) throw new Error('Fincrux returned no quarterly, P&L, balance-sheet or cash-flow statement rows.');
+  if (!statementRows) throw new Error('Fincrux returned no quarterly, P&L, balance-sheet or cash-flow statement rows. data keys: ' + Object.keys(data).slice(0, 15).join(', '));
   return {
     ticker: symbol,
     company: clean(payload.company),
