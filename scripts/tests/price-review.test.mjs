@@ -6,8 +6,16 @@ import { readFileSync } from 'node:fs';
 import { migratedDb } from './helpers/pglite.mjs';
 import { priceJumpSeverity, priceJumps, rejectPrice, changePrice, MEDIUM_PCT, HIGH_PCT } from '../../api/_pricereview.js';
 import { collectIssues } from '../../api/_dataquality.js';
+import { sourceFreshness } from '../../api/_routes/refresh-market-prices.js';
 
 const NOW = Date.parse('2026-11-12T10:00:00Z');
+
+test('source freshness uses observation time, rejects missing and stale timestamps',()=>{
+  assert.equal(sourceFreshness('2026-11-12T09:00:00Z',NOW).fresh,true);
+  assert.equal(sourceFreshness('2026-11-01T09:00:00Z',NOW).fresh,false);
+  assert.equal(sourceFreshness(null,NOW).fresh,false);
+  assert.equal(sourceFreshness('2026-11-12T11:00:00Z',NOW).fresh,false);
+});
 
 async function setup({ usd = false } = {}) {
   const { db, a } = await migratedDb();
