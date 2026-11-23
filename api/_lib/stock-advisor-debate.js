@@ -338,7 +338,9 @@ async function startDebate(req,res) {
     await sql.query("UPDATE wealth_stock_advisor_run_jobs SET status='pending',step_attempts=0,available_at=now(),last_error=NULL,locked_at=NULL,updated_at=now() WHERE run_id=$1 AND stage='debate' AND status='failed'",[run.id]);
     await sql.query("UPDATE wealth_stock_advisor_runs SET status='running',last_error=NULL,updated_at=now() WHERE id=$1",[run.id]);
   }
-  if (run.status !== 'completed') scheduleWorker(req,run.id);
+  // Bulk schedule submissions are queued first; the authenticated queue pump dispatches one run at a time.
+  // Direct single-ticker requests still start immediately.
+  if (run.status !== 'completed' && !String(input.schedule_execution_id||'').trim()) scheduleWorker(req,run.id);
   return json(res,202,{saved:true,queued:true,run,messageCount:0,progress:{completed:0,total:9,current_round:1,current_speaker:'Bull Analyst'}});
 }
 

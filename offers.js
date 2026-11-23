@@ -523,7 +523,7 @@ function ofPendOfferLabel(m, choose) {
 }
 // A reward row with, for cashback, the account that will receive it (default: the offer's receiving account, else the paying account).
 function ofPendOfferHtml(m, choose, accountId) {
-  return ofPendOfferLabel(m, choose) + (m.kind === 'cashback' ? '<label class="pd-recv">Received in <select data-of-recv="' + esc(m.id) + '">' + ofRecvOptions(m.receiveAccountId, accountId) + '</select></label>' : '');
+  return ofPendOfferLabel(m, choose) + ofTargetHtml(m, 'data-of-recv', m.receiveAccountId, accountId);
 }
 function ofPendItemHtml(t) {
   const into = t.kind === 'income' || (t.kind === 'transfer' && /received|from/i.test(t.category || '')), icon = t.kind === 'transfer' ? '⇄' : into ? '↓' : '↑', sign = into ? '+' : '−';
@@ -546,7 +546,7 @@ async function loadPendingTx() {
 }
 function ofAcceptMessage(r) {
   const parts = ['Accepted. Balance ' + esc(money(r.before)) + ' → <b>' + esc(money(r.after)) + '</b>.'];
-  for (const a of r.applied || []) parts.push('<span class="pd-got">' + esc(ofEarnText({ ...a, rewardUnit: a.unit, kind: a.kind })) + '</span> from ' + esc(a.title) + (a.kind === 'points' ? ' (added to points)' : (r.cashbackPosted || []).some(p => p.earningId === a.id) ? ' (added to history as Cashback)' : a.creditTiming === 'settle' ? ' (credited after settlement: tap Mark received when it lands)' : ' (expected)'));
+  for (const a of r.applied || []) parts.push('<span class="pd-got">' + esc(ofEarnText({ ...a, rewardUnit: a.unit, kind: a.kind })) + '</span> from ' + esc(a.title) + ofTargetPhrase(a) + (a.kind === 'points' ? ' (added to points)' : (r.cashbackPosted || []).some(p => p.earningId === a.id) ? ' (added to history as Cashback)' : a.creditTiming === 'settle' ? ' (credited after settlement: tap Mark received when it lands)' : ' (expected)'));
   if (r.needsChoice) parts.push('<span class="pd-yellow">' + (r.offers || []).filter(m => !m.shadowed).length + ' rewards match this payment and none was chosen. Open it in Transactions to map the ones you want.</span>');
   else if (!(r.applied || []).length) parts.push((r.offers || []).length ? 'No offer applied.' : 'No offer matched this payment.');
   if (r.offerError) parts.push('<span class="error">Offers could not be applied: ' + esc(r.offerError) + '</span>');
@@ -662,14 +662,14 @@ function ofMapPanel(x) {
   const need = !!x.needsMapping;
   return '<div class="of-map"><div class="of-map-head">' + (need ? c.filter(m => !m.shadowed).length + ' rewards match this payment: choose which to map' : 'Map another reward') + '</div>'
     + c.map(m => '<label class="pd-offer"><input type="checkbox" class="rm-switch" data-tx-map-id="' + esc(m.id) + '" aria-label="Map ' + esc(m.title) + '"><span class="pd-offer-main"><b>' + esc(m.title) + '</b><small>'
-      + esc(m.shadowed ? 'Same group as “' + m.shadowed + '”: map it only if you want both' : m.apply === 'ask' ? 'Needs activation: tick only if you used it' : 'Automatic offer') + '</small></span><span class="pd-offer-amt"><b>' + esc(ofEarnText(m)) + '</b></span></label>' + (m.kind === 'cashback' ? '<label class="pd-recv">Received in <select data-tx-map-recv="' + esc(m.id) + '">' + ofRecvOptions(m.receiveAccountId, x.account_id) + '</select></label>' : '')).join('')
+      + esc(m.shadowed ? 'Same group as “' + m.shadowed + '”: map it only if you want both' : m.apply === 'ask' ? 'Needs activation: tick only if you used it' : 'Automatic offer') + '</small></span><span class="pd-offer-amt"><b>' + esc(ofEarnText(m)) + '</b></span></label>' + ofTargetHtml(m, 'data-tx-map-recv', m.receiveAccountId, x.account_id)).join('')
     + '<div class="of-map-actions"><button type="button" class="primary" data-tx-map="' + esc(x.id) + '">Map selected</button></div></div>';
 }
 function rewardRowDetail(x) {
   const r = x.rewards || [], map = ofMapPanel(x);
   if (!r.length && map) return '<div class="of-txdetail">' + map + '</div>';
   if (!r.length) return (['expense', 'investment'].includes(x.kind) && x.account_id) ? '<div class="of-txdetail"><button type="button" class="link-btn" data-tx-apply-offers="' + esc(x.id) + '">Check offers for this payment</button></div>' : '';
-  return '<div class="of-txdetail"><div class="of-txdetail-head">Rewards</div>' + r.map(e => '<div class="of-txline"><span><b>' + esc(e.title || 'Offer') + '</b><small>' + esc(ofEarnPill(e)) + '</small>' + (e.kind === 'cashback' ? '<label class="of-recv">Received in <select data-earn-recv="' + esc(e.id) + '">' + ofRecvOptions(e.receive_account_id, x.account_id) + '</select></label>' : '') + '</span><span class="of-txline-btns">'
+  return '<div class="of-txdetail"><div class="of-txdetail-head">Rewards</div>' + r.map(e => '<div class="of-txline"><span><b>' + esc(e.title || 'Offer') + '</b><small>' + esc(ofEarnPill(e)) + '</small>' + (e.kind === 'cashback' ? '<label class="of-recv">Goes to <select data-earn-recv="' + esc(e.id) + '">' + ofRecvOptions(e.receive_account_id, x.account_id) + '</select></label>' : e.kind === 'points' ? '<span class="of-recv">Goes to <b>' + esc(e.program_name || e.unit || 'points') + '</b>' + (ofAcctName(e.program_account_id) ? ' · linked to ' + esc(ofAcctName(e.program_account_id)) : '') + '</span>' : '') + '</span><span class="of-txline-btns">'
     + (e.kind !== 'points' && e.status === 'expected' ? '<button type="button" class="link-btn" data-earn-receive="' + esc(e.id) + '">Mark received</button>' : '')
     + (e.status === 'received' ? '<button type="button" class="link-btn" data-earn-reopen="' + esc(e.id) + '">Reopen</button>' : '')
     + '<button type="button" class="link-btn" data-earn-remove="' + esc(e.id) + '"' + (e.credited_transaction_id ? ' data-earn-posted="1"' : '') + '>Remove</button></span></div>').join('') + map + '</div>';
@@ -691,6 +691,19 @@ document.addEventListener('click', async e => {
   } catch (err) { b.disabled = false; alert(ofErr(err)); }
 });
 
+// ---- reward target (start): where a reward goes. Cashback -> an account (changeable), points -> their reward program, discount / coupon -> nothing is credited ----
+const ofAcctName = id => { const a = (typeof accounts !== 'undefined' && Array.isArray(accounts) ? accounts : []).find(x => x.id === id); return a ? ofAcct(a) : ''; };
+function ofTargetHtml(m, attr, selectedId, fallbackId) {   // m: a matched offer
+  if (m.kind === 'cashback') return '<label class="pd-recv">Goes to <select ' + attr + '="' + esc(m.id) + '">' + ofRecvOptions(selectedId, fallbackId) + '</select></label>';
+  if (m.kind === 'points') { const acct = ofAcctName(m.programAccountId); return '<div class="pd-recv pd-target">Points go to <b>' + esc(m.programName || m.programUnit || 'the points program') + '</b>' + (acct ? ' · linked to ' + esc(acct) : '') + '</div>'; }
+  return '<div class="pd-recv pd-target">' + (m.kind === 'coupon' ? 'A coupon: nothing is credited' : 'Saved at payment: nothing is credited') + '</div>';
+}
+function ofTargetPhrase(a) {   // after Accept: ' → Salary Account' / ' → Slice Monies'
+  if (a.kind === 'points') return ' → ' + esc(a.programName || 'points program');
+  if (a.kind === 'cashback') return ' → ' + esc(ofAcctName(a.receiveAccountId) || 'the paying account');
+  return '';
+}
+// ---- reward target (end) ----
 // The accounts a cashback can be received in (cash and card accounts). `selected` is the chosen one, `fallback` the paying account (the default).
 function ofRecvOptions(selected, fallback) {
   const list = (typeof accounts !== 'undefined' && Array.isArray(accounts) ? accounts : []).filter(a => a.id && ['credit_card', 'savings', 'current'].includes(a.account_type));

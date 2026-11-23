@@ -142,7 +142,7 @@ export function matchOffers(offers, tx, uses = [], programs = new Map()) {
       id: o.id, title: o.title, kind: e.kind, unit: e.unit, rewardUnit: o.reward_unit, amount: e.amount, units: e.units, inr: e.inr, percent: e.percent,
       benefitType: o.benefit_type, benefitValue: Number(o.benefit_value), maxBenefit: o.max_benefit == null ? null : Number(o.max_benefit),
       expected: e.amount, couponCode: o.coupon_code || null, verifyStatus: o.verify_status, notes: o.notes || null, apply: o.apply_mode || 'auto',
-      programId: o.program_id || null, receiveAccountId: o.receive_account_id || null, creditTiming: o.credit_timing || 'now', programName: program ? program.name : null, programUnit: program ? program.unit : null, group: o.exclusive_group || null, oneTime: o.frequency === 'one_time',
+      programId: o.program_id || null, receiveAccountId: o.receive_account_id || null, creditTiming: o.credit_timing || 'now', programAccountId: program ? program.account_id || null : null, programName: program ? program.name : null, programUnit: program ? program.unit : null, group: o.exclusive_group || null, oneTime: o.frequency === 'one_time',
       usesLeftTotal: st.usesLeftTotal, usesLeftPeriod: st.usesLeftPeriod, benefitLeftPeriod: st.benefitLeftPeriod, shadowed: null,
     });
   }
@@ -318,7 +318,7 @@ export async function applyOffers(uid, tx, offerIds, { db = sql, actor = 'user',
 // For accepted payments: the rewards still available to map (not applied yet), and whether the owner has to map them by hand
 // (two or more available and nothing mapped yet): the Transactions page shows those in yellow.
 const slim = m => ({ id: m.id, title: m.title, kind: m.kind, unit: m.unit, rewardUnit: m.rewardUnit, amount: m.amount, units: m.units, inr: m.inr, percent: m.percent,
-  programName: m.programName, programUnit: m.programUnit, receiveAccountId: m.receiveAccountId, creditTiming: m.creditTiming, apply: m.apply, shadowed: m.shadowed, oneTime: m.oneTime, couponCode: m.couponCode });
+  programName: m.programName, programUnit: m.programUnit, programAccountId: m.programAccountId, receiveAccountId: m.receiveAccountId, creditTiming: m.creditTiming, apply: m.apply, shadowed: m.shadowed, oneTime: m.oneTime, couponCode: m.couponCode });
 export async function choicesForTransactions(uid, txIds, { db = sql } = {}) {
   const out = new Map();
   if (!txIds.length) return out;
@@ -339,6 +339,8 @@ export async function choicesForTransactions(uid, txIds, { db = sql } = {}) {
 // ---- earnings: show, receive, remove --------------------------------------------------------------------------------------
 const EARN_COLS = `u.id, u.offer_id, u.transaction_id, u.used_on::text AS used_on, u.title, u.kind, u.benefit::float8 AS inr, u.units::float8 AS units,
   (SELECT p.unit FROM wealth_reward_programs p WHERE p.id = u.program_id) AS unit,
+  (SELECT p.name FROM wealth_reward_programs p WHERE p.id = u.program_id) AS program_name,
+  (SELECT p.account_id FROM wealth_reward_programs p WHERE p.id = u.program_id) AS program_account_id,
   u.percent::float8 AS percent, u.status, u.program_id, u.credited_transaction_id, u.credited_on::text AS credited_on, u.receive_account_id`;
 
 export async function earningsForTransactions(uid, txIds, { db = sql } = {}) {
