@@ -1235,6 +1235,10 @@ $('viewContent').addEventListener('click',async e=>{
  const remove=e.target.closest('[data-fincrux-key-delete]');
  const toggle=e.target.closest('[data-fincrux-key-toggle]');
  const configure=e.target.closest('[data-fincrux-key-configure]');
+ const edit=e.target.closest('[data-fincrux-key-edit]');
+ const close=e.target.closest('[data-fincrux-key-close]');
+ if(edit){const id=edit.dataset.fincruxKeyEdit,editor=document.querySelector('[data-fincrux-key-editor="'+id+'"]');if(editor){editor.hidden=false;editor.querySelector('input')?.focus()}return}
+ if(close){const id=close.dataset.fincruxKeyClose,editor=document.querySelector('[data-fincrux-key-editor="'+id+'"]');if(editor)editor.hidden=true;return}
  if(!save&&!remove&&!toggle&&!configure)return;
  const status=document.getElementById('fincruxKeyStatus');
  const setStatus=(message,error=false)=>{if(status){status.textContent=message;status.classList.toggle('is-error',error)}};
