@@ -1244,8 +1244,11 @@ b.pj-medium{color:#f5c26b}
 .act-row.inactive{opacity:.55}
 .act-row.inactive .act-amt{text-decoration:line-through}
 .act-tag.inactive{color:#c8d3e6;border-color:#4a5a73;background:#1b2638}
+.interest-fd-asof{display:block;margin-top:2px;color:#7f93ad;font-size:12px}
 /* Cashback: the account that receives it */
 .pd-recv,.of-recv{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:4px 0 8px 44px;color:var(--muted);font-size:12px}
+.pd-target b{color:#e9f2ff}
+.of-recv b{color:#e9f2ff}
 .pd-recv select,.of-recv select{min-height:36px;max-width:100%;font-size:13px}
 .of-txline .of-recv{margin:6px 0 0}
 /* Interest on your accounts (2026-11-14) */
@@ -1405,3 +1408,392 @@ b.pj-medium{color:#f5c26b}
 .advisor-auto-stock span{min-width:0}
 .advisor-auto-stock b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media(max-width:560px){.advisor-auto-stock-list{grid-template-columns:1fr}}
+
+/* Stock Advisor Auto Research schedule details */
+.advisor-auto-schedule{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:14px 0}
+.advisor-auto-schedule>div{display:grid;gap:5px;min-width:0;padding:11px;border:1px solid var(--line);border-radius:11px;background:#101b2b}
+.advisor-auto-schedule small{font-size:10px;color:var(--muted)}
+.advisor-auto-schedule b{font-size:12px;overflow-wrap:anywhere}
+@media(max-width:560px){.advisor-auto-schedule{grid-template-columns:1fr}}
+
+
+/* Stock Advisor compact dashboard refresh */
+.stock-advisor-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
+.stock-advisor-heading>div{min-width:0}
+.stock-advisor-heading h3{margin-bottom:4px}
+.stock-advisor-heading p{margin:0;max-width:58ch}
+.stock-advisor-intro{padding-bottom:10px}
+.stock-advisor-intro .advisor-refresh{min-height:42px;flex:0 0 auto}
+.advisor-dashboard{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;min-width:0}
+.advisor-dashboard>*{min-width:0}
+.advisor-dashboard .advisor-panel{padding:14px;border-radius:14px}
+.advisor-value-card{display:flex;align-items:center;justify-content:space-between}
+.advisor-value-card>div{display:grid;gap:4px;min-width:0}
+.advisor-value-card>div>b{font-size:clamp(25px,6vw,32px);line-height:1.15;letter-spacing:-.7px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.advisor-value-card>div>small:last-child{color:var(--muted);font-size:11px}
+.advisor-dashboard .advisor-kpis{gap:7px;margin:0}
+.advisor-dashboard .advisor-kpi{padding:11px 9px;border-radius:12px}
+.advisor-dashboard .advisor-kpi small{font-size:9px;letter-spacing:.45px;line-height:1.3;white-space:normal;overflow-wrap:anywhere}
+.advisor-dashboard .advisor-kpi b{font-size:clamp(19px,5vw,24px)}
+.advisor-next-time{display:block;font-size:clamp(17px,4.5vw,21px);line-height:1.3;overflow-wrap:anywhere}
+.advisor-next-meta{display:flex;flex-wrap:wrap;gap:5px 14px;margin-top:6px;color:var(--muted);font-size:11px}
+.advisor-run-now{display:flex;align-items:center;gap:8px;margin-top:13px;min-width:0}
+.advisor-run-now select{flex:1;min-width:0;max-width:100%;min-height:44px}
+.advisor-run-now button{min-height:44px;flex:0 0 auto;white-space:nowrap}
+.advisor-run-status{display:block;margin-top:7px;font-size:11px;overflow-wrap:anywhere}
+.advisor-latest-card .advisor-latest-date{color:var(--muted);font-size:10px;margin:-4px 0 8px}
+.advisor-latest-summary{margin:0;color:#dce7f4;font-size:13px;line-height:1.55;white-space:pre-line;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.advisor-case-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}
+.advisor-case-grid>div{min-width:0;padding:10px;border:1px solid #2b3c55;border-radius:11px;background:#0d1929}
+.advisor-case-grid b{font-size:11px}
+.advisor-case-grid p{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin:5px 0 0;color:#b9c9dc;font-size:11px;line-height:1.45;overflow-wrap:anywhere}
+.advisor-full-report-link{display:flex;justify-content:space-between;align-items:center;width:100%;min-height:42px;margin-top:11px;padding:8px 0;border:0;border-top:1px solid #2b3c55;border-radius:0;color:#8de0c0;background:transparent;text-align:left;font-weight:700}
+.advisor-expandable{min-width:0;border:1px solid var(--line);border-radius:14px;background:#101b2b;overflow:hidden}
+.advisor-expandable>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:50px;padding:12px 14px;cursor:pointer;list-style:none;font-size:13px;font-weight:750}
+.advisor-expandable>summary::-webkit-details-marker{display:none}
+.advisor-expandable>summary:after{content:'＋';color:var(--green);font-size:17px}
+.advisor-expandable[open]>summary:after{content:'−'}
+.advisor-settings-state{font-size:10px;letter-spacing:.6px;padding:5px 9px;border-radius:20px;background:#3a252b;color:#ffb0b4}
+.advisor-settings-state.is-on{background:#15372f;color:#8ce0bd}
+.advisor-expanded-content{display:grid;gap:10px;padding:0 10px 10px;min-width:0}
+.advisor-expanded-content>.advisor-panel{padding:12px;border-radius:11px}
+.advisor-expanded-content .advisor-panel{min-width:0}
+.advisor-full-report .advisor-expanded-content{padding-top:10px}
+.advisor-bullbear-list,.advisor-stock-list,.advisor-holding-list{min-width:0}
+.advisor-bullbear-card,.advisor-stock-card,.advisor-holding-card{min-width:0;overflow-wrap:anywhere}
+.advisor-bullbear-card pre,.advisor-message-text,.advisor-structured-content{max-width:100%;overflow-wrap:anywhere;white-space:pre-wrap}
+.advisor-tabs{position:sticky;top:0;z-index:3;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:5px 0 9px;background:linear-gradient(180deg,var(--panel-bg,#101827) 85%,transparent);margin-bottom:2px}
+.advisor-tabs::-webkit-scrollbar{display:none}
+.advisor-tabs button{flex:1 0 auto;min-height:42px;padding:8px 13px;white-space:nowrap}
+.advisor-wa-chat,.advisor-filter-message{min-width:0;max-width:100%}
+.advisor-wa-bubble{min-width:0;max-width:100%}
+.advisor-wa-bubble pre,.advisor-wa-bubble dd{max-width:100%;overflow-wrap:anywhere;white-space:pre-wrap}
+@media(max-width:520px){
+ .stock-advisor-heading{align-items:flex-start}
+ .stock-advisor-heading h3{font-size:24px}
+ .stock-advisor-intro .advisor-refresh{padding:8px 10px;font-size:11px}
+ .advisor-dashboard{gap:9px}
+ .advisor-dashboard .advisor-panel{padding:12px 11px}
+ .advisor-dashboard .advisor-kpi{padding:10px 7px}
+ .advisor-dashboard .advisor-kpi b{font-size:19px}
+ .advisor-dashboard .advisor-kpi small{font-size:8px;letter-spacing:.2px}
+ .advisor-run-now{align-items:stretch;flex-direction:column}
+ .advisor-run-now select,.advisor-run-now button{width:100%;max-width:none}
+ .advisor-case-grid{grid-template-columns:1fr}
+ .advisor-case-grid p{-webkit-line-clamp:2}
+ .advisor-expandable>summary{padding:11px 12px}
+}
+@media(max-width:360px){
+ .advisor-dashboard .advisor-kpi b{font-size:17px}
+ .advisor-dashboard .advisor-kpi small{font-size:7px}
+ .advisor-next-meta{display:grid;gap:4px}
+}
+
+/* Four-round debate: summary-first conversation cards */
+.advisor-debate-rounds{display:grid;gap:9px;min-width:0}
+.advisor-round-card{min-width:0;border:1px solid var(--line);border-radius:13px;background:#0e1a2a;overflow:hidden}
+.advisor-round-card>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px;min-height:48px;cursor:pointer;list-style:none;font-size:12px}
+.advisor-round-card>summary::-webkit-details-marker{display:none}
+.advisor-round-card>summary:after{content:'＋';color:var(--green);font-size:16px}
+.advisor-round-card[open]>summary:after{content:'−'}
+.advisor-round-card>summary span{color:var(--muted);font-size:10px;white-space:nowrap}
+.advisor-round-messages{display:grid;gap:8px;padding:0 9px 10px;min-width:0}
+.advisor-message-summary{margin:7px 0;color:#dce7f4;font-size:13px;line-height:1.55;white-space:pre-line;overflow-wrap:anywhere}
+.advisor-message-details{margin-top:8px;border-top:1px solid #2b3c55;padding-top:7px;font-size:11px;color:#b9c9dc}
+.advisor-message-details summary{cursor:pointer;color:#8de0c0;font-weight:700}
+.advisor-message-details p{margin:6px 0;overflow-wrap:anywhere}
+@media(max-width:520px){.advisor-round-card>summary{padding:11px}.advisor-round-messages{padding:0 7px 8px}.advisor-message-summary{font-size:12px}}
+
+/* Stock Advisor dynamic research schedule */
+.advisor-schedule-config{margin-top:16px;padding-top:15px;border-top:1px solid var(--line);min-width:0}
+.advisor-schedule-config .advisor-section-head{margin-bottom:10px}
+.advisor-schedule-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:10px 0}
+.advisor-schedule-controls label{display:grid;gap:6px;min-width:0;color:var(--muted);font-size:11px;font-weight:650}
+.advisor-schedule-controls input,.advisor-schedule-controls select{width:100%;min-width:0;min-height:44px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2,var(--panel));color:var(--text);font:inherit;font-size:14px}
+.advisor-schedule-config .advisor-intro-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:10px}
+.advisor-schedule-config .advisor-intro-actions button{min-height:42px}
+.advisor-schedule-config .advisor-auto-schedule{margin:12px 0 6px}
+@media(max-width:560px){.advisor-schedule-controls{grid-template-columns:minmax(0,1fr)}.advisor-schedule-config .advisor-intro-actions button{flex:1 1 auto}.advisor-schedule-config .advisor-intro-actions span{flex-basis:100%}}
+
+
+/* Simple Scheduled Jobs UI */
+.jobs-page{display:grid;gap:13px;margin-top:4px;min-width:0}
+.jobs-page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.jobs-page-head h4{margin:0;font-size:17px;color:var(--text)}
+.jobs-page-head p{margin:5px 0 0;color:var(--muted);font-size:12px;line-height:1.5;max-width:520px}
+.jobs-list{display:grid;gap:12px}
+.jobs-card{min-width:0;padding:15px;border:1px solid var(--line);border-radius:16px;background:linear-gradient(145deg,#15243a,#101a2a);box-shadow:0 8px 24px #0002}
+.jobs-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.jobs-job-title{display:flex;align-items:center;gap:11px;min-width:0}
+.jobs-job-icon{display:grid;place-items:center;flex:0 0 40px;height:40px;border-radius:13px;background:#1d3b43;color:#80dfbd;font-size:22px}
+.jobs-job-title h4{margin:0;color:var(--text);font-size:15px;line-height:1.35}
+.jobs-job-title p{margin:4px 0 0;color:var(--muted);font-size:11px;line-height:1.45}
+.jobs-switch{position:relative;display:inline-flex;align-items:center;flex:0 0 auto;cursor:pointer}
+.jobs-switch input{position:absolute;opacity:0;width:1px;height:1px}
+.jobs-switch span{width:46px;height:27px;border-radius:20px;background:#46546a;transition:background .18s;position:relative}
+.jobs-switch span:after{content:'';position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:50%;background:#fff;transition:transform .18s}
+.jobs-switch input:checked+span{background:#24956e}
+.jobs-switch input:checked+span:after{transform:translateX(19px)}
+.jobs-switch input:focus-visible+span{outline:2px solid var(--green);outline-offset:3px}
+.jobs-card-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:14px 0 10px}
+.jobs-card-meta>div{min-width:0;padding:11px;border-radius:11px;background:#0c1727;border:1px solid #24364d}
+.jobs-card-meta small{display:block;color:var(--muted);font-size:10px;margin-bottom:5px}
+.jobs-card-meta b{display:block;color:var(--text);font-size:13px;overflow-wrap:anywhere;line-height:1.4}
+.jobs-card-status{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 1px;color:var(--muted);font-size:11px}
+.jobs-status{display:inline-flex;align-items:center;padding:5px 9px;border-radius:20px;background:#26364b;color:#cbd7e7;font-size:10px;font-weight:750;white-space:nowrap}
+.jobs-status.success{background:#153b32;color:#8ce0bd}
+.jobs-status.info{background:#183650;color:#9bcaff}
+.jobs-status.danger{background:#482b32;color:#ffb0b4}
+.jobs-card-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:9px}
+.jobs-card-actions button{min-height:46px}
+.jobs-edit-panel{margin-top:12px;padding:13px;border:1px solid #34516c;border-radius:13px;background:#0c1727}
+.jobs-edit-panel[hidden]{display:none}
+.jobs-edit-title{font-size:12px;font-weight:800;margin-bottom:10px;color:#dce8f8}
+.jobs-edit-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.jobs-edit-fields label{display:grid;gap:6px;color:var(--muted);font-size:11px;font-weight:650}
+.jobs-edit-fields input,.jobs-edit-fields select{width:100%;min-width:0;min-height:45px;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:#101b2b;color:var(--text);font:inherit;font-size:14px}
+.jobs-edit-panel>button{width:100%;min-height:45px}
+.jobs-history{margin-top:12px;border-top:1px solid #2b3b52;padding-top:10px}
+.jobs-history summary{cursor:pointer;list-style:none;color:#91dfc1;font-size:11px;font-weight:750;min-height:32px;display:flex;align-items:center;justify-content:space-between}
+.jobs-history summary::-webkit-details-marker{display:none}
+.jobs-history summary:after{content:'＋';font-size:16px}
+.jobs-history[open] summary:after{content:'−'}
+.jobs-history-list{display:grid;gap:8px;padding-top:8px}
+.jobs-history-list>div{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:7px;padding:9px;border-radius:9px;background:#0c1727;font-size:10px;color:#b9c9dc}
+.jobs-history-list>div>span{overflow-wrap:anywhere;line-height:1.45}
+.jobs-history-list .jobs-error{grid-column:1/-1}
+.jobs-next{margin:11px 0 0;padding-top:10px;border-top:1px solid #26364e;color:var(--muted);font-size:10px;line-height:1.5}
+.jobs-next b{color:#dbe8f8;font-weight:650}
+.jobs-error{margin:8px 0 0;color:#ffaaa6;font-size:11px;line-height:1.5;overflow-wrap:anywhere}
+.jobs-empty{padding:24px 16px;border:1px dashed #40516a;border-radius:14px;text-align:center;color:var(--muted);font-size:13px}
+.jobs-footnote{margin:0;color:var(--muted);font-size:10px;line-height:1.55}
+@media(max-width:520px){
+ .jobs-page-head{align-items:center}
+ .jobs-page-head h4{font-size:16px}
+ .jobs-page-head p{font-size:11px}
+ .jobs-card{padding:13px;border-radius:14px}
+ .jobs-job-icon{flex-basis:36px;height:36px;border-radius:11px}
+ .jobs-job-title h4{font-size:14px}
+ .jobs-card-meta{gap:7px}
+ .jobs-card-meta>div{padding:10px 9px}
+ .jobs-card-meta b{font-size:12px}
+ .jobs-card-actions{grid-template-columns:1fr}
+ .jobs-edit-fields{grid-template-columns:1fr}
+}
+
+
+/* Home dashboard refresh — calm hierarchy, readable finance cards */
+.dashboard-home{display:grid;gap:16px;min-width:0}
+.dashboard-pulse,.dashboard-secondary,.dashboard-spend-tools{min-width:0}
+.dashboard-section-title{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:2px 1px 11px}
+.dashboard-section-title h3{margin:5px 0 0;color:var(--text);font-size:19px;letter-spacing:-.35px}
+.dashboard-section-title p{margin:4px 0 0;color:var(--muted);font-size:11px;line-height:1.45}
+.dashboard-live-mark{flex:0 0 auto;padding:6px 9px;border:1px solid #285846;border-radius:20px;background:#14342d;color:#8ce0bd;font-size:9px;font-weight:750;letter-spacing:.4px}
+.dashboard-pulse-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.dashboard-pulse-card{min-width:0;padding:15px;border:1px solid var(--line);border-radius:15px;background:linear-gradient(145deg,#15243a,#101a2a)}
+.dashboard-pulse-card small{display:block;color:var(--muted);font-size:9px;letter-spacing:.8px;font-weight:750;line-height:1.4}
+.dashboard-pulse-card strong{display:block;margin-top:10px;color:var(--text);font-size:clamp(17px,2.5vw,23px);letter-spacing:-.55px;overflow-wrap:anywhere}
+.dashboard-pulse-card span{display:block;margin-top:7px;color:#9aacc2;font-size:10px;line-height:1.45}
+.dashboard-pulse-card.spend{border-color:#3d4c60;background:linear-gradient(145deg,#26364b,#152238)}
+.dashboard-pulse-card.spend strong{color:#f2d49b}
+.dashboard-pulse-card.income strong{color:#8ce0bd}
+.dashboard-snapshot-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
+.dashboard-snapshot-grid>article{display:flex;align-items:center;gap:10px;min-width:0;padding:12px;border:1px solid var(--line);border-radius:13px;background:#101b2b}
+.dashboard-snapshot-icon{display:grid;place-items:center;flex:0 0 32px;height:32px;border-radius:10px;background:#1c3047;color:#9bcaff;font-size:17px}
+.dashboard-snapshot-grid small{display:block;color:var(--muted);font-size:8px;letter-spacing:.7px;font-weight:750}
+.dashboard-snapshot-grid b{display:block;margin-top:5px;color:var(--text);font-size:13px;overflow-wrap:anywhere}
+.dashboard-insight-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.dashboard-insight-card{display:flex;align-items:center;gap:12px;min-width:0;width:100%;padding:14px;border:1px solid var(--line);border-radius:14px;background:#101b2b;color:var(--text);text-align:left;cursor:pointer}
+.dashboard-insight-card:hover,.dashboard-insight-card[aria-expanded="true"]{border-color:#52718a;background:#15243a}
+.dashboard-insight-icon{display:grid;place-items:center;flex:0 0 38px;height:38px;border-radius:12px;background:#1d354c;color:#9bcaff;font-size:20px}
+.dashboard-insight-card>span:nth-child(2){display:grid;gap:4px;min-width:0}
+.dashboard-insight-card small{color:var(--muted);font-size:8px;letter-spacing:.6px;font-weight:750}
+.dashboard-insight-card b{font-size:18px;letter-spacing:-.3px;overflow-wrap:anywhere}
+.dashboard-insight-card em{font-size:10px;color:#9aacc2;font-style:normal;line-height:1.4}
+.dashboard-insight-card>i{margin-left:auto;color:var(--green);font-size:23px;font-style:normal}
+.dashboard-chart-toolbar{padding:2px 0}
+.dashboard-chart-toolbar .chart-range-row{margin:0}
+.dashboard-main-chart{margin:0}
+.dashboard-main-chart .chart-head{margin-bottom:4px}
+.dashboard-main-chart .chart-head h4{font-size:17px;margin-top:4px}
+.dashboard-main-chart .chart-head .eyebrow{font-size:9px}
+.dashboard-history{overflow:hidden;border:1px solid var(--line);border-radius:15px;background:#101b2b}
+.dashboard-history>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px;min-height:62px;cursor:pointer;list-style:none}
+.dashboard-history>summary::-webkit-details-marker{display:none}
+.dashboard-history>summary span{display:grid;gap:4px}
+.dashboard-history>summary b{font-size:13px;color:var(--text)}
+.dashboard-history>summary small{font-size:10px;color:var(--muted)}
+.dashboard-history>summary i{font-style:normal;color:var(--green);font-size:19px}
+.dashboard-history[open]>summary{border-bottom:1px solid var(--line)}
+.dashboard-history[open]>summary i{transform:rotate(45deg)}
+.dashboard-history-content{display:grid;gap:8px;padding:4px 10px 10px}
+.dashboard-history-content .chart-card{margin:7px 0}
+.dashboard-legacy-counts{display:none}
+.dashboard-pulse .eyebrow,.dashboard-section-title .eyebrow{font-size:9px;letter-spacing:1.1px}
+@media(max-width:700px){
+ .dashboard-home{gap:13px}
+ .dashboard-section-title{margin-bottom:9px}
+ .dashboard-section-title h3{font-size:17px}
+ .dashboard-pulse-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .dashboard-pulse-card{padding:13px 11px;border-radius:13px}
+ .dashboard-pulse-card strong{font-size:19px;margin-top:8px}
+ .dashboard-pulse-card span{font-size:9px}
+ .dashboard-snapshot-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .dashboard-snapshot-grid>article{padding:10px;gap:8px}
+ .dashboard-snapshot-grid b{font-size:12px}
+ .dashboard-insight-grid{grid-template-columns:1fr;gap:8px}
+ .dashboard-insight-card{padding:12px}
+ .dashboard-insight-card b{font-size:17px}
+ .dashboard-main-chart{padding:13px 10px}
+ .dashboard-history-content{padding:3px 7px 8px}
+}
+@media(max-width:360px){
+ .dashboard-pulse-card strong{font-size:17px}
+ .dashboard-pulse-card small{font-size:8px}
+ .dashboard-snapshot-icon{flex-basis:28px;height:28px}
+ .dashboard-snapshot-grid b{font-size:11px}
+}
+
+/* Dashboard usability polish: clearer hierarchy, readable labels and comfortable touch targets. */
+.dashboard-section-title p{font-size:12px;line-height:1.55;max-width:560px}
+.dashboard-pulse-card small,.dashboard-snapshot-grid small,.dashboard-insight-card small{font-size:10px;letter-spacing:.35px;line-height:1.45}
+.dashboard-pulse-card span,.dashboard-insight-card em{font-size:11px;line-height:1.5}
+.dashboard-snapshot-grid>article{min-height:66px}
+.dashboard-snapshot-grid b{font-size:14px}
+.dashboard-insight-card{min-height:76px}
+.dashboard-insight-card:focus-visible,.dashboard-history>summary:focus-visible{outline:2px solid #9bcaff;outline-offset:3px}
+.dashboard-history>summary{min-height:68px}
+.dashboard-history>summary b{font-size:14px}
+.dashboard-history>summary small{font-size:11px;line-height:1.45}
+.dashboard-chart-toolbar{overflow-x:auto;padding:4px 0 7px;scrollbar-width:thin}
+.dashboard-chart-toolbar .chart-range-row{min-width:max-content}
+.dashboard-main-chart .chart-head p{font-size:11px;line-height:1.5}
+@media(max-width:700px){
+ .dashboard-section-title p{font-size:11px}
+ .dashboard-pulse-card small,.dashboard-snapshot-grid small,.dashboard-insight-card small{font-size:9px}
+ .dashboard-pulse-card span,.dashboard-insight-card em{font-size:10px}
+ .dashboard-snapshot-grid>article{min-height:64px}
+ .dashboard-snapshot-grid b{font-size:13px}
+ .dashboard-insight-card{min-height:72px}
+ .dashboard-history>summary{min-height:64px}
+}
+
+/* Scheduled Jobs: at-a-glance operations and clearer run history. */
+.jobs-overview{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
+.jobs-overview article{min-width:0;padding:12px;border:1px solid var(--line);border-radius:13px;background:var(--card, #111d2e)}
+.jobs-overview article span,.jobs-overview article small{display:block;color:var(--muted);font-size:10px;line-height:1.4}
+.jobs-overview article b{display:block;margin:5px 0;font-size:23px;line-height:1.1;color:var(--text);font-variant-numeric:tabular-nums}
+.jobs-overview article.has-failures{border-color:#87434b}
+.jobs-overview article.has-failures b{color:#ff9da5}
+.jobs-next-up{display:flex;align-items:center;gap:12px;padding:13px;border:1px solid #31516a;border-radius:14px;background:#10263a}
+.jobs-next-icon{display:grid;place-items:center;flex:0 0 38px;height:38px;border-radius:12px;background:#1c3c4b;color:#a8d9ff;font-size:21px}
+.jobs-next-up>div{display:grid;gap:3px;min-width:0}
+.jobs-next-up small{font-size:9px;letter-spacing:.9px;color:#9bcaff;font-weight:800}
+.jobs-next-up b{font-size:13px;color:var(--text);overflow-wrap:anywhere}
+.jobs-next-up span:last-child{font-size:11px;color:var(--muted);line-height:1.4}
+.jobs-history summary span{margin-left:auto;color:var(--muted);font-weight:600}
+.jobs-history-list>div>span{display:grid;gap:3px}
+.jobs-history-list>div>span b{font-size:10px;color:var(--text)}
+.jobs-history-list>div>span small{font-size:9px;color:var(--muted);line-height:1.4;overflow-wrap:anywhere}
+.jobs-history-list>div>span .jobs-error{color:#ffb0b4}
+@media(max-width:520px){
+ .jobs-overview{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .jobs-overview article{padding:11px}
+ .jobs-overview article b{font-size:21px}
+ .jobs-next-up{padding:11px}
+}
+
+
+/* Mobile density pass: Scheduled Jobs + Auto Research (presentation only). */
+@media (max-width:600px){
+ .jobs-page{gap:9px}
+ .jobs-page-head{gap:8px}
+ .jobs-page-head p{line-height:1.35}
+ .jobs-list{gap:9px}
+ .jobs-card{padding:10px;border-radius:13px;box-shadow:0 4px 14px #0002}
+ .jobs-card-head{gap:8px}
+ .jobs-job-title{gap:8px}
+ .jobs-job-icon{flex-basis:32px;height:32px;border-radius:10px;font-size:18px}
+ .jobs-job-title h4{font-size:13px;line-height:1.25}
+ .jobs-job-title p{margin-top:3px;font-size:10px;line-height:1.35}
+ .jobs-switch span{width:40px;height:24px}
+ .jobs-switch span:after{width:18px;height:18px;top:3px;left:3px}
+ .jobs-switch input:checked+span:after{transform:translateX(16px)}
+ .jobs-card-meta{gap:6px;margin:9px 0 6px}
+ .jobs-card-meta>div{padding:8px;border-radius:9px}
+ .jobs-card-meta small{font-size:9px;margin-bottom:3px}
+ .jobs-card-meta b{font-size:11px;line-height:1.3}
+ .jobs-card-status{padding:6px 0;font-size:10px}
+ .jobs-status{padding:4px 7px;font-size:9px}
+ .jobs-card-actions{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:7px}
+ .jobs-card-actions button{min-height:38px;padding:8px 9px;font-size:12px;border-radius:10px}
+ .jobs-edit-panel{margin-top:9px;padding:10px;border-radius:11px}
+ .jobs-edit-title{font-size:11px;margin-bottom:8px}
+ .jobs-edit-fields{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-bottom:9px}
+ .jobs-edit-fields label{gap:4px;font-size:10px}
+ .jobs-edit-fields input,.jobs-edit-fields select{min-height:38px;padding:7px 8px;font-size:12px;border-radius:9px}
+ .jobs-edit-panel>button{min-height:38px;font-size:12px}
+ .jobs-history{margin-top:8px;padding-top:7px}
+ .jobs-history summary{min-height:28px;font-size:10px}
+ .jobs-history summary:after{font-size:14px}
+ .jobs-history-list{gap:6px;padding-top:6px}
+ .jobs-history-list>div{padding:7px;font-size:9px}
+ .jobs-history-list>div>span b{font-size:9px}
+ .jobs-history-list>div>span small{font-size:8px}
+ .jobs-next{margin-top:7px;padding-top:7px;font-size:9px;line-height:1.4}
+ .jobs-error{font-size:10px}
+ .jobs-footnote{font-size:9px}
+ .jobs-overview{gap:6px}
+ .jobs-overview article{padding:8px;border-radius:10px}
+ .jobs-overview article span,.jobs-overview article small{font-size:9px}
+ .jobs-overview article b{font-size:18px;margin:3px 0}
+ .jobs-next-up{gap:8px;padding:9px;border-radius:11px}
+ .jobs-next-icon{flex-basis:30px;height:30px;border-radius:9px;font-size:17px}
+ .jobs-next-up small{font-size:8px}
+ .jobs-next-up b{font-size:11px}
+ .jobs-next-up span:last-child{font-size:10px}
+
+ /* Research coverage gets its own row; time and repeat share the next row. */
+ .research-schedule-card>.jobs-edit-panel{margin-top:9px!important;padding:10px}
+ .research-schedule-card .jobs-edit-fields{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .research-schedule-card .jobs-edit-fields>label:first-child{grid-column:1/-1}
+ .research-schedule-card .jobs-edit-fields label{font-size:10px}
+ .research-schedule-card .jobs-edit-fields input,
+ .research-schedule-card .jobs-edit-fields select{min-height:40px;font-size:12px}
+ .research-schedule-card .jobs-card-actions{grid-template-columns:1.2fr .8fr}
+ .research-schedule-card .jobs-card-actions button{min-height:40px;font-size:11px}
+ .research-schedule-card .muted{font-size:10px;line-height:1.4}
+ .research-schedule-card [data-research-manual-stocks] .advisor-auto-stock-list{max-height:190px;overflow:auto}
+}
+
+/* Stock Advisor research-provider health */
+.advisor-research-health{display:grid;gap:12px}
+.advisor-provider-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.advisor-provider-card{display:flex;flex-direction:column;justify-content:space-between;gap:9px;min-width:0;padding:10px;border:1px solid #2b3c55;border-radius:11px;background:#0d1929}
+.advisor-provider-card>div{display:grid;gap:4px;min-width:0}
+.advisor-provider-card b{font-size:12px;overflow-wrap:anywhere}
+.advisor-provider-card small{font-size:10px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}
+.advisor-provider-status{align-self:flex-start;padding:4px 7px;border:1px solid #40516a;border-radius:999px;font-size:9px;font-weight:750;letter-spacing:.45px;color:#c7d4e4;background:#152338}
+.advisor-provider-status.status-available{border-color:#286c56;color:#83e2bb;background:#14392f}
+.advisor-provider-status.status-configured{border-color:#365f8d;color:#a8ceff;background:#182e49}
+.advisor-provider-status.status-needs_key{border-color:#675b37;color:#e7d49a;background:#302b1e}
+.advisor-provider-status.status-blocked{border-color:#804c50;color:#ffabb0;background:#3a2228}
+.advisor-coverage-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.advisor-coverage-card{display:grid;gap:5px;min-width:0;padding:10px;border:1px solid #2b3c55;border-radius:11px;background:#111f32}
+.advisor-coverage-card small{font-size:10px;line-height:1.35;color:var(--muted)}
+.advisor-coverage-card b{font-size:20px;font-variant-numeric:tabular-nums}
+.advisor-collection-status{display:grid;gap:5px;padding:11px;border:1px solid #2b3c55;border-radius:11px;background:#0d1929}
+.advisor-collection-status>span,.advisor-collection-status>small{color:var(--muted);font-size:10px;line-height:1.45}
+.advisor-collection-status>b{font-size:12px;overflow-wrap:anywhere}
+.advisor-health-error{color:#ffabb0!important}
+.advisor-evidence-source-list{border-top:1px solid #2b3c55;padding-top:9px}
+.advisor-evidence-source-list>summary{font-size:11px;font-weight:700;color:#a9c8ee;cursor:pointer;min-height:30px}
+.advisor-evidence-source-list>div{display:grid;gap:7px}
+.advisor-evidence-source-list>div>div{display:grid;gap:3px;padding:8px 0;border-bottom:1px solid #24364d}
+.advisor-evidence-source-list b{font-size:11px}
+.advisor-evidence-source-list span,.advisor-evidence-source-list small{font-size:10px;color:var(--muted);overflow-wrap:anywhere}
+@media(min-width:620px){
+ .advisor-provider-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+ .advisor-coverage-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+ .advisor-provider-card{min-height:105px}
+}

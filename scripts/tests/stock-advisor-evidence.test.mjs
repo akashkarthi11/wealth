@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { buildEvidenceContext, normalizeResearchSource } from '../../api/_lib/stock-advisor-evidence.js';
 
 const now = Date.parse('2026-11-22T12:00:00Z');
@@ -20,4 +21,30 @@ test('allows evidence-ready only when price, statements and technical data are a
   const types = ['market_price', 'financial_statement', 'technical_indicator'];
   const sources = types.map(type => ({ title: type, url: 'https://example.com/' + type, source_type: type, verification_status: 'verified', retrieved_at: new Date(now).toISOString() }));
   assert.equal(buildEvidenceContext(sources, now).action_gate, 'EVIDENCE_READY');
+});
+
+const advisorRoute = readFileSync(new URL('../../api/_routes/stock-advisor.js', import.meta.url), 'utf8');
+
+test('Nemotron Gateway requests disable hidden reasoning for concise JSON answers', () => {
+  assert.match(advisorRoute, /reasoning:\s*\{\s*effort:\s*'none'\s*\}/);
+  assert.match(advisorRoute, /response_format:\s*\{\s*type:\s*'json_object'\s*\}/);
+  assert.match(advisorRoute, /max_tokens:\s*4096/);
+});
+
+test('empty Gateway responses include finish reason and token diagnostics', () => {
+  assert.match(advisorRoute, /finish_reason/);
+  assert.match(advisorRoute, /completion_tokens/);
+  assert.match(advisorRoute, /no final content/);
+});
+
+test('fresh MFAPI NAV counts as price evidence but does not invent equity fundamentals', () => {
+  const source = { title:'NAV observation', url:'https://api.mfapi.in/mf/119551', source_type:'fund_nav', verification_status:'verified', retrieved_at:new Date(now).toISOString(), published_at:new Date(now).toISOString() };
+  const result = buildEvidenceContext([source], now);
+  assert.ok(!result.missing_evidence_types.includes('market_price'));
+  assert.ok(result.missing_evidence_types.includes('financial_statement'));
+  assert.equal(result.action_gate,'DATA_REQUIRED');
+});
+test('old MFAPI NAV is downgraded using its seven-day freshness limit', () => {
+  const source = normalizeResearchSource({ title:'Old NAV', url:'https://api.mfapi.in/mf/119551', source_type:'fund_nav', verification_status:'verified', retrieved_at:'2026-11-10T00:00:00Z' }, now);
+  assert.equal(source.verification_status,'stale');
 });

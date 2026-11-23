@@ -2,7 +2,8 @@
   "git": {
     "deploymentEnabled": {
       "**": false,
-      "main": true
+      "main": true,
+      "development": true
     }
   },
   "rewrites": [
@@ -17,7 +18,7 @@
   ],
   "functions": {
     "api/router.js": {
-      "maxDuration": 30,
+      "maxDuration": 60,
       "regions": [
         "sin1"
       ]
@@ -121,12 +122,8 @@
   ],
   "crons": [
     {
-      "path": "/api/refresh-market-prices",
-      "schedule": "0 23 * * *"
-    },
-    {
-      "path": "/api/nightly",
-      "schedule": "0 20 * * *"
+      "path": "/api/jobs/dispatch",
+      "schedule": "15 13 * * *"
     }
   ]
 }
