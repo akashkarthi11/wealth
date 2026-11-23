@@ -1,15 +1,28 @@
 const BASE = 'https://api.tejhq.dev/v1';
 const SOURCE = 'TejHQ NSE EOD';
+import { recordApiCall } from './api-audit.js';
 const timeout = ms => AbortSignal.timeout(ms);
 const finite = value => Number.isFinite(Number(value)) ? Number(value) : null;
 
-async function getJson(url) {
+async function getJson(url, db = null, ticker = null) {
+  const startedAt = Date.now();
   const response = await fetch(url, {
     headers: { Accept: 'application/json', 'User-Agent': 'WealthPersonalStockResearch/1.0' },
     signal: timeout(12000)
   });
-  if (!response.ok) throw new Error('TejHQ HTTP ' + response.status);
-  return response.json();
+  if (!response.ok) {
+    if (db) await recordApiCall(db, { provider: SOURCE, endpoint: url, ticker, httpStatus: response.status, ok: false, usable: false,
+      durationMs: Date.now() - startedAt, error: 'TejHQ HTTP ' + response.status });
+    throw new Error('TejHQ HTTP ' + response.status);
+  }
+  const payload = await response.json();
+  if (db) {
+    const rows = rowsFrom(payload);
+    await recordApiCall(db, { provider: SOURCE, endpoint: url, ticker, httpStatus: response.status, ok: true,
+      usable: rows.some(r => normalizeRow(r)), durationMs: Date.now() - startedAt,
+      payload: Array.isArray(payload) ? { rows: payload } : payload, bytes: JSON.stringify(payload || {}).length });
+  }
+  return payload;
 }
 
 function rowsFrom(payload) {
@@ -67,7 +80,7 @@ export async function collectTejHqEquityEvidence({ ticker, name, runId, db }) {
     if (!/^[A-Z0-9&.-]{1,30}$/.test(symbol)) throw new Error('Invalid NSE symbol.');
     const to = new Date().toISOString().slice(0, 10);
     const fromDate = new Date(Date.now() - 420 * 86400000).toISOString().slice(0, 10);
-    const payload = await getJson(BASE + '/ohlcv/nse/' + encodeURIComponent(symbol) + '?from=' + fromDate + '&to=' + to);
+    const payload = await getJson(BASE + '/ohlcv/nse/' + encodeURIComponent(symbol) + '?from=' + fromDate + '&to=' + to, db, symbol);
     const history = rowsFrom(payload).map(normalizeRow).filter(Boolean).sort((a, b) => a.date.localeCompare(b.date));
     const deduped = [...new Map(history.map(row => [row.date, row])).values()].slice(-260);
     if (!deduped.length) throw new Error('TejHQ returned no valid NSE EOD rows for ' + symbol + '.');

@@ -1,9 +1,11 @@
 const BASE='https://api.mfapi.in/mf';
+import { recordApiCall } from './api-audit.js';
 const timeout=ms=>AbortSignal.timeout(ms);
 const clean=s=>String(s||'').replace(/\s+/g,' ').trim();
 const normalize=s=>clean(s).toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
 
 async function getJson(url){
+ const auditStartedAt=Date.now();
  const response=await fetch(url,{headers:{Accept:'application/json','User-Agent':'MyWealthPersonalResearch/1.0'},signal:timeout(9000)});
  if(!response.ok)throw new Error('MFAPI HTTP '+response.status);
  return response.json();

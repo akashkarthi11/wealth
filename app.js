@@ -465,6 +465,44 @@ async function loadDataQuality(){
  }catch(e){box.innerHTML='<p class="error">'+esc(e.message)+'</p>'}
 }
 
+// "Succeeded" only means the handler did not throw. Production had interest-accrual write 0 rows and auto-research
+// queue 0 runs, both reported as successes (owner's check, 2026-11-23). Say what the run actually did.
+function jobWork(key,result){
+ let r=result;if(typeof r==='string'){try{r=JSON.parse(r)}catch{r=null}}
+ if(!r||typeof r!=='object')return {text:'',idle:false};
+ const n=v=>Number(v||0),plural=(c,w)=>c+' '+w+(c===1?'':'s');
+ if(key==='interest-accrual'){
+  const rows=n(r.rows),users=n(r.users),through=r.through?', through '+r.through:'';
+  return rows?{text:plural(rows,'accrual row')+' for '+plural(users,'user')+through,idle:false}
+             :{text:'no accruals written for '+plural(users,'user')+through,idle:true};
+ }
+ if(key==='market-price-refresh'){
+  const list=Array.isArray(r.results)?r.results:[],updated=list.filter(x=>x&&x.status==='updated').length;
+  return updated?{text:plural(updated,'price')+' updated'+(n(r.failed)?' · '+n(r.failed)+' failed':''),idle:false}
+                :{text:'no prices updated',idle:true};
+ }
+ if(key==='stock-advisor-auto-research'){
+  const queued=Array.isArray(r.results)?r.results.length:0;
+  return queued?{text:plural(queued,'research run')+' queued',idle:false}
+               :{text:plural(n(r.checked),'schedule')+' checked · nothing was due',idle:true};
+ }
+ if(key==='stock-advisor-data-collection'){
+  const bits=[];
+  if(r.instruments!=null)bits.push(plural(n(r.instruments),'holding'));
+  if(n(r.market_data_updated))bits.push(plural(n(r.market_data_updated),'price'));
+  if(n(r.nav_updated))bits.push(n(r.nav_updated)+' NAV'+(n(r.nav_updated)===1?'':'s'));
+  if(n(r.announcements))bits.push(plural(n(r.announcements),'announcement'));
+  if(n(r.financials_verified))bits.push(plural(n(r.financials_verified),'statement')+' verified');
+  if(n(r.failed))bits.push(n(r.failed)+' failed');
+  if(n(r.skipped_for_time))bits.push(n(r.skipped_for_time)+' left for next time');
+  const did=n(r.market_data_updated)+n(r.nav_updated)+n(r.announcements)+n(r.financials_verified);
+  return {text:bits.join(' · ')||'nothing collected',idle:!did};
+ }
+ if(r.error)return {text:String(r.error).slice(0,140),idle:false};
+ const counts=Object.keys(r).filter(k=>typeof r[k]==='number');
+ const shown=counts.filter(k=>r[k]!==0).slice(0,4);
+ return {text:shown.map(k=>r[k]+' '+k.replace(/_/g,' ')).join(' · ')||'nothing to report',idle:counts.length>0&&shown.length===0};
+}
 function scheduledJobsHtml(data){
  const jobs=data?.jobs||[];
  const fmt=value=>value?new Date(value).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Kolkata'}):'Not yet';
@@ -488,7 +526,9 @@ function scheduledJobsHtml(data){
    '<div class="jobs-card-head"><div class="jobs-job-title"><span class="jobs-job-icon">◷</span><div><h4>'+esc(j.name)+'</h4><p>'+esc(j.description||'Scheduled automation')+'</p></div></div>'+
    '<label class="jobs-switch" title="'+(enabled?'Pause job':'Enable job')+'"><input type="checkbox" data-job-enabled'+(enabled?' checked':'')+' aria-label="Enable '+esc(j.name)+'"><span></span></label></div>'+
    '<div class="jobs-card-meta"><div><small>Schedule</small><b>'+esc(time)+' · '+(frequency==='weekdays'?'Weekdays':'Every day')+'</b></div><div><small>Last run</small><b>'+esc(j.last_run_at?fmt(j.last_run_at):'Not run yet')+'</b></div></div>'+
-   '<div class="jobs-card-status"><span>Last result</span>'+status(j.last_status)+(j.queued?' <span class="jobs-status info">'+j.queued+' queued</span>':'')+'</div>'+
+   (()=>{const last=(Array.isArray(j.recent_runs)?j.recent_runs:[])[0],w=last?jobWork(j.job_key,last.result):{text:'',idle:false};
+     return '<div class="jobs-card-status"><span>Last result</span>'+status(j.last_status)+(w.idle?' <span class="jobs-status neutral">Nothing to do</span>':'')+(j.queued?' <span class="jobs-status info">'+j.queued+' queued</span>':'')+'</div>'+
+      (w.text?'<p class="jobs-work'+(w.idle?' idle':'')+'">'+esc(w.text)+'</p>':'')})()+
    (j.last_error?'<p class="jobs-error" role="alert">'+esc(j.last_error)+'</p>':'')+
    '<div class="jobs-card-actions"><button type="button" class="primary" data-job-run="'+esc(j.id)+'">▶ Run now</button><button type="button" class="ghost" data-job-edit-toggle="'+esc(j.id)+'">Edit schedule</button></div>'+
    '<div class="jobs-edit-panel" data-job-edit hidden><div class="jobs-edit-title">Schedule settings</div><div class="jobs-edit-fields"><label>Time (IST)<input type="time" max="18:45" data-job-time value="'+esc(time)+'"></label><label>Repeat<select data-job-frequency><option value="daily"'+(frequency==='daily'?' selected':'')+'>Every day</option><option value="weekdays"'+(frequency==='weekdays'?' selected':'')+'>Monday–Friday</option></select></label></div><button type="button" class="primary" data-job-save="'+esc(j.id)+'">Save changes</button></div>'+
@@ -497,12 +537,13 @@ function scheduledJobsHtml(data){
     const finished=run.finished_at?fmt(run.finished_at):'';
     const elapsed=run.started_at&&run.finished_at?Math.max(0,new Date(run.finished_at)-new Date(run.started_at)):null;
     const duration=elapsed==null?'':elapsed<1000?' · <1 sec':' · '+(elapsed<60000?Math.round(elapsed/1000)+' sec':Math.floor(elapsed/60000)+'m '+Math.round((elapsed%60000)/1000)+'s');
-    return '<div><span><b>'+esc(began)+'</b><small>'+(finished?'Finished '+esc(finished):'')+esc(run.trigger_type?' · '+run.trigger_type:'')+duration+'</small>'+(run.error?'<small class="jobs-error">'+esc(run.error)+'</small>':'')+'</span>'+status(run.status)+'</div>';
+    const w=jobWork(j.job_key,run.result);
+    return '<div><span><b>'+esc(began)+'</b><small>'+(finished?'Finished '+esc(finished):'')+esc(run.trigger_type?' · '+run.trigger_type:'')+duration+'</small>'+(w.text?'<small class="jobs-work'+(w.idle?' idle':'')+'">'+esc(w.text)+'</small>':'')+(run.error?'<small class="jobs-error">'+esc(run.error)+'</small>':'')+'</span>'+status(run.status)+'</div>';
    }).join('')+'</div>':'<p class="muted">No execution history yet. Use Run now to test this job.</p>')+'</details>'+
    '<p class="jobs-next">Next scheduled run: <b>'+esc(enabled&&j.next_run_at?fmt(j.next_run_at):enabled?'Waiting for dispatcher':'Paused')+'</b></p>'+
   '</article>';
  }).join('');
- return '<section class="jobs-page"><div class="jobs-page-head"><div><h4>Your scheduled jobs</h4><p>Monitor every automation, change its schedule and inspect recent runs. Changes are saved to your existing database schedules.</p></div><button type="button" class="ghost" data-jobs-refresh>↻ Refresh</button></div>'+
+ return '<section class="jobs-page"><div class="jobs-page-head"><div><h4>Your scheduled jobs</h4><p>Monitor every automation, change its schedule and inspect recent runs. Changes are saved to your existing database schedules.</p></div><button type="button" class="primary" data-queue-run>▶ Run queue now</button> <button type="button" class="ghost" data-jobs-refresh>↻ Refresh</button></div>'+
  overview+
  (jobs.length?'<div class="jobs-list">'+cards+'</div>':'<div class="jobs-empty">No scheduled jobs are configured yet.</div>')+
  '<p class="jobs-footnote">All times are India Standard Time. The central dispatcher processes due jobs; the saved time is a due-time cutoff, not an exact-minute guarantee. Run history is retained by the existing jobs service.</p></section>';
@@ -546,7 +587,7 @@ async function loadJobs(){
    const page=box.querySelector('.jobs-page');
    if(page){const empty=page.querySelector('.jobs-empty');if(empty)empty.remove();page.insertAdjacentHTML('beforeend','<div class="jobs-list">'+card+'</div>')}
   }
-  if(jobs.queue?.pending>0)pumpJobQueue('jobs',loadJobs);
+  if(jobs.queue?.waiting>0)pumpJobQueue('jobs',loadJobs);
  }catch(e){box.innerHTML='<section class="chart-card"><h4>Scheduled jobs unavailable</h4><p class="error">'+esc(e.message)+'</p></section>'}
 }
 
@@ -566,18 +607,18 @@ function aiChip(status){const s=String(status||'').toLowerCase();const tone=['ok
  return '<span class="jobs-status '+tone+'">'+esc(label)+'</span>'}
 function aiDataHtml(d){
  const runs=d.runs||[],sel=d.selected;
- if(!sel)return '<section class="jobs-page"><div class="jobs-page-head"><div><h4>AI data</h4><p>The data collection job has not run yet. Open Scheduled jobs and use Run now on “Stock Advisor data collection”.</p></div><button type="button" class="ghost" data-aidata-refresh>↻ Refresh</button></div></section>';
+ if(!sel)return '<section class="jobs-page"><div class="jobs-page-head"><div><h4>AI data</h4><p>The data collection job has not run yet. Open Scheduled jobs and use Run now on “Stock Advisor data collection”.</p></div><button type="button" class="primary" data-queue-run>▶ Run queue now</button> <button type="button" class="ghost" data-aidata-refresh>↻ Refresh</button></div></section>';
  const limit=(d.function_limit_seconds||60)*1000,steps=sel.steps||[],firstStep=steps.find(s=>s.started_at),t0=firstStep?Date.parse(firstStep.started_at):Date.parse(sel.started_at);
  const dur=sel.duration_ms!=null?sel.duration_ms:(sel.status==='running'?Date.now()-Date.parse(sel.started_at):null);
  const near=sel.work_ms==null&&dur!=null&&dur>limit*0.75; // a queued run is split over many calls; only a run made in one call can run into the limit
- const queueLeft=(d.queue?.pending||0)+(d.queue?.running||0);
+ const queueLeft=d.queue?.waiting||0;
  const c=sel.counts||{};
  const picker='<label class="aid-pick">Run<select data-aidata-run>'+runs.map(r=>'<option value="'+esc(r.id)+'"'+(r.id===sel.id?' selected':'')+'>'+esc(fmtJobDate(r.started_at))+' · '+esc(aiChip(r.status).replace(/<[^>]+>/g,''))+' · '+esc(aiMs(r.duration_ms))+'</option>').join('')+'</select></label>';
  const tiles='<section class="jobs-overview"><article><span>Status</span><b>'+aiChip(sel.status)+'</b><small>'+esc(fmtJobDate(sel.started_at))+'</small></article>'+
   '<article class="'+(near?'has-failures':'')+'"><span>'+(sel.work_ms!=null?'Working time':'Took')+'</span><b>'+esc(aiMs(sel.work_ms!=null?sel.work_ms:dur))+'</b><small>'+(sel.progress?sel.progress.done+' of '+sel.progress.total+' steps done':'Limit per call: '+esc(aiMs(limit)))+'</small></article>'+
   '<article><span>Steps</span><b>'+steps.length+'</b><small>'+c.instruments+' holdings read</small></article>'+
   '<article class="'+(c.failed?'has-failures':'')+'"><span>Failed</span><b>'+c.failed+'</b><small>'+c.skipped+' skipped</small></article></section>';
- const warn=(queueLeft?'<p class="muted">'+queueLeft+' step'+(queueLeft===1?'':'s')+' still waiting in the job queue (all jobs). They run one at a time when the next worker call starts; this page keeps them moving while it is open.</p>':'')+(sel.status==='stalled'?'<p class="jobs-error" role="alert">This run never recorded a finish. It was most likely stopped by the '+esc(aiMs(limit))+' function limit. The steps below show how far it got.</p>':'')+
+ const warn=(queueLeft?'<p class="muted">'+queueLeft+' step'+(queueLeft===1?'':'s')+' still waiting'+(d.queue?.stranded?', including '+d.queue.stranded+' research run'+(d.queue.stranded===1?'':'s')+' not yet picked up':'')+'. They run one at a time; this page keeps them moving while it is open.</p>':'')+(sel.status==='stalled'?'<p class="jobs-error" role="alert">This run never recorded a finish. It was most likely stopped by the '+esc(aiMs(limit))+' function limit. The steps below show how far it got.</p>':'')+
   (near&&sel.status!=='stalled'?'<p class="jobs-error" role="alert">This run used more than three quarters of the '+esc(aiMs(limit))+' limit. With more holdings it can be stopped before it finishes.</p>':'')+
   (sel.error?'<p class="jobs-error" role="alert">'+esc(sel.error)+'</p>':'');
  const rows=steps.length?steps.map(s=>'<div class="aid-row aid-t"><span class="aid-when">'+(s.started_at?'+'+esc(aiMs(Math.max(0,Date.parse(s.started_at)-t0))):'–')+'</span><span class="aid-what"><b>'+esc(s.provider||'')+(s.ticker?' · '+esc(s.ticker):'')+'</b><small>'+esc(s.name||'')+(s.note?' — '+esc(s.note):'')+'</small></span><span class="aid-end">'+aiChip(s.status)+'<small>'+esc(aiMs(s.ms))+'</small></span></div>').join(''):'<p class="muted">This run was made before step timings were recorded. Run it again to see the steps.</p>';
@@ -586,7 +627,7 @@ function aiDataHtml(d){
  const f=d.filter||{};
  const records='<div class="aid-filters"><label>Stock<input data-aidata-ticker value="'+esc(f.ticker||aiDataState.ticker)+'" placeholder="e.g. TCS" maxlength="40"></label><label>Provider<select data-aidata-provider><option value="">All</option>'+(d.providers||[]).map(p=>'<option'+(p===(f.provider||aiDataState.provider)?' selected':'')+'>'+esc(p)+'</option>').join('')+'</select></label><button type="button" class="ghost" data-aidata-apply>Show</button></div>'+
   ((d.sources||[]).length?'<div class="aid-table">'+d.sources.map(s=>'<div class="aid-row"><span class="aid-what"><b>'+esc(s.ticker)+' · '+esc(s.publisher||'')+'</b><small>'+(s.url?'<a href="'+esc(s.url)+'" target="_blank" rel="noopener noreferrer">'+esc(s.title)+'</a>':esc(s.title))+'</small>'+(s.excerpt?'<small>'+esc(s.excerpt)+'</small>':'')+'</span><span class="aid-end">'+aiChip(s.verification_status)+'<small>'+esc(String(s.source_type).replace(/_/g,' '))+'</small><small>fetched '+esc(fmtJobDate(s.retrieved_at))+'</small></span></div>').join('')+'</div><p class="muted">Latest 100 records.</p>':'<p class="muted">No stored records match.</p>');
- return '<section class="jobs-page"><div class="jobs-page-head"><div><h4>AI data</h4><p>What the daily “Stock Advisor data collection” job fetched for the advisor: every provider call with its time, and what is stored now.</p></div><button type="button" class="ghost" data-aidata-refresh>↻ Refresh</button></div>'+
+ return '<section class="jobs-page"><div class="jobs-page-head"><div><h4>AI data</h4><p>What the daily “Stock Advisor data collection” job fetched for the advisor: every provider call with its time, and what is stored now.</p></div><button type="button" class="primary" data-queue-run>▶ Run queue now</button> <button type="button" class="ghost" data-aidata-refresh>↻ Refresh</button></div>'+
   picker+tiles+warn+
   '<article class="jobs-card"><div class="jobs-card-head"><div class="jobs-job-title"><div><h4>What happened in this run</h4><p>In order, one line per provider call. “+” is the time since the run’s first call.</p></div></div></div><div class="aid-table">'+rows+'</div></article>'+
   '<article class="jobs-card"><div class="jobs-card-head"><div class="jobs-job-title"><div><h4>Stored for the advisor now</h4><p>All stored data, newest fetch per provider. Unverified items do not count as evidence.</p></div></div></div>'+stored+missing+'</article>'+
@@ -599,7 +640,7 @@ async function loadAiData(){
   const q=new URLSearchParams();if(aiDataState.run)q.set('run',aiDataState.run);if(aiDataState.ticker)q.set('ticker',aiDataState.ticker);if(aiDataState.provider)q.set('provider',aiDataState.provider);
   const d=await api('/api/ai-data'+(q.toString()?'?'+q:''));
   box.innerHTML=aiDataHtml(d);
-  if(d.queue?.pending>0)pumpJobQueue('ai-data',loadAiData);
+  if(d.queue?.waiting>0)pumpJobQueue('ai-data',loadAiData);
   else if(d.selected?.status==='running')aiDataTimer=setTimeout(()=>{if(activeView==='ai-data')loadAiData()},4000);
  }catch(e){box.innerHTML='<section class="chart-card"><h4>AI data unavailable</h4><p class="error">'+esc(e.message)+'</p></section>'}
 }
@@ -608,6 +649,27 @@ function auBar(used,limit){
  if(!limit)return '';
  const pct=Math.min(100,Math.round(used/limit*100));
  return '<div class="au-bar'+(pct>=100?' full':pct>=80?' near':'')+'"><span style="width:'+pct+'%"></span></div>';
+}
+function auHealth(p){
+ const s=String(p.status||'available');
+ const label={configured:'Configured',needs_key:'Needs a key',blocked:'Blocked',available:'Open · no key'}[s]||s.replace(/_/g,' ');
+ const tone=s==='configured'?'success':s==='needs_key'?'danger':s==='blocked'?'info':'neutral';
+ return '<span class="jobs-status '+tone+'">'+esc(label)+'</span>';
+}
+// What the provider actually sent back, from wealth_api_audit. This is how "which data do we get" is answered without
+// spending another request.
+function auAudit(a){
+ if(!a)return '';
+ const counts=a.section_counts&&typeof a.section_counts==='object'?a.section_counts:{};
+ const rows=Object.entries(counts).slice(0,14).map(([k,v])=>'<tr><td>'+esc(k)+'</td><td>'+esc(String(v))+'</td></tr>').join('');
+ const empties=Object.entries(counts).filter(([,v])=>v===0||v==='empty'||v==='empty object').map(([k])=>k);
+ return '<details class="au-audit"><summary>Last response · '+esc(a.ticker||'')+' '+(a.ok?'ok':'failed')+
+  (a.usable===false?' · nothing usable':a.usable===true?' · usable':'')+'</summary>'+
+  (empties.length?'<p class="au-meta idle">Came back empty: '+esc(empties.join(', '))+'</p>':'')+
+  (rows?'<table class="au-shape"><tr><th>field</th><th>rows / size</th></tr>'+rows+'</table>':'<p class="au-meta">No fields recorded.</p>')+
+  (a.error?'<p class="au-meta idle">'+esc(String(a.error).slice(0,200))+'</p>':'')+
+  '<p class="au-meta">'+esc(fmtJobDate(a.created_at))+(a.bytes?' · '+a.bytes+' bytes':'')+(a.duration_ms?' · '+aiMs(a.duration_ms):'')+'</p>'+
+  '</details>';
 }
 function apiUsageHtml(d){
  const rows=(d.providers||[]).map(p=>{
@@ -626,6 +688,9 @@ function apiUsageHtml(d){
   return '<article class="au-card'+(limited&&p.remaining===0?' spent':'')+'">'+
    '<div class="au-head"><div><h4>'+esc(p.name)+'</h4><small>'+esc(p.purpose||'')+'</small></div>'+
    '<div class="au-count"><b>'+esc(headline)+'</b><small>'+esc(left)+'</small></div></div>'+
+   '<div class="au-health">'+auHealth(p)+(p.key_env?'<code>'+esc(p.key_env)+'</code>':'')+'</div>'+
+   (p.detail?'<p class="au-meta">'+esc(p.detail)+'</p>':'')+
+   auAudit(p.audit)+
    auBar(p.used||0,limited?p.limit:0)+
    '<p class="au-meta">'+esc(bits.join(' · ')||'nothing used today')+'</p>'+
    (p.resets_at_ist?'<p class="au-meta">Resets at '+esc(p.resets_at_ist)+'</p>':'')+
@@ -635,6 +700,7 @@ function apiUsageHtml(d){
  }).join('');
  return '<section class="jobs-page"><div class="jobs-page-head"><div><h4>API usage</h4><p>What each outside provider allows, what today has used and what is left. Counted for the Indian day, which starts at midnight IST.</p></div><button type="button" class="ghost" data-apiusage-refresh>↻ Refresh</button></div>'+
   '<div class="au-list">'+(rows||'<p class="muted">No provider activity recorded yet.</p>')+'</div>'+
+  (d.config_note?'<p class="jobs-footnote">'+esc(d.config_note)+'</p>':'')+
   '<p class="jobs-footnote">A limit is shown only where the provider publishes one and this app enforces it. Where none is shown, none is published — not that calls are unlimited.</p></section>';
 }
 async function loadApiUsage(){
@@ -642,6 +708,19 @@ async function loadApiUsage(){
  try{box.innerHTML=apiUsageHtml(await api('/api/api-usage'))}
  catch(e){box.innerHTML='<section class="chart-card"><h4>API usage unavailable</h4><p class="error">'+esc(e.message)+'</p></section>'}
 }
+// Run the job queue now instead of waiting for a cron. It also adopts research runs that have nothing queued yet.
+document.addEventListener('click',async e=>{
+ const runQueue=e.target.closest('[data-queue-run]');
+ if(!runQueue)return;
+ const back=runQueue.textContent;runQueue.disabled=true;runQueue.textContent='Running…';
+ try{
+  const r=await api('/api/jobs/worker',{method:'POST',body:'{}'});
+  const left=(r?.queue?.waiting!=null)?r.queue.waiting:((r?.queue?.pending||0)+(r?.queue?.running||0));
+  runQueue.textContent=(r?.processed||0)+' step'+((r?.processed||0)===1?'':'s')+' run'+(left?' · '+left+' waiting':'');
+  setTimeout(()=>{runQueue.textContent=back;runQueue.disabled=false},4000);
+ }catch(err){showError(err);runQueue.textContent=back;runQueue.disabled=false;return}
+ if(activeView==='ai-data')loadAiData();else if(activeView==='jobs')loadJobs();
+});
 document.addEventListener('click',e=>{
  if(e.target.closest('[data-apiusage-refresh]')){loadApiUsage();return}
  if(e.target.closest('[data-aidata-refresh]')){loadAiData();return}

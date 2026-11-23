@@ -28,6 +28,14 @@ export async function queueCounts(db) {
   const rows = await db.query(`SELECT status,count(*)::int AS n FROM wealth_job_queue WHERE status IN ('pending','running') GROUP BY status`);
   const out = { pending: 0, running: 0 };
   for (const r of rows) out[r.status] = Number(r.n);
+  // Research runs that are open but have nothing queued yet. The worker adopts them, so a page that only watched
+  // "pending" would never call the worker and the runs would sit until the next cron.
+  const [stranded] = await db.query(`SELECT count(*)::int AS n FROM wealth_stock_advisor_runs r
+    JOIN wealth_stock_advisor_run_jobs j ON j.run_id=r.id AND j.stage='debate'
+    WHERE r.status NOT IN ('completed','failed','partially_completed') AND j.status IN ('pending','running')
+      AND NOT EXISTS (SELECT 1 FROM wealth_job_queue q WHERE q.handler_key=$1 AND q.payload->>'run_id'=r.id::text AND q.status IN ('pending','running'))`, [DEBATE_HANDLER]);
+  out.stranded = Number(stranded?.n || 0);
+  out.waiting = out.pending + out.running + out.stranded;
   return out;
 }
 

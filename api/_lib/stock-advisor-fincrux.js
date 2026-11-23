@@ -1,6 +1,7 @@
 const BASE = 'https://api.fincrux.org/api/financials';
 const SOURCE = 'Fincrux';
 const MAX_DAILY_REQUESTS = 5;
+import { recordApiCall } from './api-audit.js';
 const timeout = ms => AbortSignal.timeout(ms);
 const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
 const safeDate = value => {
@@ -101,7 +102,8 @@ export async function collectFincruxFinancials({ instrument, db } = {}) {
   }
   const dateKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   const sourceUrl = BASE + '/' + encodeURIComponent(ticker);
-  let reservationId = null;
+  let reservationId = null, payload = null;
+  const startedAt = Date.now();
   try {
     reservationId = await reserveDailySlot(db, ticker, sourceUrl, dateKey);
     if (!reservationId) {
@@ -114,7 +116,10 @@ export async function collectFincruxFinancials({ instrument, db } = {}) {
       signal: timeout(12000)
     });
     if (!response.ok) throw new Error('Fincrux HTTP ' + response.status + '.');
-    const payload = await response.json();
+    payload = await response.json();
+    // Record what came back before parsing, so one request answers "what data does this plan actually give".
+    await recordApiCall(db, { provider: SOURCE, endpoint: sourceUrl, ticker, httpStatus: response.status, ok: true,
+      durationMs: Date.now() - startedAt, payload, bytes: JSON.stringify(payload || {}).length });
     const normalized = normalizeFincruxFinancials(payload, ticker);
     const retrievedAt = new Date().toISOString();
     const evidence = {
@@ -146,20 +151,41 @@ export async function collectFincruxFinancials({ instrument, db } = {}) {
     `, [reservationId, 'Financial statements — ' + (normalized.company || ticker), normalized.last_updated_at, retrievedAt, excerpt, JSON.stringify(evidence)]);
     result.status = 'stored_unverified';
     result.statement_rows = normalized.statement_row_count;
+    await recordApiCall(db, { provider: SOURCE, endpoint: sourceUrl, ticker, httpStatus: 200, ok: true, usable: true,
+      durationMs: Date.now() - startedAt, payload: { data: normalized.financials }, bytes: null });
     result.last_updated_at = normalized.last_updated_at;
     result.source_url = sourceUrl;
     return result;
   } catch (error) {
     result.status = 'failed';
     result.error = String(error?.message || error).slice(0, 240);
+    await recordApiCall(db, { provider: SOURCE, endpoint: sourceUrl, ticker, ok: false, usable: false,
+      durationMs: Date.now() - startedAt, payload, bytes: payload ? JSON.stringify(payload).length : null, error: result.error });
+    // One of five requests a day was spent, so keep everything the response did carry. 'rejected' keeps it out of the
+    // 30-day freshness check, so the ticker can be tried again instead of being locked out for a month.
+    const salvage = { provider: SOURCE, request_date_ist: dateKey, request_failed: true, error: result.error,
+      response_keys: payload && typeof payload === 'object' ? Object.keys(payload).slice(0, 20) : [],
+      data_keys: payload?.data && typeof payload.data === 'object' && !Array.isArray(payload.data) ? Object.keys(payload.data).slice(0, 30) : [],
+      partial: {} };
+    for (const section of ['about', 'ratios', 'top_ratios', 'shareholding_quarterly', 'shareholding_yearly', 'last_updated_at']) {
+      const value = payload?.data?.[section];
+      if (value !== undefined && value !== null) salvage.partial[section] = value;
+    }
+    result.response_keys = salvage.response_keys;
+    result.data_keys = salvage.data_keys;
     if (reservationId) {
-      await db.query(`
-        UPDATE wealth_stock_advisor_research_sources
-        SET title=$2,retrieved_at=now(),excerpt=$3,
-            evidence=jsonb_build_object('provider','Fincrux','request_date_ist',$4,'request_failed',true,'error',$5),
-            verification_status='rejected'
-        WHERE id=$1
-      `, [reservationId, 'Fincrux request failed — ' + ticker, result.error, dateKey, result.error]).catch(() => {});
+      try {
+        await db.query(`
+          UPDATE wealth_stock_advisor_research_sources
+          SET title=$2::text,retrieved_at=now(),excerpt=$3::text,evidence=$4::jsonb,verification_status='rejected'
+          WHERE id=$1
+        `, [reservationId, 'Fincrux request failed — ' + ticker,
+          (result.error + (salvage.data_keys.length ? ' Response carried: ' + salvage.data_keys.join(', ') + '.' : '')).slice(0, 1000),
+          JSON.stringify(salvage)]);
+      } catch (writeError) {
+        // Never silent: a slot was spent and we failed to record it.
+        console.error('[stock-advisor-fincrux] could not record the failed request', writeError?.message || writeError);
+      }
     }
     return result;
   }

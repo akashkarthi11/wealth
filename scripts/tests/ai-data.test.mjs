@@ -127,7 +127,7 @@ test('draining runs whole jobs one at a time, closes each job run with the right
   const out = await drainQueue({ db: a, runHandler, deadlineAt: Date.now() + 20000 });
   assert.deepEqual(order, ['interest-accrual', 'backup', 'market-price-refresh']);
   assert.equal(out.processed, 3);
-  assert.deepEqual(out.queue, { pending: 0, running: 0 });
+  assert.deepEqual([out.queue.pending, out.queue.running, out.queue.waiting], [0, 0, 0], 'nothing left, and nothing waiting to be adopted');
   const status = async id => (await a.query('SELECT status,finished_at FROM wealth_scheduled_job_runs WHERE id=$1', [id]))[0];
   assert.equal((await status(r1)).status, 'succeeded');
   assert.equal((await status(r2)).status, 'partial');

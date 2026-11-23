@@ -1832,3 +1832,13 @@ b.pj-medium{color:#f5c26b}
 .au-meta{margin:0;font-size:12px;color:var(--muted);overflow-wrap:anywhere}
 .au-note{margin:0;font-size:12px;line-height:1.5;color:var(--muted);opacity:.85}
 @media (max-width:560px){.au-list{grid-template-columns:1fr}}
+.au-health{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.au-health code{font-size:11px;background:#1d242d;padding:1px 6px;border-radius:4px;color:var(--muted)}
+.jobs-work{margin:6px 0 0;font-size:12.5px;color:var(--muted);line-height:1.5;overflow-wrap:anywhere}
+.jobs-work.idle{color:#f0b65c}
+.au-audit{margin-top:4px;border-top:1px solid #2b3b52;padding-top:8px}
+.au-audit summary{cursor:pointer;font-size:12.5px;color:var(--muted)}
+.au-shape{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px;font-family:ui-monospace,Consolas,monospace}
+.au-shape th{text-align:left;color:var(--muted);font-weight:500;padding:2px 6px}
+.au-shape td{padding:2px 6px;border-top:1px solid #243041;overflow-wrap:anywhere}
+.au-meta.idle{color:#f0b65c}
