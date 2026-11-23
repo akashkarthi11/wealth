@@ -1888,3 +1888,42 @@ b.pj-medium{color:#f5c26b}
 .advisor-key-config input{width:100%;min-width:0;padding:9px 10px;border:1px solid var(--line,#ccc);border-radius:8px;background:var(--surface,#fff);color:inherit}
 .advisor-key-config button{justify-self:start}
 @media(min-width:700px){.advisor-key-config{grid-template-columns:1fr 1fr auto;align-items:end}.advisor-key-config button{margin-bottom:1px}}
+
+
+/* Fincrux key manager: responsive, readable cards and automatic ticker routing */
+.advisor-key-manager{gap:12px;padding:14px}
+.advisor-key-intro{display:grid;gap:5px}
+.advisor-key-intro>b{font-size:15px}
+.advisor-key-intro>small{font-size:12px;line-height:1.5;color:var(--muted)}
+.advisor-key-summary{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 12px;border:1px solid #31516e;border-radius:10px;background:#12243a}
+.advisor-key-summary>b{font-size:13px}
+.advisor-key-summary>span{font-size:11px;color:var(--muted)}
+.advisor-key-list{gap:10px}
+.advisor-key-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:10px;padding:12px}
+.advisor-key-main{display:grid;gap:6px;min-width:0}
+.advisor-key-heading{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.advisor-key-heading>b{font-size:14px}
+.advisor-key-state{font-size:10px;font-weight:750;letter-spacing:.5px;border-radius:99px;padding:4px 8px}
+.advisor-key-state.is-active{color:#8be0bd;background:#14382f;border:1px solid #286c56}
+.advisor-key-state.is-paused{color:#f0c4a0;background:#382b20;border:1px solid #73543a}
+.advisor-key-row .advisor-key-main>small{font-size:11px;line-height:1.4}
+.advisor-key-actions{display:flex;justify-content:flex-end;gap:6px;flex-wrap:wrap}
+.advisor-key-actions button{font-size:12px;min-height:36px;padding:7px 10px}
+.advisor-key-config{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:10px;padding-top:10px;border-top:1px solid #293c55}
+.advisor-key-config label{display:grid;gap:6px;min-width:0;font-size:12px;font-weight:650}
+.advisor-key-config input{width:100%;min-width:0;box-sizing:border-box;padding:12px;border:1px solid #405571;border-radius:10px;background:#0a1524;color:var(--text);font:inherit;font-size:13px}
+.advisor-key-config>button{min-height:42px;padding:8px 12px;white-space:nowrap}
+.advisor-key-routing{grid-column:1/-1;display:grid;gap:3px;margin:0;font-size:12px}
+.advisor-key-routing>span{color:var(--muted);font-size:11px;line-height:1.4}
+.advisor-key-row-env{grid-template-columns:minmax(0,1fr)}
+@media(max-width:620px){
+ .advisor-key-manager{padding:11px;gap:10px}
+ .advisor-key-row{grid-template-columns:minmax(0,1fr);gap:10px;padding:12px}
+ .advisor-key-actions{justify-content:flex-start}
+ .advisor-key-actions button{flex:1;min-width:0}
+ .advisor-key-config{grid-template-columns:minmax(0,1fr)}
+ .advisor-key-config>button{width:100%}
+ .advisor-key-add{grid-template-columns:minmax(0,1fr)}
+ .advisor-key-add input{box-sizing:border-box;width:100%;min-width:0}
+ .advisor-key-add button{width:100%}
+}
