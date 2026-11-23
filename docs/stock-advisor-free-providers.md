@@ -13,9 +13,9 @@ This document describes the provider adapters used by the existing Stock Advisor
 
 ### Fincrux setup
 
-Add `FINCRUX_API_KEY` only to the Development Preview environment. Never commit the key or include it in stored source URLs or logs.
+Set `FINCRUX_API_KEY` (and optionally `FINCRUX_API_KEY_2` through `FINCRUX_API_KEY_10`) as environment defaults only in the Development Preview environment. Never commit a key or include it in stored source URLs or logs. Additional keys can be added and ordered from Stock Advisor → Provider Health; database keys are encrypted with AES-256-GCM using a key derived from `WEALTH_SESSION_SECRET`, and are tried before environment defaults. The UI shows only masked values. Disable or remove a database override to stop using it; environment defaults remain untouched.
 
-The collector reserves each daily request in the existing `wealth_stock_advisor_research_sources` table under a Postgres advisory lock. Failed attempts count toward the five-request daily allowance. No separate quota table is created.
+The collector reserves each actual key attempt in the existing `wealth_stock_advisor_research_sources` table under a Postgres advisory lock. Failed attempts count toward the shared five-request-per-IST-day allowance; a fallback key is tried only if another reserved attempt is available. The cap is deliberately shared across all keys until Fincrux confirms that multiple keys have independent quotas. No separate quota table is created.
 
 The Fincrux response is stored as `financial_statement` with `verification_status='unverified'`. This is deliberate: the provider documents that its forced refresh scrapes Screener data, so its figures must not independently unlock the evidence gate.
 
