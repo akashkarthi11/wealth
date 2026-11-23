@@ -84,11 +84,17 @@ export async function collectTejHqEquityEvidence({ ticker, name, runId, db }) {
     const history = rowsFrom(payload).map(normalizeRow).filter(Boolean).sort((a, b) => a.date.localeCompare(b.date));
     const deduped = [...new Map(history.map(row => [row.date, row])).values()].slice(-260);
     if (!deduped.length) throw new Error('TejHQ returned no valid NSE EOD rows for ' + symbol + '.');
+    const latest = deduped[deduped.length - 1];
+    const latestAsOf = new Date(latest.date + 'T15:30:00+05:30');
+    if (!Number.isFinite(latestAsOf.getTime()) || Date.now() - latestAsOf.getTime() > 7 * 86400000) {
+      throw new Error('TejHQ NSE EOD data is stale for ' + symbol + '; latest observation is ' + latest.date + '.');
+    }
     result.observations = deduped.length;
 
     const [instrument] = await db.query('SELECT id FROM wealth_instruments WHERE upper(symbol)=upper($1) LIMIT 1', [symbol]);
     if (instrument?.id) {
-      for (const row of deduped) {
+      const recentRows = deduped.filter(row => Date.now() - new Date(row.date + 'T15:30:00+05:30').getTime() <= 7 * 86400000);
+      for (const row of recentRows) {
         await db.query(
           "INSERT INTO wealth_instrument_prices (instrument_id,as_of,source,price,fx_to_inr,fetched_at) VALUES ($1,$2::date + time '15:30',$3,$4,1,$5::timestamptz) ON CONFLICT (instrument_id,as_of,source) DO UPDATE SET price=EXCLUDED.price,fx_to_inr=EXCLUDED.fx_to_inr,fetched_at=EXCLUDED.fetched_at",
           [instrument.id, row.date, SOURCE, row.close, result.fetched_at]
@@ -97,7 +103,6 @@ export async function collectTejHqEquityEvidence({ ticker, name, runId, db }) {
       result.price_stored = true;
     }
 
-    const latest = deduped[deduped.length - 1];
     const priceEvidence = {
       provider: 'TejHQ', exchange: 'NSE', ticker: symbol, company: String(name || symbol),
       data_type: 'end_of_day_ohlcv', currency: 'INR', latest, observations: deduped.length,

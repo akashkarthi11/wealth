@@ -82,7 +82,12 @@ export async function adoptStrandedDebates(db, limit = 25) {
   return adopted;
 }
 
-const mapRunStatus = (http, payload) => http >= 500 || http === 401 || (payload?.ok === false && payload?.status === 'failed') ? 'failed' : payload?.ok === false ? 'partial' : 'succeeded';
+const mapRunStatus = (http, payload) => {
+  if (http >= 400 || payload?.status === 'failed') return 'failed';
+  if (payload?.status === 'partial' || payload?.ok === false || payload?.failed > 0 || payload?.instruments?.failed > 0) return 'partial';
+  if (payload?.status === 'skipped' || payload?.outcome === 'no_work_due') return 'skipped';
+  return 'succeeded';
+};
 
 export async function finishJobRun(db, { runId, jobId, status, http = null, payload = {}, error = null }) {
   const done = await db.query(`UPDATE wealth_scheduled_job_runs SET status=$2,finished_at=now(),http_status=$3,result=$4::jsonb,error=$5 WHERE id=$1 AND status='running' RETURNING id`,
@@ -135,9 +140,13 @@ export async function runItem(db, item, { runHandler, deadlineAt }) {
     }
     else if (item.handler_key === 'stock-advisor-data-collection' && TASKS[item.task]) result = await runCollectionTask(db, item.task, obj(item.payload), { deadlineAt });
     else { const r = await runHandler(item.handler_key, deadlineAt); result = { http_status: r.http_status, payload: r.payload }; }
-    await db.query(`UPDATE wealth_job_queue SET status='done',result=$2::jsonb,finished_at=now(),locked_until=NULL WHERE id=$1`, [item.id, JSON.stringify(result)]);
+    const payload = result?.payload || result || {};
+    const businessOutcome = String(payload?.status || (payload?.ok === false ? 'partial' : 'succeeded'));
+    const executionStatus = ['failed','error'].includes(businessOutcome) ? 'failed' : 'done';
+    const outcomeError = executionStatus === 'failed' ? String(payload?.error || payload?.message || 'Provider task failed').slice(0, 500) : null;
+    await db.query(`UPDATE wealth_job_queue SET status=$2,result=$3::jsonb,error=$4,finished_at=now(),locked_until=NULL WHERE id=$1`, [item.id, executionStatus, JSON.stringify(result), outcomeError]);
     await settle(db, item.job_run_id);
-    return { id: item.id, task: item.task, status: 'done' };
+    return { id: item.id, task: item.task, status: executionStatus, outcome: businessOutcome };
   } catch (e) {
     const message = String(e?.message || e).slice(0, 500);
     if (Number(item.attempts) < Number(item.max_attempts)) {
@@ -160,7 +169,7 @@ export async function drainQueue({ db, runHandler, deadlineAt = Date.now() + DIS
     if (!item) break;
     ran.push(await runItem(db, item, { runHandler, deadlineAt }));
   }
-  return { processed: ran.length, items: ran.map(x => x.task + ':' + x.status), queue: await queueCounts(db) };
+  return { processed: ran.length, items: ran.map(x => x.task + ':' + x.status + (x.outcome ? ':' + x.outcome : '')), outcomes: ran.map(x => ({ task: x.task, execution: x.status, outcome: x.outcome || null })), queue: await queueCounts(db) };
 }
 
 // Clean up after calls that were cut off: items out of attempts are failed, runs with nothing left to do are closed (a run with no items at

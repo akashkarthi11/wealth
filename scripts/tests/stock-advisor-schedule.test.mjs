@@ -63,6 +63,7 @@ test('invalid schedule settings fail closed',()=>{
 const route=readFileSync(new URL('../../api/_routes/stock-advisor-schedule.js',import.meta.url),'utf8');
 const service=readFileSync(new URL('../../api/_lib/stock-advisor-schedule-service.js',import.meta.url),'utf8');
 const cron=readFileSync(new URL('../../api/_routes/stock-advisor-scheduled.js',import.meta.url),'utf8');
+const debate=readFileSync(new URL('../../api/_lib/stock-advisor-debate.js',import.meta.url),'utf8');
 const router=readFileSync(new URL('../../api/router.js',import.meta.url),'utf8');
 const ui=readFileSync(new URL('../../app.js',import.meta.url),'utf8');
 const migration=readFileSync(new URL('../migrations/0042_stock_advisor_dynamic_schedule.sql',import.meta.url),'utf8');
@@ -81,6 +82,21 @@ test('Run Now has a database lock and a recent-run duplicate guard',()=>{
   assert.match(route,/created_at>now\(\)-interval '15 minutes'/);
   assert.match(route,/reused:true/);
 });
+test('submitted work is not counted as a successful completed research run',()=>{
+  assert.match(service,/last_success_at=CASE WHEN \$2='completed' THEN now\(\) ELSE last_success_at END/);
+  assert.doesNotMatch(service,/last_success_at=CASE WHEN \$2 IN \('submitted','completed'\)/);
+});
+test('scheduled research records remain submitted until all linked debates are terminal',()=>{
+  assert.match(debate,/schedule_execution_id:String\(input\.schedule_execution_id/);
+  assert.match(debate,/settleScheduledExecutionForRun\(runId\)/);
+  assert.match(debate,/last_success_at=CASE WHEN \$2='completed' THEN now\(\)/);
+});
+test('empty scheduler windows are explicitly reported as no work due',()=>{
+  assert.match(cron,/researchLaunched=result\.results\.some/);
+  assert.match(cron,/researchLaunched\?'succeeded':'skipped'/);
+  assert.match(cron,/outcome:researchLaunched\?'research_submitted_or_completed':'no_work_due'/);
+});
+
 test('scheduled executions use per-user per-date idempotency and retry failed runs',()=>{
   assert.match(service,/executionKey='scheduled:'\+dateKey/);
   assert.match(service,/ON CONFLICT \(user_id,execution_key\)/);
@@ -125,7 +141,7 @@ test('schedule migration is additive and stores execution history',()=>{
 });
 test('one central Vercel Cron dispatches (queues) the database-driven jobs once daily; the other crons only work the job queue',()=>{
   assert.deepEqual(vercel.crons.filter(c=>c.path==='/api/jobs/dispatch'),[{path:'/api/jobs/dispatch',schedule:'15 13 * * *'}]);
-  assert.ok(vercel.crons.every(c=>['/api/jobs/dispatch','/api/jobs/worker'].includes(c.path)),'no other cron paths');
+  assert.ok(vercel.crons.every(c=>['/api/nightly','/api/jobs/dispatch','/api/jobs/worker'].includes(c.path)),'only approved nightly, dispatch and worker paths');
   assert.ok(vercel.crons.every(c=>/^\d+ \d+ \* \* \*$/.test(c.schedule)),'each cron runs once a day (Hobby plan)');
 });
 test('frontend saves preferences via PUT and Run Now via POST',()=>{

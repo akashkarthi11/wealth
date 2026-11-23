@@ -9,6 +9,13 @@ import { sql, withActor, httpError, isDay, isUuid } from './_lib.js';
 const DAY = 86400e3, IST_MS = 5.5 * 3600e3;
 export const MAX_CATCH_UP_DAYS = 90, CORRECTION_WINDOW_DAYS = 30, FD_MAX_DAYS = 1200, STALE_PRINCIPAL_DAYS = 2;
 
+// Treat an account as an FD when either its account subtype or its linked product/name identifies it as one.
+// This prevents an aggregate FD linked under a generic savings subtype from accruing against a savings balance.
+export function interestAccountKind(link = {}) {
+  const descriptor = [link.subtype_code, link.product_key, link.account_name].filter(Boolean).join(' ').toLowerCase();
+  return link.subtype_code === 'fixed_deposit' || /\bfixed[\s_-]*deposit\b|\bfd\b/.test(descriptor) ? 'fd' : 'savings';
+}
+
 export const istDay = (ms = Date.now()) => new Date(ms + IST_MS).toISOString().slice(0, 10);
 export const addDays = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * DAY).toISOString().slice(0, 10);
 export const startOfIstDay = d => Date.parse(d + 'T00:00:00+05:30');
@@ -150,7 +157,7 @@ export function planAccrual({ kind, balances = [], rates = [], terms = null, led
   // 1. New days: from the day after the last accrual (or the first possible day) through `through`.
   let from;
   if (kind === 'fd') {
-    if (!terms?.principal || !terms?.bookedOn || !terms?.payout) return { status: 'pending_terms', rows, skipped, last };
+    if (!terms?.principal || !terms?.bookedOn || !terms?.maturityOn || !terms?.payout) return { status: 'pending_terms', rows, skipped, last };
     from = last ? addDays(last, 1) : terms.bookedOn;
     if (addDays(through, -FD_MAX_DAYS) > from) from = addDays(through, -FD_MAX_DAYS);
   } else {
@@ -309,6 +316,7 @@ export async function postFdCredits(db, uid, l, totals, through, actor = 'cron')
 // Run every linked source for one user, through yesterday (IST). Idempotent: unique keys make re-runs no-ops.
 // accountId: run only that account (used right after the owner sets an account up, so the list fills at once).
 export async function runAccrual(uid, { db = sql, now = Date.now(), dryRun = false, actor = 'cron', accountId = null } = {}) {
+  if (!dryRun && actor !== 'cron') throw new Error('Interest accrual is owned exclusively by the nightly /api/nightly job.');
   const through = addDays(istDay(now), -1);
   // How the interest is paid can be set per account (link); otherwise the product's (catalogue) value applies.
   const linkQuery = cols => db.query(`SELECT l.account_id, l.partition_key, a.account_key, a.bank_name, a.account_name, a.subtype_code,
@@ -338,7 +346,7 @@ export async function runAccrual(uid, { db = sql, now = Date.now(), dryRun = fal
       db.query(`SELECT id, accrual_date::text AS accrual_date, revision, interest_amount::float8 AS interest_amount, calculation_status, entry_type
         FROM wealth_interest_ledger WHERE user_id=$1 AND account_key=$2 AND product_key=$3 AND partition_key=$4`, [uid, l.account_key, l.product_key, l.partition_key]),
     ]);
-    const kind = l.subtype_code === 'fixed_deposit' ? 'fd' : 'savings';
+    const kind = interestAccountKind(l);
     const terms = kind === 'fd' ? { principal: l.fd_principal, bookedOn: l.fd_booked_on, maturityOn: l.fd_maturity_on, payout: l.fd_payout, compounding: l.fd_compounding } : null;
     const dailyCredit = kind === 'savings' && l.credit_frequency === 'daily';
     // Paid every N months: accrued daily, paid at the end of each period (periods counted from the account's anchor; default whole calendar months).
@@ -542,8 +550,8 @@ export async function saveInterestAccount(uid, b, { db = sql, actor = 'user', no
     }
   }
   await withActor(db, actor, stmts);
-  // Work the interest out at once, so the list shows it without waiting for the night.
-  const run = paused ? null : await runAccrual(uid, { db, now, actor, accountId: a.id }).catch(e => ({ error: String(e?.message || e) }));
+  // Preview only. The nightly /api/nightly job is the sole writer of interest ledger and income rows.
+  const run = paused ? null : await runAccrual(uid, { db, now, actor, accountId: a.id, dryRun: true }).catch(e => ({ error: String(e?.message || e) }));
   return { accountId: a.id, productKey, created, rateChange, run: run && run.accounts ? run.accounts[0] || null : run };
 }
 
@@ -649,7 +657,20 @@ export async function interestOverview(uid, { db = sql, now = Date.now() } = {})
     .catch(e => { if (e?.code === '42703') return query(`p.credit_frequency, NULL::text AS credit_anchor, NULL::int AS balance_max_age_days, false AS paused, false AS own, 'month' AS record_mode, NULL::uuid AS payout_account_id, NULL::text AS payout_account, NULL::text AS link_frequency`); throw e; });
   // Periodic accounts: the open period, what it has earned so far and when it is paid.
   for (const s of sources) {
-    if (s.subtype_code === 'fixed_deposit') {
+    const fd = interestAccountKind(s) === 'fd';
+    const completeFdTerms = Number(s.fd_principal) > 0 && !!s.fd_booked_on && !!s.fd_maturity_on && !!s.fd_payout;
+    if (fd && !completeFdTerms) {
+      // Do not display legacy estimates as earned interest when the deposit terms are not verified.
+      s.status = 'pending_terms';
+      s.last_accrual = null;
+      s.accrued_month = 0;
+      s.accrued_total = 0;
+      s.period = null;
+      s.next_credit = null;
+      s.period_accrued = null;
+      continue;
+    }
+    if (fd) {
       // FD: paid out every N months from the booking date (the last period ends the day before maturity), or all at maturity.
       s.max_age_days = null;
       const n = s.link_frequency && s.fd_payout !== 'cumulative' ? FREQ_MONTHS[s.fd_payout] : undefined;

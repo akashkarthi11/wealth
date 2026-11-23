@@ -1,8 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from '../_lib.js';
 import marketPriceRefresh from '../_routes/refresh-market-prices.js';
-import interestAccrual from '../_routes/interest-accrual.js';
-import backupJob from '../_routes/backup.js';
 import stockAdvisorResearch from '../_routes/stock-advisor-scheduled.js';
 import stockAdvisorCollection from '../_routes/stock-advisor-data-collection.js';
 import { nextJobRun } from './scheduled-job-time.js';
@@ -12,13 +10,11 @@ export { DISPATCH_BUDGET_MS, reapStalled, queueCounts };
 
 const HANDLERS = {
   'market-price-refresh': marketPriceRefresh,
-  'interest-accrual': interestAccrual,
-  'backup': backupJob,
   'stock-advisor-auto-research': stockAdvisorResearch,
   'stock-advisor-data-collection': stockAdvisorCollection
 };
 // Queue order between jobs: lower runs first. The collection's own tasks use 40-44 (see TASKS in stock-advisor-data-collection.js).
-const JOB_PRIORITY = { 'interest-accrual': 10, 'backup': 20, 'market-price-refresh': 30, 'stock-advisor-auto-research': 90 };
+const JOB_PRIORITY = { 'market-price-refresh': 30, 'stock-advisor-auto-research': 90 };
 const WHOLE_JOB_MIN_BUDGET_MS = 15000;
 
 function fakeResponse(){
@@ -61,6 +57,7 @@ async function claimJob(job,triggerType,db=sql) {
 
 // Put a job on the queue (nothing runs yet). The data collection is planned into one item per provider call; any other job is one item.
 export async function enqueueJob(job,triggerType='scheduled',db=sql) {
+  if(['interest-accrual','backup'].includes(job.handler_key))return {job_key:job.job_key,status:'blocked',reason:'Interest accrual and backup are owned exclusively by /api/nightly.'};
   const claimed=await claimJob(job,triggerType,db);
   if(!claimed)return {job_key:job.job_key,status:'busy'};
   try{
@@ -107,10 +104,12 @@ export async function runJobNow(job,db=sql) {
 export async function dispatchDueJobs() {
   const deadlineAt=Date.now()+DISPATCH_BUDGET_MS;
   const reaped=await reapStalled(sql).catch(()=>null);
+  // Interest and backup are owned exclusively by /api/nightly (01:30 IST). Never queue their legacy copies here.
   const due=await sql.query(`SELECT * FROM wealth_scheduled_jobs WHERE enabled=true AND next_run_at<=now()
+    AND handler_key NOT IN ('interest-accrual','backup')
     AND (locked_until IS NULL OR locked_until<now()) ORDER BY CASE handler_key
-    WHEN 'interest-accrual' THEN 1 WHEN 'backup' THEN 2 WHEN 'market-price-refresh' THEN 3
-    WHEN 'stock-advisor-data-collection' THEN 4 WHEN 'stock-advisor-auto-research' THEN 5 ELSE 99 END LIMIT 8`);
+    WHEN 'market-price-refresh' THEN 1 WHEN 'stock-advisor-data-collection' THEN 2
+    WHEN 'stock-advisor-auto-research' THEN 3 ELSE 99 END LIMIT 8`);
   const queued=[];
   for(const job of due){
     try{queued.push(await enqueueJob(job,'scheduled'))}

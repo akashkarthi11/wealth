@@ -10,6 +10,15 @@ import {usdInrRate} from '../_lib/fx-rate.js';
 const YAHOO='https://query1.finance.yahoo.com/v8/finance/chart/';
 const TROY_OUNCE_GRAMS=31.1034768;
 const METAL_FUTURES=new Set(['GC=F','SI=F']);
+const MAX_SOURCE_AGE_MS=7*24*60*60*1000;
+export function sourceFreshness(asOf,now=Date.now(),maxAgeMs=MAX_SOURCE_AGE_MS){
+ const timestamp=asOf instanceof Date?asOf.getTime():new Date(asOf).getTime();
+ if(asOf==null||asOf===''||!Number.isFinite(timestamp))return {fresh:false,ageMs:null,reason:'Source timestamp is missing or invalid'};
+ const ageMs=now-timestamp;
+ if(ageMs < -5*60*1000)return {fresh:false,ageMs,reason:'Source timestamp is in the future'};
+ if(ageMs>maxAgeMs)return {fresh:false,ageMs,reason:'Source observation is older than the allowed freshness window'};
+ return {fresh:true,ageMs,reason:null};
+}
 
 async function yahooQuote(symbol){
  const r=await fetch(YAHOO+encodeURIComponent(symbol)+'?range=1d&interval=5m',{headers:{'User-Agent':'Mozilla/5.0'},signal:AbortSignal.timeout(8000)});
@@ -18,7 +27,8 @@ async function yahooQuote(symbol){
  const result=j?.chart?.result?.[0];
  const price=Number(result?.meta?.regularMarketPrice);
  if(!Number.isFinite(price)||price<=0)throw new Error('No valid quote for '+symbol);
- return {price,asOf:result.meta.regularMarketTime?new Date(result.meta.regularMarketTime*1000):new Date(),currency:result.meta.currency||null};
+ if(!result.meta.regularMarketTime)throw new Error('Quote provider did not return a source timestamp for '+symbol);
+ return {price,asOf:new Date(result.meta.regularMarketTime*1000),currency:result.meta.currency||null};
 }
 
 // Resolve an AMFI scheme code once (by name), then read the latest NAV.
@@ -43,7 +53,9 @@ async function mutualFundNav(symbolOrName,displayName){
  const nav=Number(payload?.data?.[0]?.nav);
  if(!Number.isFinite(nav)||nav<=0)throw new Error('No valid NAV for scheme '+schemeCode);
  const parts=String(payload.data[0].date||'').split('-');
- const asOf=parts.length===3?new Date(Date.UTC(Number(parts[2]),Number(parts[1])-1,Number(parts[0]))):new Date();
+ if(parts.length!==3)throw new Error('MFAPI did not return a valid NAV source date for scheme '+schemeCode);
+ const asOf=new Date(Date.UTC(Number(parts[2]),Number(parts[1])-1,Number(parts[0])));
+ if(!Number.isFinite(asOf.getTime()))throw new Error('MFAPI returned an invalid NAV source date for scheme '+schemeCode);
  return {price:nav,asOf,currency:'INR',schemeCode,resolved};
 }
 
@@ -55,9 +67,13 @@ export function makePricer(fx){
   if(!memo.has(key))memo.set(key,(async()=>{
    if(assetClass==='indian_mutual_fund'){
     const q=await mutualFundNav(symbol,name);
+    const freshness=sourceFreshness(q.asOf);
+    if(!freshness.fresh)throw new Error('Stale MFAPI NAV for '+symbol+': '+freshness.reason);
     return {unitPrice:q.price,asOf:q.asOf,currency:'INR',providerSymbol:q.schemeCode,resolvedSymbol:q.resolved?q.schemeCode:null,source:'MFAPI.in',basis:'AMFI mutual fund NAV',fx:null};
    }
    const q=await yahooQuote(symbol);
+   const freshness=sourceFreshness(q.asOf);
+   if(!freshness.fresh)throw new Error('Stale Yahoo quote for '+symbol+': '+freshness.reason);
    if(METAL_FUTURES.has(symbol)){
     if(!fx)throw new Error('USD/INR reference rate unavailable');
     return {unitPrice:q.price*fx.price/TROY_OUNCE_GRAMS,asOf:fx.asOf<q.asOf?fx.asOf:q.asOf,currency:'INR',providerSymbol:symbol,source:'Yahoo Finance',basis:'global futures parity converted from USD/oz to INR/g',fx};
@@ -156,10 +172,14 @@ export default async function handler(req,res){
   await Promise.all([...affected].map(uid=>invalidateUserCaches(uid)));
   const count=(rs,s)=>rs.filter(x=>x.status===s).length;
   const failed=count(legacy.results,'error')+count(v2.results,'error'),updated=count(legacy.results,'updated')+count(v2.results,'updated');
-  await finishJob(run,!fx||failed?(updated?'partial':'failed'):'succeeded',{fx:fx?.price||null,fx_source:fx?.source||null,updated,failed,instrumentsUpdated:count(v2.results,'updated')});
+  const skipped=count(legacy.results,'skipped')+count(v2.results,'skipped');
+  const status=!fx||failed?(updated?'partial':'failed'):'succeeded';
+  const summary={ok:status==='succeeded',status,fx:fx?.price||null,fx_source:fx?.source||null,updated,failed,skipped,instrumentsUpdated:count(v2.results,'updated')};
+  await finishJob(run,status,summary);
   return json(res,200,{
+   ...summary,
    fx:fx?{rate:fx.price,asOf:fx.asOf.toISOString()}:null,
-   updated:count(legacy.results,'updated'),failed:count(legacy.results,'error'),results:legacy.results,
+   updated:count(legacy.results,'updated'),failed:count(legacy.results,'error')+count(v2.results,'error'),results:legacy.results,
    instruments:{updated:count(v2.results,'updated'),failed:count(v2.results,'error'),skipped:v2.skipped||null,results:v2.results},
   });
  }catch(e){console.error('[market-price-refresh]',e?.message||e);await finishJob(run,'failed',{error:String(e?.message||e).slice(0,300)});return json(res,500,{error:'Market price refresh failed'})}

@@ -49,7 +49,7 @@ export async function executeUserResearch({uid,sessionVersion,settings,execution
     const error=results.filter(r=>r.error).map(r=>r.ticker+': '+r.error).join(' | ').slice(0,1000)||null;
     await sql.query("UPDATE wealth_stock_advisor_schedule_runs SET status=$2,finished_at=now(),tickers_total=$3,tickers_submitted=$4,tickers_failed=$5,result_json=$6::jsonb,last_error=$7,updated_at=now() WHERE id=$1",[executionId,status,tickers.length,completed+queued,failed,JSON.stringify(results),error]);
     const next=nextScheduledAt(now,settings.schedule_time||DEFAULT_SCHEDULE_TIME,settings.schedule_frequency||'daily',SCHEDULE_TIMEZONE).toISOString();
-    await sql.query("UPDATE wealth_stock_advisor_settings SET last_run_at=now(),last_success_at=CASE WHEN $2 IN ('submitted','completed') THEN now() ELSE last_success_at END,last_scheduled_date=CASE WHEN $3='scheduled' AND $2 IN ('submitted','completed') THEN $4::date ELSE last_scheduled_date END,last_status=$2,last_error=$5,next_run_at=$6,updated_at=now() WHERE user_id=$1::uuid",[uid,status,runType,scheduledDate,error,next]);
+    await sql.query("UPDATE wealth_stock_advisor_settings SET last_run_at=now(),last_success_at=CASE WHEN $2='completed' THEN now() ELSE last_success_at END,last_scheduled_date=CASE WHEN $3='scheduled' AND $2 IN ('submitted','completed') THEN $4::date ELSE last_scheduled_date END,last_status=$2,last_error=$5,next_run_at=$6,updated_at=now() WHERE user_id=$1::uuid",[uid,status,runType,scheduledDate,error,next]);
     return {status,tickers:tickers.length,completed,queued,failed,results};
   } catch(error) {
     const message=String(error?.message||error).slice(0,1000);
