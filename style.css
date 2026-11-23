@@ -1766,6 +1766,26 @@ b.pj-medium{color:#f5c26b}
  .research-schedule-card [data-research-manual-stocks] .advisor-auto-stock-list{max-height:190px;overflow:auto}
 }
 
+
+.advisor-key-manager{display:grid;gap:9px;padding:12px;border:1px solid #334761;border-radius:13px;background:#101d30}
+.advisor-key-manager>div:first-child{display:grid;gap:4px}
+.advisor-key-manager>div:first-child>b{font-size:13px}
+.advisor-key-manager>div:first-child>small,.advisor-key-status{font-size:10px;line-height:1.45;color:var(--muted)}
+.advisor-key-list{display:grid;gap:6px}
+.advisor-key-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px;border:1px solid #2b3c55;border-radius:9px;background:#0b1727;min-width:0}
+.advisor-key-row>div:first-child{display:grid;gap:3px;min-width:0}
+.advisor-key-row b{font-size:11px;overflow-wrap:anywhere}
+.advisor-key-row small{font-size:9px;color:var(--muted);letter-spacing:.2px;overflow-wrap:anywhere}
+.advisor-key-actions{display:flex;align-items:center;gap:5px;flex:0 0 auto}
+.advisor-key-actions button{font-size:10px;padding:6px 8px;min-height:30px}
+.advisor-key-actions .danger{color:#ffb1b1}
+.advisor-key-default{font-size:9px;letter-spacing:.6px;color:#a8ceff;border:1px solid #365f8d;border-radius:99px;padding:4px 7px}
+.advisor-key-add{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) auto;gap:7px}
+.advisor-key-add input{min-width:0;width:100%;padding:10px;border:1px solid #344963;border-radius:9px;background:#0a1524;color:var(--text);font:inherit;font-size:12px}
+.advisor-key-add button{white-space:nowrap;padding:8px 12px}
+.advisor-key-status.is-error{color:#ffabab}
+@media(max-width:620px){.advisor-key-add{grid-template-columns:1fr}.advisor-key-add button{width:100%}.advisor-key-actions{flex-wrap:wrap}.advisor-key-row{align-items:flex-start}}
+
 /* Stock Advisor research-provider health */
 .advisor-research-health{display:grid;gap:12px}
 .advisor-provider-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
