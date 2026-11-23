@@ -126,7 +126,7 @@ export async function collectFincruxFinancials({ instrument, db } = {}) {
   const startedAt = Date.now();
   for (const key of keys) {
     const reservationUrl = sourceUrl + '#key-' + encodeURIComponent(key.id);
-    const reservationId = await reserveDailySlot(db, ticker, reservationUrl, dateKey, key.id);
+    const reservationId = await reserveDailySlot(db, ticker, reservationUrl, dateKey, encodeURIComponent(key.id));
     if (!reservationId) {
       result.reason = 'This Fincrux account has used its five-request daily allowance, or this ticker was already attempted with this account today.';
       continue;
