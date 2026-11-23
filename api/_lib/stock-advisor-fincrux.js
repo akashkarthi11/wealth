@@ -11,12 +11,12 @@ const safeDate = value => {
   return Number.isFinite(stamp) ? new Date(stamp).toISOString() : null;
 };
 // Fincrux statement tables may contain object rows or positional array rows. Keep both:
- // dropping nested arrays silently turns valid API responses into "no statements".
+ // Dropping nested arrays silently turns valid API responses into "no statements".
 const rows = value => Array.isArray(value)
   ? value.filter(x => x !== null && typeof x === 'object').slice(0, 60)
   : [];
-const firstPopulatedArray = (...values) => values.find(value => Array.isArray(value) && value.length) 
-  || values.find(Array.isArray) || [];
+const firstPopulatedArray = (...values) =>
+  values.find(value => Array.isArray(value) && value.length) || values.find(Array.isArray) || [];
 
 export function normalizeFincruxFinancials(payload, expectedTicker) {
   const symbol = clean(payload?.trading_symbol).toUpperCase();
