@@ -92,7 +92,7 @@ export function parseNseXbrl(xmlText) {
   const xml = String(xmlText || '');
   if (!xml.trim() || xml.length > 5 * 1024 * 1024) throw new Error('XBRL document is empty or exceeds the 5 MB safety limit.');
   if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw new Error('DTD and entity declarations are not accepted in NSE XBRL documents.');
-  if (!/<(?:[\w.-]+:)?xbrl\b/i.test(xml) || !/<\/(?:[\w.-]+:)?xbrl\s*>/i.test(xml)) throw new Error('Response is not a complete XBRL instance document (xbrl root not found or not closed).');
+  if (!/<(?:[\w.-]+:)?xbrl\b/i.test(xml) || !/<\/(?:[\w.-]+:)?xbrl\s*>/i.test(xml)) throw new Error('Response is not an XBRL instance document (xbrl root not found or not closed).');
   const contexts = parseContexts(xml), facts = parseFacts(xml);
   if (!contexts.size || !facts.length) throw new Error('XBRL structure changed: no usable contexts or numeric facts were found.');
   const context = chooseCurrentDurationContext(contexts, facts);
