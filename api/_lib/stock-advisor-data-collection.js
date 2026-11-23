@@ -1,4 +1,4 @@
-import { collectFincruxFinancials, releaseAbandonedReservations } from './stock-advisor-fincrux.js';
+import { collectFincruxFinancials, releaseAbandonedReservations, clearFincruxDailyUsageMemory } from './stock-advisor-fincrux.js';
 import { collectNseNewsBatch, NSE_FEED_LABELS } from './stock-advisor-live-evidence.js';
 import { collectMutualFundEvidence } from './stock-advisor-mfapi.js';
 import { collectTejHqEquityEvidence } from './stock-advisor-tejhq.js';
@@ -85,7 +85,7 @@ export async function planCollection(db) {
        WHERE publisher='Fincrux'
          AND retrieved_at >= (date_trunc('day',now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata')
          AND retrieved_at < ((date_trunc('day',now() AT TIME ZONE 'Asia/Kolkata') + interval '1 day') AT TIME ZONE 'Asia/Kolkata')`);
-      const remaining = Math.max(0, 5 - Number(quota?.used || 0));
+      const remaining = Math.max(0, (5 * fincruxKeys.length) - Number(quota?.used || 0));
       if (remaining) {
         const recent = await db.query(`SELECT upper(ticker) AS ticker,max(retrieved_at) AS last_retrieved
          FROM wealth_stock_advisor_research_sources
@@ -94,7 +94,7 @@ export async function planCollection(db) {
         const lastByTicker = new Map(recent.map(row => [row.ticker, row.last_retrieved ? Date.parse(row.last_retrieved) : 0]));
         const candidates = [...equities].sort((a, b) => (lastByTicker.get(String(a.symbol).toUpperCase()) || 0) - (lastByTicker.get(String(b.symbol).toUpperCase()) || 0));
         for (const c of candidates.slice(0, remaining)) add('fincrux', { instrument: slim(c) });
-      } else add('fincrux_skip', { reason: 'Five free-tier requests already reserved today (IST).' });
+      } else add('fincrux_skip', { reason: 'All configured Fincrux accounts have used their combined daily allowance (IST).' });
     } else add('fincrux_skip', { reason: 'No Fincrux API keys are configured in Provider Health or the environment; no request attempted.' });
   }
   return { instruments: instruments.length, tasks };
@@ -190,6 +190,7 @@ export async function finalizeCollectionRun(db, runId) {
   const items = await db.query(`SELECT handler_key,task,status,payload,result,error,started_at,finished_at FROM wealth_job_queue
     WHERE payload->>'collection_run_id'=$1 ORDER BY priority,created_at,id`, [runId]);
   if (!items.length || items.some(x => x.status === 'pending' || x.status === 'running')) return null;
+  clearFincruxDailyUsageMemory();
   const [run] = await db.query('SELECT started_at,summary FROM wealth_stock_advisor_data_collection_runs WHERE id=$1 AND status=\'running\'', [runId]);
   if (!run) return null;
   const summary = summarizeItems(items, { instruments: Number(obj(run.summary).instruments || 0) });
