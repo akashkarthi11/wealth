@@ -122,6 +122,10 @@
   ],
   "crons": [
     {
+      "path": "/api/nightly",
+      "schedule": "0 20 * * *"
+    },
+    {
       "path": "/api/jobs/dispatch",
       "schedule": "15 13 * * *"
     },
