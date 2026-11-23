@@ -15,14 +15,22 @@ Never use `git push`, `git pull` or `git fetch` against GitHub, never ask the ow
   titles) and merge it only when asked: `git merge relay/<branch>-<sha>` on the target branch. The last GitHub commit seen is a marker file
   `.git/relay-remote/<branch>`.
 - **Merge on GitHub** (only when asked): `scripts/relay-merge.sh <from> <into>`, for example `claude-dev development`. Only `claude-dev` and
-  `development`; never from or into `main`. A conflict stops with a message and changes nothing (do not force); resolve it locally, push again.
+  `development`; `main` only when the owner asks for it in that message (see **`main` deploys Production** below). A conflict stops with a
+  message and changes nothing (do not force); resolve it locally, push again.
   Afterwards run `scripts/relay-pull.sh <into>` to bring the merge result down.
 - **Push stops if GitHub has moved** since the last known commit (another push or merge): run `scripts/relay-pull.sh <branch>` first, merge what
   it brings, then push again. Never override that stop.
 - **Push** (below).
 - **Only when the owner asks** ("push", "push to dev"). Never push on your own after a commit or a deploy. Before sending, tell the
   owner which files are going out.
-- **Default branch is `claude-dev`.** The relay also allows `development` when the owner asks for it. It refuses `main`, never forces,
+- **`main` deploys Production.** `vercel.json` builds `main` and `development`, so updating `main` on GitHub starts a Production build that
+  applies every pending migration to the Production database. Never send `main` unless the owner asks for `main` in that message; "push" alone
+  always means `claude-dev`. The relay needs both `main` in `GITHUB_RELAY_BRANCHES` and `GITHUB_RELAY_ALLOW_MAIN=yes` in the
+  `karthi-github-relay` project, and a redeploy of that project, before it will accept `main` at all. Both switches are off, which is the safer
+  default: GitHub `main` is updated by the owner, and Production is deployed with the Vercel CLI when the owner says "deploy prod".
+- **Work on `claude-dev`, and keep all three local branches on the same commit.** After committing, fast-forward local `development` and
+  `main` onto `claude-dev` (`git fetch . claude-dev:development`), so the three never drift. Only GitHub `main` is allowed to lag.
+- **Default branch is `claude-dev`.** The relay also allows `development` when the owner asks for it. It never forces,
   and refuses `.env*`, `.vercel`, `public/`, `node_modules` and key files.
 - **How:** commit first (the relay sends committed work only), then from the repo root run
   `scripts/relay-push.sh claude-dev "<commit message>"` (add `dry` as a third word to list the files without sending).
