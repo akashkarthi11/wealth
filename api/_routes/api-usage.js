@@ -1,5 +1,5 @@
 import { sql, json, sessionUser } from '../_lib.js';
-import { listFincruxKeyMetadata } from '../_lib/provider-api-keys.js';
+import { loadFincruxApiKeys } from '../_lib/provider-api-keys.js';
 
 // GET /api/api-usage   (admin only, read only)
 // What each outside provider allows, what has been used today, and what is left. Limits are only shown where the
@@ -41,9 +41,8 @@ export default async function handler(req, res) {
     if (req.method !== 'GET') return json(res, 405, { error: 'Method not allowed' });
     const uid = await adminUser(req);
     if (!uid) return json(res, 403, { error: 'Admin sign-in required' });
-    const fincruxKeys = await listFincruxKeyMetadata(sql, uid);
-    const fincruxLimit = 5 * Number(fincruxKeys.total_enabled || 0);
-    const activeFincruxAccounts = [...fincruxKeys.database.filter(k => k.enabled && !k.error), ...fincruxKeys.environment];
+    const activeFincruxAccounts = await loadFincruxApiKeys(sql);
+    const fincruxLimit = 5 * activeFincruxAccounts.length;
 
     // One row per provider call made by today's data collection runs.
     const steps = await sql.query(`SELECT s->>'provider' AS provider,
