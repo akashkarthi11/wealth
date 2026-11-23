@@ -10,6 +10,10 @@ test('the nightly route owns interest and backup at 01:30 IST; dispatcher exclud
   assert.match(jobs,/handler_key NOT IN \('interest-accrual','backup'\)/);
   assert.match(jobs,/job.handler_key==='interest-accrual'.*status:'blocked'/);
   const nightly=readFileSync(new URL('../../api/_routes/nightly.js',import.meta.url),'utf8');
+  const router=readFileSync(new URL('../../api/router.js',import.meta.url),'utf8');
+  const retired=readFileSync(new URL('../../api/_routes/interest-accrual.js',import.meta.url),'utf8');
+  assert.match(router,/'nightly':/);
+  assert.match(retired,/json\(res,410/);
   assert.match(nightly,/runAccrual/);
   assert.match(nightly,/runBackup/);
 });
