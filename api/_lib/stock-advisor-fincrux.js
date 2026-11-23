@@ -165,7 +165,8 @@ export async function collectFincruxFinancials({ instrument, db, manual = false 
       return result;
     }
   }
-  let lastError = null, lastPayload = null, successful = null;\n  const rateLimitedKeys = [];
+  let lastError = null, lastPayload = null, successful = null;
+  const rateLimitedKeys = [];
   const startedAt = Date.now();
   for (const key of keys) {
     const cooldown = await getKeyRateLimit(db, key.id);
@@ -198,10 +199,14 @@ export async function collectFincruxFinancials({ instrument, db, manual = false 
       successful = { key, reservationId, normalized };
       break;
     } catch (error) {
-      lastError = String(error?.message || error).slice(0, 240);\n      const retrySeconds = responseStatus === 429 ? retryAfterSeconds(payload) : null;\n      const rateLimitedUntil = retrySeconds ? new Date(Date.now() + retrySeconds * 1000).toISOString() : null;\n      if (responseStatus === 429) rateLimitedKeys.push({ label: key.label, until: rateLimitedUntil, retry_seconds: retrySeconds });
+      lastError = String(error?.message || error).slice(0, 240);
+      const retrySeconds = responseStatus === 429 ? retryAfterSeconds(payload) : null;
+      const rateLimitedUntil = retrySeconds ? new Date(Date.now() + retrySeconds * 1000).toISOString() : null;
+      if (responseStatus === 429) rateLimitedKeys.push({ label: key.label, until: rateLimitedUntil, retry_seconds: retrySeconds });
       await recordApiCall(db, { provider: SOURCE, endpoint: sourceUrl, ticker, httpStatus: responseStatus, ok: false,
         durationMs: Date.now() - startedAt, payload, bytes: payload ? JSON.stringify(payload).length : null, usable: false, error: lastError });
-      const salvage = { provider: SOURCE, request_date_ist: dateKey, request_failed: true, attempted_key: key.id, error: lastError,\n        ...(retrySeconds ? { rate_limit_retry_seconds: retrySeconds, rate_limited_until: rateLimitedUntil } : {}),
+      const salvage = { provider: SOURCE, request_date_ist: dateKey, request_failed: true, attempted_key: key.id, error: lastError,
+        ...(retrySeconds ? { rate_limit_retry_seconds: retrySeconds, rate_limited_until: rateLimitedUntil } : {}),
         response_keys: payload && typeof payload === 'object' ? Object.keys(payload).slice(0, 20) : [],
         data_keys: payload?.data && typeof payload.data === 'object' && !Array.isArray(payload.data) ? Object.keys(payload.data).slice(0, 30) : [],
         partial: {} };
@@ -258,7 +263,8 @@ export async function collectFincruxFinancials({ instrument, db, manual = false 
   result.statement_rows = normalized.statement_row_count;
   result.last_updated_at = normalized.last_updated_at;
   result.source_url = sourceUrl;
-  result.key_label = key.label;\n  result.rate_limited_keys = rateLimitedKeys;
+  result.key_label = key.label;
+  result.rate_limited_keys = rateLimitedKeys;
   result.attempted_keys = result.attempted_keys;
   return result;
 }
