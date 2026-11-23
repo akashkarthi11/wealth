@@ -46,8 +46,7 @@ export async function claimNext(db, remainingMs) {
       SELECT pg_advisory_xact_lock(hashtext('wealth-job-queue-claim'))
     )
     UPDATE wealth_job_queue q SET status='running',attempts=q.attempts+1,locked_until=now()+interval '${LOCK_SECONDS} seconds',started_at=now(),finished_at=NULL,error=NULL
-    WHERE q.id=(SELECT id FROM wealth_job_queue
-      FROM wealth_job_queue, claim_lock
+    WHERE q.id=(SELECT id FROM wealth_job_queue, claim_lock
       WHERE ((status='pending' AND available_at<=now()) OR (status='running' AND locked_until<now())) AND attempts<max_attempts AND min_budget_ms<=$1
       AND NOT (
         task='fincrux' AND EXISTS (
