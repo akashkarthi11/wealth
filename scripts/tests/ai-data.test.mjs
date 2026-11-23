@@ -21,7 +21,7 @@ test('each provider call of the job is timed, and the steps are saved while the 
   try {
     const r = await runStockAdvisorDataCollection(db);
     const names = r.steps.map(s => s.provider + (s.ticker ? ':' + s.ticker : ''));
-    assert.deepEqual(names, ['NSE RSS', 'NSE RSS', 'NSE RSS', 'NSE RSS', 'NSE RSS', 'NSE RSS', 'TejHQ:TCS', 'NSE XBRL:TCS', 'Fincrux'],
+    assert.deepEqual(names, ['NSE RSS', 'NSE RSS', 'NSE RSS', 'NSE RSS', 'NSE RSS', 'NSE RSS', 'TejHQ:TCS', 'NSE XBRL:TCS', 'Yahoo Finance fundamentals:TCS', 'Fincrux'],
       'one step per NSE feed, so no single step has to download all six');
     assert.deepEqual(r.steps.filter(s => s.provider === 'NSE RSS').map(s => s.name.split(' · ')[0]),
       ['Announcements', 'Financial results', 'Annual reports', 'Board meetings', 'Shareholding patterns', 'Corporate actions']);
@@ -37,7 +37,7 @@ test('each provider call of the job is timed, and the steps are saved while the 
     assert.ok(progress.length >= 2 * 3, 'progress is written when a call starts and when it ends');
     const last = writes[writes.length - 1];
     assert.match(last.sql, /finished_at=now\(\)/);
-    assert.equal(JSON.parse(last.params[2]).steps.length, 9, 'the final summary keeps the steps');
+    assert.equal(JSON.parse(last.params[2]).steps.length, 10, 'the final summary keeps the steps');
   } finally {
     globalThis.fetch = originalFetch;
     if (originalKey !== undefined) process.env.FINCRUX_API_KEY = originalKey;
@@ -68,7 +68,7 @@ test('the job stops starting provider calls when too little of the 60 seconds is
     const tej = r.steps.filter(s => s.provider === 'TejHQ');
     assert.deepEqual(tej.map(s => s.status), ['skipped', 'skipped']);
     assert.match(tej[0].note, /Time limit reached/);
-    assert.equal(r.skipped_for_time, 4, 'two TejHQ calls and two NSE XBRL holding calls are deferred');
+    assert.equal(r.skipped_for_time, 6, 'two TejHQ, two NSE XBRL and two Yahoo holding calls are deferred');
     assert.equal(r.status, 'failed', 'nothing was collected, so the run is not reported as a success');
     assert.match(db.writes[db.writes.length - 1].sql, /finished_at=now\(\)/, 'the run still records its finish');
   } finally { globalThis.fetch = originalFetch; if (key !== undefined) process.env.FINCRUX_API_KEY = key; }
