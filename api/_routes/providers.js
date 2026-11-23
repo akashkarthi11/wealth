@@ -62,9 +62,9 @@ export default async function handler(req, res) {
       const id = String(input.id || '');
       if (!/^[0-9a-f-]{36}$/i.test(id)) return json(res, 400, { error: 'Invalid key ID.' });
       const userAgent = String(input.user_agent || 'WealthPersonalStockResearch/1.0').trim();
-      if (!userAgent || userAgent.length > 200 || /[\\r\\n]/.test(userAgent)) return json(res, 400, { error: 'User-Agent must be 1–200 characters on one line.' });
+      if (!userAgent || userAgent.length > 200 || /[\r\n]/.test(userAgent)) return json(res, 400, { error: 'User-Agent must be 1–200 characters on one line.' });
       const assigned = Array.isArray(input.assigned_tickers) ? [...new Set(input.assigned_tickers.map(x => String(x || '').trim().toUpperCase()).filter(Boolean))] : [];
-      if (assigned.length > 100 || assigned.some(x => !/^[A-Z0-9&.\\-]{1,30}$/.test(x))) return json(res, 400, { error: 'Ticker assignments must contain up to 100 valid ticker symbols.' });
+      if (assigned.length > 100 || assigned.some(x => !/^[A-Z0-9&.-]{1,30}$/.test(x))) return json(res, 400, { error: 'Ticker assignments must contain up to 100 valid ticker symbols.' });
       const updated = await sql.query("UPDATE wealth_provider_api_keys SET user_agent=$3,assigned_tickers=$4::text[],updated_at=now() WHERE id=$1 AND user_id=$2 AND provider='fincrux' RETURNING id", [id, auth.uid, userAgent, assigned]);
       if (!updated.length) return json(res, 404, { error: 'Saved Fincrux key not found.' });
       return json(res, 200, { saved: true, ...(await listFincruxKeyMetadata(sql, auth.uid)) });
