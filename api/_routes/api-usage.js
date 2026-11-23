@@ -1,4 +1,5 @@
 import { sql, json, sessionUser } from '../_lib.js';
+import { listFincruxKeyMetadata } from '../_lib/provider-api-keys.js';
 
 // GET /api/api-usage   (admin only, read only)
 // What each outside provider allows, what has been used today, and what is left. Limits are only shown where the
@@ -16,10 +17,10 @@ const num = v => Number(v || 0);
 // Whether a provider is usable at all. Only the PRESENCE of a key is ever read, never its value, and the names below
 // are the environment variables to set in the Vercel project — they cannot be set from the app.
 const set = name => String(process.env[name] || '').trim().length > 0;
-function health(key) {
-  if (key === 'fincrux') return set('FINCRUX_API_KEY')
-    ? { status: 'configured', detail: 'Key present in this environment.' , key_env: 'FINCRUX_API_KEY' }
-    : { status: 'needs_key', detail: 'No key in this environment, so no request is attempted.', key_env: 'FINCRUX_API_KEY' };
+function health(key, configured = false) {
+  if (key === 'fincrux') return configured
+    ? { status: 'configured', detail: 'Fincrux account keys are configured.', key_env: null }
+    : { status: 'needs_key', detail: 'No enabled Fincrux account keys are configured.', key_env: null };
   if (key === 'free-model') {
     if (set('AI_GATEWAY_API_KEY')) return { status: 'configured', detail: 'Vercel AI Gateway key present.', key_env: 'AI_GATEWAY_API_KEY' };
     if (set('VERCEL_OIDC_TOKEN')) return { status: 'configured', detail: 'No gateway key; falling back to the deployment OIDC token.', key_env: 'AI_GATEWAY_API_KEY' };
@@ -38,7 +39,11 @@ export default async function handler(req, res) {
   try {
     if (!sql) return json(res, 503, { error: 'Database is not configured' });
     if (req.method !== 'GET') return json(res, 405, { error: 'Method not allowed' });
-    if (!(await adminUser(req))) return json(res, 403, { error: 'Admin sign-in required' });
+    const uid = await adminUser(req);
+    if (!uid) return json(res, 403, { error: 'Admin sign-in required' });
+    const fincruxKeys = await listFincruxKeyMetadata(sql, uid);
+    const fincruxLimit = 5 * Number(fincruxKeys.total_enabled || 0);
+    const activeFincruxAccounts = [...fincruxKeys.database.filter(k => k.enabled && !k.error), ...fincruxKeys.environment];
 
     // One row per provider call made by today's data collection runs.
     const steps = await sql.query(`SELECT s->>'provider' AS provider,
@@ -57,6 +62,17 @@ export default async function handler(req, res) {
       FROM wealth_stock_advisor_research_sources
       WHERE publisher='Fincrux' AND retrieved_at >= ${IST_DAY}
         AND retrieved_at < (${IST_DAY} + interval '1 day')`);
+    const fincruxAccountRows = await sql.query(`SELECT regexp_replace(url, '^.*#key-', '') AS key_id, count(*)::int AS used
+      FROM wealth_stock_advisor_research_sources
+      WHERE publisher='Fincrux' AND retrieved_at >= ${IST_DAY}
+        AND retrieved_at < (${IST_DAY} + interval '1 day') AND url LIKE '%#key-%'
+      GROUP BY 1`);
+    const fincruxUsageByKey = new Map(fincruxAccountRows.map(row => [String(row.key_id), num(row.used)]));
+    const fincruxQuotas = activeFincruxAccounts.map(key => ({
+      label: key.label, source: key.source, limit: 5,
+      used: fincruxUsageByKey.get(String(key.id)) || 0,
+      remaining: Math.max(0, 5 - (fincruxUsageByKey.get(String(key.id)) || 0))
+    }));
 
     // Every debate message is one free-model call, except the evidence-gate result, which uses none.
     const [model] = await sql.query(`SELECT
@@ -78,10 +94,11 @@ export default async function handler(req, res) {
     const providers = [
       {
         key: 'fincrux', name: 'Fincrux', purpose: 'Company financial statements',
-        limit: 5, limit_window: 'per day (IST)', used: num(fincrux?.used), remaining: Math.max(0, 5 - num(fincrux?.used)),
+        limit: fincruxLimit, limit_window: 'per day (IST; 5 per account)', used: num(fincrux?.used), remaining: Math.max(0, fincruxLimit - num(fincrux?.used)),
+        account_count: activeFincruxAccounts.length, account_quotas: fincruxQuotas,
         resets_at_ist: 'midnight IST', last_at: fincrux?.last_at || null,
-        ...fromSteps('Fincrux', {}), ...health('fincrux'),
-        note: 'A free-tier key. Each request is reserved in the database before it is sent, so the limit holds even with several runs at once.',
+        ...fromSteps('Fincrux', {}), ...health('fincrux', fincruxLimit > 0),
+        note: 'Five requests per active Fincrux Hobby account each IST day. Each account is reserved and counted separately; failed attempts also consume that account’s allowance.',
       },
       {
         key: 'free-model', name: 'Vercel AI Gateway · Nemotron Free', purpose: 'Bull, Bear and CIO debate steps',
