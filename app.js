@@ -1197,7 +1197,7 @@ async function loadStockAdvisor(runId=null){
   const fincruxKeys=researchHealth.fincrux_keys||{database:[],environment:[]};
   const dbFincruxKeys=Array.isArray(fincruxKeys.database)?fincruxKeys.database:[];
   const envFincruxKeys=Array.isArray(fincruxKeys.environment)?fincruxKeys.environment:[];
-  const fincruxKeyRows=dbFincruxKeys.map(k=>'<div class="advisor-key-row"><div><b>'+esc(k.label||'Saved key')+'</b><small>'+esc(k.masked||'Unavailable')+' · Database override · Priority '+Number(k.priority||0)+'</small></div><div class="advisor-key-actions"><button type="button" class="ghost" data-fincrux-key-toggle="'+esc(k.id)+'" data-enabled="'+(k.enabled?'true':'false')+'">'+(k.enabled?'Disable':'Enable')+'</button><button type="button" class="ghost danger" data-fincrux-key-delete="'+esc(k.id)+'">Remove</button></div></div>').join('');
+  const fincruxKeyRows=dbFincruxKeys.map(k=>'<div class="advisor-key-row"><div><b>'+esc(k.label||'Saved key')+'</b><small>'+esc(k.masked||'Unavailable')+' · Database override · Priority '+Number(k.priority||0)+'</small></div><div class="advisor-key-actions"><button type="button" class="ghost" data-fincrux-key-toggle="'+esc(k.id)+'" data-enabled="'+(k.enabled?'true':'false')+'">'+(k.enabled?'Disable':'Enable')+'</button><button type="button" class="ghost danger" data-fincrux-key-delete="'+esc(k.id)+'">Remove</button></div><div class="advisor-key-config"><label>User-Agent<input type="text" maxlength="200" data-fincrux-key-agent="'+esc(k.id)+'" value="'+esc(k.user_agent||'WealthPersonalStockResearch/1.0')+'"></label><label>Assigned tickers <small>Comma-separated; leave empty for automatic fallback</small><input type="text" maxlength="3000" data-fincrux-key-tickers="'+esc(k.id)+'" value="'+esc((k.assigned_tickers||[]).join(', '))+'" placeholder="HDFCBANK, RECLTD"></label><button type="button" class="ghost" data-fincrux-key-configure="'+esc(k.id)+'">Save configuration</button></div></div>').join('');
   const envFincruxRows=envFincruxKeys.map(k=>'<div class="advisor-key-row"><div><b>'+esc(k.label)+'</b><small>'+esc(k.masked)+' · Environment default</small></div><span class="advisor-key-default">DEFAULT</span></div>').join('');
   const fincruxKeyManager='<section class="advisor-key-manager"><div><b>Fincrux API keys</b><small>Database keys are tried first in list order. Environment keys are the fallback defaults.</small></div><div class="advisor-key-list">'+(fincruxKeyRows||'<p class="muted">No database overrides saved.</p>')+'</div><div class="advisor-key-list advisor-key-env">'+(envFincruxRows||'<p class="muted">No environment default keys detected.</p>')+'</div><div class="advisor-key-add"><input id="fincruxKeyLabel" type="text" maxlength="60" placeholder="Key label (e.g. Account 2)"><input id="fincruxKeyValue" type="password" autocomplete="new-password" placeholder="Paste Fincrux API key"><button type="button" class="primary" data-fincrux-key-save>Add key</button></div><small id="fincruxKeyStatus" class="advisor-key-status">Keys are encrypted before storage. Full key values are never displayed.</small></section>';
   const coverage=researchHealth.coverage||{};
@@ -1233,10 +1233,11 @@ $('viewContent').addEventListener('click',async e=>{
  const save=e.target.closest('[data-fincrux-key-save]');
  const remove=e.target.closest('[data-fincrux-key-delete]');
  const toggle=e.target.closest('[data-fincrux-key-toggle]');
- if(!save&&!remove&&!toggle)return;
+ const configure=e.target.closest('[data-fincrux-key-configure]');
+ if(!save&&!remove&&!toggle&&!configure)return;
  const status=document.getElementById('fincruxKeyStatus');
  const setStatus=(message,error=false)=>{if(status){status.textContent=message;status.classList.toggle('is-error',error)}};
- const buttons=[...document.querySelectorAll('[data-fincrux-key-save],[data-fincrux-key-delete],[data-fincrux-key-toggle]')];
+ const buttons=[...document.querySelectorAll('[data-fincrux-key-save],[data-fincrux-key-delete],[data-fincrux-key-toggle],[data-fincrux-key-configure]')];
  buttons.forEach(b=>b.disabled=true);
  try{
   if(save){
@@ -1251,6 +1252,12 @@ $('viewContent').addEventListener('click',async e=>{
    if(!confirm('Remove this saved Fincrux key?'))return;
    await api('/api/providers',{method:'POST',body:JSON.stringify({action:'fincrux_key_delete',id:remove.dataset.fincruxKeyDelete})});
    setStatus('Saved key removed.');
+  }else if(configure){
+   const id=configure.dataset.fincruxKeyConfigure;
+   const user_agent=document.querySelector('[data-fincrux-key-agent="'+id+'"]')?.value||'';
+   const assigned_tickers=(document.querySelector('[data-fincrux-key-tickers="'+id+'"]')?.value||'').split(',').map(x=>x.trim().toUpperCase()).filter(Boolean);
+   await api('/api/providers',{method:'POST',body:JSON.stringify({action:'fincrux_key_configure',id,user_agent,assigned_tickers})});
+   setStatus('Per-key User-Agent and ticker routing saved.');
   }else{
    const enabled=toggle.dataset.enabled!=='true';
    await api('/api/providers',{method:'POST',body:JSON.stringify({action:'fincrux_key_update',id:toggle.dataset.fincruxKeyToggle,enabled})});
