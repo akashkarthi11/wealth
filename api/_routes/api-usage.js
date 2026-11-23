@@ -69,7 +69,7 @@ export default async function handler(req, res) {
     const fincruxUsageByKey = new Map(fincruxAccountRows.map(row => [String(row.key_id), num(row.used)]));
     const fincruxQuotas = activeFincruxAccounts.map(key => ({
       label: key.label, source: key.source, limit: 5,
-      used: fincruxUsageByKey.get(String(key.id)) || 0,
+      used: fincruxUsageByKey.get(encodeURIComponent(key.id)) || 0,
       remaining: Math.max(0, 5 - (fincruxUsageByKey.get(String(key.id)) || 0))
     }));
 
