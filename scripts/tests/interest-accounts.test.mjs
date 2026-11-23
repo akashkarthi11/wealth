@@ -165,6 +165,11 @@ test('an own account uses a balance up to 60 days old; catalogue products keep t
 
 test('wiring: route, router, nightly runs every user, migration is additive and fixes interest rows left waiting for review', () => {
   assert.match(read('api/_routes/interest.js'), /'interest\/accounts': \{ user: true, ingest: false \}/);
+  const interestRoute=read('api/_routes/interest.js');
+  assert.match(interestRoute,/route === 'interest\\/credits' \|\| route === 'interest\\/run'/);
+  assert.match(interestRoute,/json\(res, 410/);
+  assert.match(read('api/_routes/interest-accrual.js'),/json\(res,410/);
+  assert.match(read('api/_interest.js'),/if \(!dryRun && actor !== 'cron'\)/);
   assert.match(read('api/router.js'), /'interest\/accounts': \(\) => import/);
   const n = read('api/_routes/nightly.js');
   assert.match(n, /SELECT DISTINCT a\.user_id FROM wealth_interest_links/);
