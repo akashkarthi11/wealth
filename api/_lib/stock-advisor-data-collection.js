@@ -88,7 +88,8 @@ export async function runCollectionTask(db, task, payload = {}, { deadlineAt = n
       const { equities } = await loadInstruments(db);
       const feedLabels = payload.feed ? [payload.feed] : null;
       const news = await collectNseNewsBatch({ instruments: equities, db, deadlineAt, feedLabels });
-      return { ...base, name: (payload.feed || 'All feeds') + ' · ' + equities.length + ' stocks', status: news.status, note: note(news), feeds_checked: news.feeds_checked, stored: news.stored,
+      const seen = (news.feeds || []).map(f => f.items + ' read, ' + f.matched + ' matched').join('; ');
+      return { ...base, name: (payload.feed || 'All feeds') + ' · ' + equities.length + ' stocks' + (seen ? ' · ' + seen : ''), status: news.status, note: note(news), feeds_checked: news.feeds_checked, stored: news.stored,
         detail: [{ provider: news.provider, status: news.status, feeds_checked: news.feeds_checked, stored: news.stored, errors: news.errors }, ...news.results] };
     }
     if (task === 'fund') {

@@ -66,7 +66,7 @@ function cleanMessages(input){
   const metadata=m.metadata&&typeof m.metadata==='object'&&!Array.isArray(m.metadata)?m.metadata:{};
   const sequenceNo=Number.isInteger(m.sequence_no)?m.sequence_no:i;
   if(sequenceNo<0)throw Object.assign(new Error('Message sequence numbers must be zero or greater.'),{status:400});
-  const sentences=content.replace(/\\s+/g,' ').split(/(?<=[.!?])\\s+/).slice(0,3).join(' ').slice(0,900);
+  const sentences=content.replace(/\s+/g,' ').split(/(?<=[.!?])\s+/).slice(0,3).join(' ').slice(0,900);
   const evidenceRefs=Array.isArray(m.evidence_refs)?m.evidence_refs:[];
   return {sequence_no:sequenceNo,
    round_no:Number.isInteger(m.round_no)&&m.round_no>0?m.round_no:1,

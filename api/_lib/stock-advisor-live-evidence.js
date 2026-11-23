@@ -64,7 +64,7 @@ export async function collectNseNewsBatch({instruments=[],runId=null,db,deadline
   const feeds=Array.isArray(feedLabels)&&feedLabels.length?NSE_FEEDS.filter(f=>feedLabels.includes(f.label)):NSE_FEEDS;
   const list=(Array.isArray(instruments)?instruments:[]).filter(x=>x?.symbol);
   const results=new Map(list.map(x=>[String(x.symbol).toUpperCase(),{ticker:String(x.symbol).toUpperCase(),status:'no_matching_items',stored:0,errors:[]} ]));
-  const batch={provider:'NSE RSS',fetched_at:new Date().toISOString(),feeds_checked:0,stored:0,errors:[],results:[]};
+  const batch={provider:'NSE RSS',fetched_at:new Date().toISOString(),feeds_checked:0,stored:0,items_seen:0,errors:[],feeds:[],results:[]};
   for(const feed of feeds) {
     // A feed can wait up to 10 seconds; do not start one that could run past the caller's deadline.
     if(deadlineAt&&deadlineAt-Date.now()<11000){batch.errors.push({feed:feed.label,error:'skipped: time limit reached'});continue}
@@ -72,9 +72,13 @@ export async function collectNseNewsBatch({instruments=[],runId=null,db,deadline
       const xml=await getFeed(feed.url);
       batch.feeds_checked++;
       const items=[...xml.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)];
+      // What this feed actually carried. Two real titles are kept so an unmatched feed can be diagnosed without another run.
+      const feedSeen={label:feed.label,items:items.length,matched:0,sample:[]};
+      batch.feeds.push(feedSeen); batch.items_seen+=items.length;
       for(const item of items) {
         const block=item[1],title=tag(block,'title'),link=tag(block,'link'),description=tag(block,'description'),date=tag(block,'pubDate');
         if(!title||!link)continue;
+        if(feedSeen.sample.length<2)feedSeen.sample.push(title.slice(0,110));
         let url;try{url=new URL(link,feed.url).toString()}catch{continue}
         if(!hostAllowed(url))continue;
         const stamp=Date.parse(date),published=Number.isFinite(stamp)?new Date(stamp).toISOString():null;
@@ -84,7 +88,7 @@ export async function collectNseNewsBatch({instruments=[],runId=null,db,deadline
           try {
             await saveItem({runId,ticker,sourceType:feed.source_type,title,url,published,excerpt:description,feed,db});
             const result=results.get(ticker);result.status='stored_unverified';result.stored++;
-            batch.stored++;
+            batch.stored++;feedSeen.matched++;
           } catch(error) {
             const result=results.get(ticker);result.status='feed_error';result.errors.push(String(error?.message||error).slice(0,160));
             batch.errors.push({ticker,feed:feed.label,error:String(error?.message||error).slice(0,160)});
@@ -98,6 +102,9 @@ export async function collectNseNewsBatch({instruments=[],runId=null,db,deadline
   }
   batch.results=[...results.values()];
   batch.status=batch.stored?(batch.errors.length?'partial':'ok'):batch.errors.length?'unavailable':'no_results';
+  if(batch.status==='no_results')batch.errors.push({feed:'(all)',error:batch.items_seen
+    ?'read '+batch.items_seen+' announcements but none named a saved holding — check that each instrument stores its real company name, not just its symbol'
+    :'the feeds returned no announcements at all'});
   return batch;
 }
 
