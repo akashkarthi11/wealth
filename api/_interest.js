@@ -9,6 +9,13 @@ import { sql, withActor, httpError, isDay, isUuid } from './_lib.js';
 const DAY = 86400e3, IST_MS = 5.5 * 3600e3;
 export const MAX_CATCH_UP_DAYS = 90, CORRECTION_WINDOW_DAYS = 30, FD_MAX_DAYS = 1200, STALE_PRINCIPAL_DAYS = 2;
 
+// Treat an account as an FD when either its account subtype or its linked product/name identifies it as one.
+// This prevents an aggregate FD linked under a generic savings subtype from accruing against a savings balance.
+export function interestAccountKind(link = {}) {
+  const descriptor = [link.subtype_code, link.product_key, link.account_name].filter(Boolean).join(' ').toLowerCase();
+  return link.subtype_code === 'fixed_deposit' || /\\bfixed[\\s_-]*deposit\\b|\\bfd\\b/.test(descriptor) ? 'fd' : 'savings';
+}
+
 export const istDay = (ms = Date.now()) => new Date(ms + IST_MS).toISOString().slice(0, 10);
 export const addDays = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * DAY).toISOString().slice(0, 10);
 export const startOfIstDay = d => Date.parse(d + 'T00:00:00+05:30');
@@ -338,7 +345,7 @@ export async function runAccrual(uid, { db = sql, now = Date.now(), dryRun = fal
       db.query(`SELECT id, accrual_date::text AS accrual_date, revision, interest_amount::float8 AS interest_amount, calculation_status, entry_type
         FROM wealth_interest_ledger WHERE user_id=$1 AND account_key=$2 AND product_key=$3 AND partition_key=$4`, [uid, l.account_key, l.product_key, l.partition_key]),
     ]);
-    const kind = l.subtype_code === 'fixed_deposit' ? 'fd' : 'savings';
+    const kind = interestAccountKind(l);
     const terms = kind === 'fd' ? { principal: l.fd_principal, bookedOn: l.fd_booked_on, maturityOn: l.fd_maturity_on, payout: l.fd_payout, compounding: l.fd_compounding } : null;
     const dailyCredit = kind === 'savings' && l.credit_frequency === 'daily';
     // Paid every N months: accrued daily, paid at the end of each period (periods counted from the account's anchor; default whole calendar months).
