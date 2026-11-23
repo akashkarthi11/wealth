@@ -107,10 +107,12 @@ export async function runJobNow(job,db=sql) {
 export async function dispatchDueJobs() {
   const deadlineAt=Date.now()+DISPATCH_BUDGET_MS;
   const reaped=await reapStalled(sql).catch(()=>null);
+  // Interest and backup are owned exclusively by /api/nightly (01:30 IST). Never queue their legacy copies here.
   const due=await sql.query(`SELECT * FROM wealth_scheduled_jobs WHERE enabled=true AND next_run_at<=now()
+    AND handler_key NOT IN ('interest-accrual','backup')
     AND (locked_until IS NULL OR locked_until<now()) ORDER BY CASE handler_key
-    WHEN 'interest-accrual' THEN 1 WHEN 'backup' THEN 2 WHEN 'market-price-refresh' THEN 3
-    WHEN 'stock-advisor-data-collection' THEN 4 WHEN 'stock-advisor-auto-research' THEN 5 ELSE 99 END LIMIT 8`);
+    WHEN 'market-price-refresh' THEN 1 WHEN 'stock-advisor-data-collection' THEN 2
+    WHEN 'stock-advisor-auto-research' THEN 3 ELSE 99 END LIMIT 8`);
   const queued=[];
   for(const job of due){
     try{queued.push(await enqueueJob(job,'scheduled'))}
