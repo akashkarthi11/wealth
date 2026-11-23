@@ -529,6 +529,7 @@ async function pumpQueue(req,res) {
     SELECT r.id FROM wealth_stock_advisor_runs r
     JOIN wealth_stock_advisor_run_jobs j ON j.run_id=r.id AND j.stage='debate'
     WHERE r.user_id=$1 AND r.id=ANY($2::uuid[]) AND r.status NOT IN ('completed','failed','partially_completed')
+      AND NOT EXISTS (SELECT 1 FROM wealth_stock_advisor_run_jobs active WHERE active.run_id=ANY($2::uuid[]) AND active.stage='debate' AND active.status='running' AND active.locked_at>now()-interval '90 seconds')
       AND ((j.status='pending' AND j.available_at<=now())
         OR (j.status='running' AND (j.locked_at IS NULL OR j.locked_at<now()-interval '90 seconds')))
     ORDER BY j.available_at,r.run_at,r.id LIMIT 1
