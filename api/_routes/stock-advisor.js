@@ -91,7 +91,7 @@ async function loadResearchHealth(uid,holdings){
   {key:'nemotron',name:'Nemotron Free',status:String(process.env.AI_GATEWAY_API_KEY||'').trim()?'configured':'needs_key',detail:'Primary free AI model through Vercel AI Gateway'},
   {key:'groq',name:'Groq Free',status:String(process.env.GROQ_API_KEY||'').trim()?(String(process.env.GROQ_ZERO_DATA_RETENTION_CONFIRMED||'').toLowerCase()==='true'?'configured':'blocked'):'needs_key',detail:'Fallback requires API key and confirmed Zero Data Retention'}
  ];
- if(!tickers.length)return {status:'ok',eligible_equities:0,coverage:{},providers,fincrux_keys:fincruxKeys,last_collection:null,evidence_summary:[]};
+ if(!tickers.length)return {status:'ok',eligible_equities:0,coverage:{},providers,fincrux_keys:fincruxKeys,eligible_tickers:tickers,last_collection:null,evidence_summary:[]};
  try{
   const [coverageRows,evidenceRows,collectionRows]=await Promise.all([
    sql.query(`SELECT
