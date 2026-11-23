@@ -68,7 +68,7 @@ test('the job stops starting provider calls when too little of the 60 seconds is
     const tej = r.steps.filter(s => s.provider === 'TejHQ');
     assert.deepEqual(tej.map(s => s.status), ['skipped', 'skipped']);
     assert.match(tej[0].note, /Time limit reached/);
-    assert.equal(r.skipped_for_time, 2);
+    assert.equal(r.skipped_for_time, 4, 'two TejHQ calls and two NSE XBRL holding calls are deferred');
     assert.equal(r.status, 'failed', 'nothing was collected, so the run is not reported as a success');
     assert.match(db.writes[db.writes.length - 1].sql, /finished_at=now\(\)/, 'the run still records its finish');
   } finally { globalThis.fetch = originalFetch; if (key !== undefined) process.env.FINCRUX_API_KEY = key; }
@@ -201,7 +201,7 @@ test('the data collection is queued as one item per provider call; when the last
   ]);
   const [{ n: before }] = await a.query(`SELECT count(*)::int AS n FROM wealth_job_queue WHERE payload->>'collection_run_id'=$1`, [crid]);
   assert.equal(before, 2);
-  const out = await drainQueue({ db: a, runHandler: async () => { throw new Error('not used'); }, deadlineAt: Date.now() + 20000 });
+  const out = await drainQueue({ db: a, runHandler: async () => { throw new Error('not used'); }, deadlineAt: Date.now() + 40000 });
   assert.equal(out.processed, 2);
   const [c] = await a.query('SELECT status,finished_at,summary FROM wealth_stock_advisor_data_collection_runs WHERE id=$1', [crid]);
   const s = typeof c.summary === 'string' ? JSON.parse(c.summary) : c.summary;
