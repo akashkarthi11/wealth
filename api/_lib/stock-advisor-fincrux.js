@@ -10,7 +10,13 @@ const safeDate = value => {
   const stamp = Date.parse(value);
   return Number.isFinite(stamp) ? new Date(stamp).toISOString() : null;
 };
-const rows = value => Array.isArray(value) ? value.filter(x => x && typeof x === 'object' && !Array.isArray(x)) : [];
+// Fincrux statement tables may contain object rows or positional array rows. Keep both:
+ // dropping nested arrays silently turns valid API responses into "no statements".
+const rows = value => Array.isArray(value)
+  ? value.filter(x => x !== null && typeof x === 'object').slice(0, 60)
+  : [];
+const firstPopulatedArray = (...values) => values.find(value => Array.isArray(value) && value.length) 
+  || values.find(Array.isArray) || [];
 
 export function normalizeFincruxFinancials(payload, expectedTicker) {
   const symbol = clean(payload?.trading_symbol).toUpperCase();
@@ -26,7 +32,7 @@ export function normalizeFincruxFinancials(payload, expectedTicker) {
     throw new Error('Fincrux returned no structured financial data. Response keys: ' + Object.keys(payload || {}).slice(0, 12).join(', '));
   }
   const financials = {
-    quarterly_results: rows(data.quarterly_results || data.quaterly_results).slice(0, 20),
+    quarterly_results: rows(firstPopulatedArray(data.quarterly_results, data.quaterly_results)).slice(0, 20),
     profit_and_loss: rows(data.profit_and_loss).slice(0, 12),
     balance_sheet: rows(data.balance_sheet).slice(0, 12),
     cash_flows: rows(data.cash_flows).slice(0, 12),
@@ -128,7 +134,7 @@ export async function collectFincruxFinancials({ instrument, db } = {}) {
     const reservationUrl = sourceUrl + '#key-' + encodeURIComponent(key.id);
     const reservationId = await reserveDailySlot(db, ticker, reservationUrl, dateKey, encodeURIComponent(key.id));
     if (!reservationId) {
-      result.reason = 'This Fincrux account has used its five-request daily allowance, or this ticker was already attempted with this account today.';
+      result.reason = 'This Fincrux API key has used its five-request daily allowance, or this ticker was already attempted with this key today. Other enabled keys are checked independently.';
       continue;
     }
     result.attempted_keys++;
@@ -176,7 +182,7 @@ export async function collectFincruxFinancials({ instrument, db } = {}) {
   if (!successful) {
     result.status = lastError ? 'failed' : 'skipped';
     result.error = lastError || null;
-    result.reason = lastError ? 'All available Fincrux accounts failed; tried ' + result.attempted_keys + ' account key(s). Last error: ' + lastError : result.reason || 'All configured Fincrux accounts have exhausted their daily allowances.';
+    result.reason = lastError ? 'All available Fincrux keys failed; tried ' + result.attempted_keys + ' key(s). Last error: ' + lastError : result.reason || 'All configured Fincrux keys have exhausted their individual daily allowances.';
     result.response_keys = lastPayload && typeof lastPayload === 'object' ? Object.keys(lastPayload).slice(0, 20) : [];
     result.data_keys = lastPayload?.data && typeof lastPayload.data === 'object' && !Array.isArray(lastPayload.data) ? Object.keys(lastPayload.data).slice(0, 30) : [];
     return result;
