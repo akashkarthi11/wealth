@@ -4,6 +4,7 @@ import { collectMutualFundEvidence } from './stock-advisor-mfapi.js';
 import { collectTejHqEquityEvidence } from './stock-advisor-tejhq.js';
 import { collectNseXbrlFinancialStatement } from './stock-advisor-nse-xbrl.js';
 import { collectYahooFinancials } from './stock-advisor-yahoo-financials.js';
+import { loadFincruxApiKeys } from './provider-api-keys.js';
 export { cleanNseFeedItemMatches } from './stock-advisor-live-evidence.js';
 
 // Stock Advisor data collection, as small TASKS. The scheduled job puts one task per provider call on the job queue (api/_lib/job-queue.js), so
@@ -77,7 +78,8 @@ export async function planCollection(db) {
     // Free any abandoned placeholder first, so the day's five requests can reach tickers that are otherwise locked out.
     const released = await releaseAbandonedReservations(db).catch(() => []);
     if (released.length) tasks.push({ task: 'fincrux_skip', payload: { reason: 'Released ' + released.length + ' abandoned reservation(s) so these tickers can be requested again: ' + released.join(', ') + '.' }, priority: TASKS.fincrux_skip.priority, min_budget_ms: 1000 });
-    if (String(process.env.FINCRUX_API_KEY || '').trim()) {
+    const fincruxKeys = await loadFincruxApiKeys(db);
+    if (fincruxKeys.length) {
       const [quota] = await db.query(`SELECT count(*)::int AS used
        FROM wealth_stock_advisor_research_sources
        WHERE publisher='Fincrux'
@@ -93,7 +95,7 @@ export async function planCollection(db) {
         const candidates = [...equities].sort((a, b) => (lastByTicker.get(String(a.symbol).toUpperCase()) || 0) - (lastByTicker.get(String(b.symbol).toUpperCase()) || 0));
         for (const c of candidates.slice(0, remaining)) add('fincrux', { instrument: slim(c) });
       } else add('fincrux_skip', { reason: 'Five free-tier requests already reserved today (IST).' });
-    } else add('fincrux_skip', { reason: 'FINCRUX_API_KEY is not configured; no paid or unauthenticated request attempted.' });
+    } else add('fincrux_skip', { reason: 'No Fincrux API keys are configured in Provider Health or the environment; no request attempted.' });
   }
   return { instruments: instruments.length, tasks };
 }
