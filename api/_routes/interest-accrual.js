@@ -1,6 +1,4 @@
-import { sql,json,safeEqual,ownerId,invalidateUserCaches } from '../_lib.js';
-import { runAccrual } from '../_interest.js';
-import { startJob,finishJob } from '../_jobs.js';
+import { json } from '../_lib.js';
 
 export default async function handler(req,res) {
   if(req.method!=='GET'&&req.method!=='POST')return json(res,405,{error:'Method not allowed'});
