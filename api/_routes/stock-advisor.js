@@ -118,6 +118,7 @@ async function loadResearchHealth(uid,holdings){
     unverified_financials:Number(coverage.unverified_financials||0)
    },
    providers,
+   fincrux_keys:fincruxKeys,
    last_collection:collectionRows[0]||null,
    evidence_summary:evidenceRows
   };
