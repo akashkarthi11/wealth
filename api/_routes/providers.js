@@ -147,6 +147,7 @@ export default async function handler(req, res) {
 
     return json(res, 400, { error: 'Unsupported action. Use status, fincrux_keys, fincrux_key_add, fincrux_key_update, fincrux_key_delete, research, or quote.' });
   } catch (error) {
+    if (error?.status) return json(res, error.status, { error: error.message });
     console.error('[wealth-providers]', error?.message || error);
     return json(res, 502, { error: 'Provider request failed. Check server configuration and provider access.' });
   }
