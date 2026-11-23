@@ -381,3 +381,19 @@ test('saving FD settings previews the calculation but leaves ledger and payouts 
   assert.ok((await a.query('SELECT count(*)::int AS n FROM wealth_interest_ledger WHERE user_id=$1', [uid]))[0].n > 0,
     'the nightly job writes the calculated accrual');
 });
+
+test('FD with incomplete terms is clearly flagged on the Interest page even when principal is present', () => {
+  const c = loadUi();
+  const html = c.inSourcesHtml({
+    today: '2026-11-14',
+    sources: [{
+      account_id: 'fd-1', bank_name: 'SBI', account_name: 'SBI FD', subtype_code: 'fixed_deposit',
+      status: 'pending_terms', rate: 0.07, fd_principal: 50000, fd_booked_on: '2026-08-01',
+      fd_maturity_on: null, fd_payout: null, paused: false, accrued_month: 0, accrued_total: 0,
+      credited_total: 0, balance: null, last_accrual: null
+    }],
+    unlinked: [], history: []
+  });
+  assert.match(html, /Deposit terms are incomplete/);
+  assert.match(html, /maturity date and payout method/);
+});
