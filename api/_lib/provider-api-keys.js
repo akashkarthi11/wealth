@@ -26,11 +26,11 @@ const fingerprint = value => createHash('sha256').update(clean(value)).digest('h
 const mask = value => '••••' + clean(value).slice(-4);
 
 export async function listFincruxKeyMetadata(db, userId) {
-  const rows = await db.query("SELECT id,label,encrypted_key,key_iv,key_tag,priority,enabled,created_at,updated_at FROM wealth_provider_api_keys WHERE user_id=$1 AND provider=$2 ORDER BY priority,id", [userId, PROVIDER]);
+  const rows = await db.query("SELECT id,label,encrypted_key,key_iv,key_tag,priority,enabled,user_agent,assigned_tickers,created_at,updated_at FROM wealth_provider_api_keys WHERE user_id=$1 AND provider=$2 ORDER BY priority,id", [userId, PROVIDER]);
   const database = rows.map(row => {
     try {
       const value = decryptProviderKey(row);
-      return { id: row.id, label: row.label, masked: mask(value), priority: row.priority, enabled: row.enabled, source: 'database', last4: value.slice(-4) };
+      return { id: row.id, label: row.label, masked: mask(value), priority: row.priority, enabled: row.enabled, source: 'database', last4: value.slice(-4), user_agent: row.user_agent || 'WealthPersonalStockResearch/1.0', assigned_tickers: Array.isArray(row.assigned_tickers) ? row.assigned_tickers : [] };
     } catch {
       return { id: row.id, label: row.label, masked: 'Unavailable', priority: row.priority, enabled: false, source: 'database', error: 'Cannot decrypt; check the session secret has not changed.' };
     }
@@ -47,14 +47,14 @@ export async function listFincruxKeyMetadata(db, userId) {
 export async function loadFincruxApiKeys(db) {
   const owners = await db.query("SELECT id FROM wealth_users WHERE role='admin' ORDER BY created_at LIMIT 1");
   const userId = owners[0]?.id;
-  const databaseRows = userId ? await db.query("SELECT id,label,encrypted_key,key_iv,key_tag,priority,enabled FROM wealth_provider_api_keys WHERE user_id=$1 AND provider=$2 AND enabled=true ORDER BY priority,id", [userId, PROVIDER]) : [];
+  const databaseRows = userId ? await db.query("SELECT id,label,encrypted_key,key_iv,key_tag,priority,enabled,user_agent,assigned_tickers FROM wealth_provider_api_keys WHERE user_id=$1 AND provider=$2 AND enabled=true ORDER BY priority,id", [userId, PROVIDER]) : [];
   const output = [], seen = new Set();
   for (const row of databaseRows) {
     try {
       const value = decryptProviderKey(row), fp = fingerprint(value);
       if (!value || seen.has(fp)) continue;
       seen.add(fp);
-      output.push({ id: row.id, label: row.label, value, source: 'database' });
+      output.push({ id: row.id, label: row.label, value, source: 'database', user_agent: row.user_agent || 'WealthPersonalStockResearch/1.0', assigned_tickers: Array.isArray(row.assigned_tickers) ? row.assigned_tickers : [] });
     } catch (error) {
       console.warn('[fincrux-keys] encrypted key unavailable', row.id, error?.message || error);
     }
@@ -66,7 +66,7 @@ export async function loadFincruxApiKeys(db) {
     const fp = fingerprint(value);
     if (seen.has(fp)) continue;
     seen.add(fp);
-    output.push({ id: 'env:' + name, label: name, value, source: 'environment' });
+    output.push({ id: 'env:' + name, label: name, value, source: 'environment', user_agent: 'WealthPersonalStockResearch/1.0', assigned_tickers: [] });
   }
   return output;
 }
