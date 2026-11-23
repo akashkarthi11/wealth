@@ -55,6 +55,7 @@ test('Fincrux falls through to the next key after the first key fails', async ()
     const result = await collectFincruxFinancials({ instrument: { symbol: 'TEST' }, db });
     assert.equal(result.status, 'stored_unverified');
     assert.equal(result.attempted_keys, 2);
+    assert.equal(result.request_limit_per_ist_day, 10);
     assert.equal(result.key_label, 'Second key');
     assert.deepEqual(calls, ['bad-secret-111', 'good-secret-222']);
     assert.equal(writes.length, 2);
