@@ -9,13 +9,13 @@ This document describes the provider adapters used by the existing Stock Advisor
 | TejHQ | NSE end-of-day OHLCV and price history | No key for the current endpoint | EOD only; not an intraday quote. Personal-use terms apply. |
 | MFAPI.in | Indian mutual fund NAV history | No key | Scheme identity must be resolved by saved AMFI scheme code or a sufficiently close name match. |
 | NSE RSS | Announcements, results, annual reports, board meetings, shareholding patterns and corporate actions | No key | RSS entries are listings only and remain unverified until the linked filing content is checked. |
-| Fincrux Hobby | Structured quarterly/annual financial data | `FINCRUX_API_KEY` | Five requests per IST day. One stored snapshot is reused for 30 days. Third-party data remains unverified until corroborated against official filings. |
+| Fincrux Hobby | Structured quarterly/annual financial data | `FINCRUX_API_KEY` | Five requests per account per IST day. With two separate Hobby accounts, the combined allowance is ten requests. One stored snapshot is reused for 30 days. Third-party data remains unverified until corroborated against official filings. |
 
 ### Fincrux setup
 
 Set `FINCRUX_API_KEY` (and optionally `FINCRUX_API_KEY_2` through `FINCRUX_API_KEY_10`) as environment defaults only in the Development Preview environment. Never commit a key or include it in stored source URLs or logs. Additional keys can be added and ordered from Stock Advisor → Provider Health; database keys are encrypted with AES-256-GCM using a key derived from `WEALTH_SESSION_SECRET`, and are tried before environment defaults. The UI shows only masked values. Disable or remove a database override to stop using it; environment defaults remain untouched.
 
-The collector reserves each actual key attempt in the existing `wealth_stock_advisor_research_sources` table under a Postgres advisory lock. Failed attempts count toward the shared five-request-per-IST-day allowance; a fallback key is tried only if another reserved attempt is available. The cap is deliberately shared across all keys until Fincrux confirms that multiple keys have independent quotas. No separate quota table is created.
+The collector reserves each actual key attempt in the existing `wealth_stock_advisor_research_sources` table under a Postgres advisory lock scoped to that account key. Fincrux documents API keys as account-linked and the Hobby plan as five requests per day. Each configured account key therefore has its own five-request IST-day allowance; two separate accounts with one key each provide ten requests in total. Failed attempts count against the account that made them. If one account is exhausted, the collector can continue with another account. No separate quota table is created.
 
 The Fincrux response is stored as `financial_statement` with `verification_status='unverified'`. This is deliberate: the provider documents that its forced refresh scrapes Screener data, so its figures must not independently unlock the evidence gate.
 
