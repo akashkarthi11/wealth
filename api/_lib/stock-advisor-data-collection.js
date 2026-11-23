@@ -92,7 +92,12 @@ export async function planCollection(db) {
          WHERE publisher='Fincrux' AND source_type='financial_statement'
          GROUP BY upper(ticker)`);
         const lastByTicker = new Map(recent.map(row => [row.ticker, row.last_retrieved ? Date.parse(row.last_retrieved) : 0]));
-        const candidates = [...equities].sort((a, b) => (lastByTicker.get(String(a.symbol).toUpperCase()) || 0) - (lastByTicker.get(String(b.symbol).toUpperCase()) || 0));
+        // One Fincrux task per unique ticker (e.g. ITC appears once even if held in multiple lots/accounts).
+        const uniqueCandidates = [...new Map(equities
+          .filter(item => item.symbol)
+          .map(item => [String(item.symbol).trim().toUpperCase(), item])).values()];
+        const candidates = uniqueCandidates.sort((a, b) =>
+          (lastByTicker.get(String(a.symbol).toUpperCase()) || 0) - (lastByTicker.get(String(b.symbol).toUpperCase()) || 0));
         for (const c of candidates.slice(0, remaining)) add('fincrux', { instrument: slim(c) });
       } else add('fincrux_skip', { reason: 'All configured Fincrux accounts have used their combined daily allowance (IST).' });
     } else add('fincrux_skip', { reason: 'No Fincrux API keys are configured in Provider Health or the environment; no request attempted.' });
