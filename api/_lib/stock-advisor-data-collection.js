@@ -127,7 +127,7 @@ export async function runCollectionTask(db, task, payload = {}, { deadlineAt = n
       return { ...base, status: r.status, note: note(r), detail: [r] };
     }
     if (task === 'fincrux') {
-      const r = await collectFincruxFinancials({ instrument: i, db });
+      const r = await collectFincruxFinancials({ instrument: i, db, manual: payload.manual === true });
       return { ...base, status: r.status, note: note(r), detail: [r] };
     }
     if (task === 'fincrux_skip') return { ...base, status: 'skipped', note: payload.reason, detail: [{ provider: 'Fincrux', status: 'skipped', reason: payload.reason }] };
