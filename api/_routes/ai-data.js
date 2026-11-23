@@ -39,7 +39,7 @@ export default async function handler(req, res) {
     if (!(await adminUser(req))) return json(res, 403, { error: 'Admin sign-in required' });
     const url = new URL(req.url || '/', 'http://x');
     const wantRun = String(url.searchParams.get('run') || '');
-    const ticker = String(url.searchParams.get('ticker') || '').trim().toUpperCase().slice(0, 40);
+    const q = String(url.searchParams.get('q') || '').trim().slice(0, 100);\n    const ticker = String(url.searchParams.get('ticker') || '').trim().toUpperCase().slice(0, 40);
     const provider = String(url.searchParams.get('provider') || '').trim().slice(0, 60);
     const verification = String(url.searchParams.get('verification') || '').trim().slice(0, 40);
     const sourceType = String(url.searchParams.get('source_type') || '').trim().slice(0, 60);
@@ -71,7 +71,103 @@ export default async function handler(req, res) {
       FROM wealth_stock_advisor_research_sources WHERE run_id IS NULL
       GROUP BY 1,2,3 ORDER BY 1,2,3`);
 
-    const where = ['run_id IS NULL'], params = [];
+    const where = ['run_id IS NULL'], params = [];\n    if (q) { params.push('%' + q.replace(/[\\\\%_]/g, '\\\\const where = ['run_id IS NULL'], params = [];') + '%'); where.push('(ticker ILIKE 
+    if (ticker) { params.push(ticker); where.push('upper(ticker)=$' + params.length); }
+    if (provider) { params.push(provider); where.push('publisher=$' + params.length); }
+    if (verification) { params.push(verification); where.push('verification_status=$' + params.length); }
+    if (sourceType) { params.push(sourceType); where.push('source_type=$' + params.length); }
+    const sources = await sql.query(`SELECT id,ticker,source_type,title,url,publisher,published_at,retrieved_at,verification_status,left(COALESCE(excerpt,''),240) AS excerpt
+      FROM wealth_stock_advisor_research_sources WHERE ${where.join(' AND ')} ORDER BY retrieved_at DESC LIMIT 100`, params);
+
+    // Holdings the job cannot collect for: it only reads active holdings whose instrument has a symbol AND a saved price-source symbol.
+    const notCollected = await sql.query(`SELECT DISTINCT i.name, i.symbol, i.asset_class,
+        CASE WHEN i.symbol IS NULL THEN 'no symbol saved' WHEN i.price_source_symbol IS NULL THEN 'no price-source symbol saved' ELSE 'not an Indian equity or mutual fund' END AS reason
+      FROM wealth_instruments i JOIN wealth_holdings h ON h.instrument_id=i.id
+      WHERE h.status='active' AND (i.symbol IS NULL OR i.price_source_symbol IS NULL OR i.asset_class NOT IN ('indian_equity','indian_mutual_fund'))
+      ORDER BY i.name LIMIT 100`);
+
+    const providers = [...new Set(stored.map(r => r.publisher))].sort();
+    const source_types = [...new Set(stored.map(r => r.source_type))].sort();
+    const verification_statuses = [...new Set(stored.map(r => r.verification_status))].sort();
+    return json(res, 200, { function_limit_seconds: FUNCTION_LIMIT_SECONDS, runs, selected, stored, providers, sources, not_collected: notCollected, queue: await queueCounts(sql), filter: { q, ticker, provider, verification, source_type: sourceType }, source_types, verification_statuses });
+  } catch (error) {
+    console.error('[ai-data]', error?.message || error);
+    return json(res, 500, { error: 'Could not load AI data.' });
+  }
+}
+ + params.length + ' OR title ILIKE 
+    if (ticker) { params.push(ticker); where.push('upper(ticker)=$' + params.length); }
+    if (provider) { params.push(provider); where.push('publisher=$' + params.length); }
+    if (verification) { params.push(verification); where.push('verification_status=$' + params.length); }
+    if (sourceType) { params.push(sourceType); where.push('source_type=$' + params.length); }
+    const sources = await sql.query(`SELECT id,ticker,source_type,title,url,publisher,published_at,retrieved_at,verification_status,left(COALESCE(excerpt,''),240) AS excerpt
+      FROM wealth_stock_advisor_research_sources WHERE ${where.join(' AND ')} ORDER BY retrieved_at DESC LIMIT 100`, params);
+
+    // Holdings the job cannot collect for: it only reads active holdings whose instrument has a symbol AND a saved price-source symbol.
+    const notCollected = await sql.query(`SELECT DISTINCT i.name, i.symbol, i.asset_class,
+        CASE WHEN i.symbol IS NULL THEN 'no symbol saved' WHEN i.price_source_symbol IS NULL THEN 'no price-source symbol saved' ELSE 'not an Indian equity or mutual fund' END AS reason
+      FROM wealth_instruments i JOIN wealth_holdings h ON h.instrument_id=i.id
+      WHERE h.status='active' AND (i.symbol IS NULL OR i.price_source_symbol IS NULL OR i.asset_class NOT IN ('indian_equity','indian_mutual_fund'))
+      ORDER BY i.name LIMIT 100`);
+
+    const providers = [...new Set(stored.map(r => r.publisher))].sort();
+    const source_types = [...new Set(stored.map(r => r.source_type))].sort();
+    const verification_statuses = [...new Set(stored.map(r => r.verification_status))].sort();
+    return json(res, 200, { function_limit_seconds: FUNCTION_LIMIT_SECONDS, runs, selected, stored, providers, sources, not_collected: notCollected, queue: await queueCounts(sql), filter: { ticker, provider, verification, source_type: sourceType }, source_types, verification_statuses });
+  } catch (error) {
+    console.error('[ai-data]', error?.message || error);
+    return json(res, 500, { error: 'Could not load AI data.' });
+  }
+}
+ + params.length + ' OR publisher ILIKE 
+    if (ticker) { params.push(ticker); where.push('upper(ticker)=$' + params.length); }
+    if (provider) { params.push(provider); where.push('publisher=$' + params.length); }
+    if (verification) { params.push(verification); where.push('verification_status=$' + params.length); }
+    if (sourceType) { params.push(sourceType); where.push('source_type=$' + params.length); }
+    const sources = await sql.query(`SELECT id,ticker,source_type,title,url,publisher,published_at,retrieved_at,verification_status,left(COALESCE(excerpt,''),240) AS excerpt
+      FROM wealth_stock_advisor_research_sources WHERE ${where.join(' AND ')} ORDER BY retrieved_at DESC LIMIT 100`, params);
+
+    // Holdings the job cannot collect for: it only reads active holdings whose instrument has a symbol AND a saved price-source symbol.
+    const notCollected = await sql.query(`SELECT DISTINCT i.name, i.symbol, i.asset_class,
+        CASE WHEN i.symbol IS NULL THEN 'no symbol saved' WHEN i.price_source_symbol IS NULL THEN 'no price-source symbol saved' ELSE 'not an Indian equity or mutual fund' END AS reason
+      FROM wealth_instruments i JOIN wealth_holdings h ON h.instrument_id=i.id
+      WHERE h.status='active' AND (i.symbol IS NULL OR i.price_source_symbol IS NULL OR i.asset_class NOT IN ('indian_equity','indian_mutual_fund'))
+      ORDER BY i.name LIMIT 100`);
+
+    const providers = [...new Set(stored.map(r => r.publisher))].sort();
+    const source_types = [...new Set(stored.map(r => r.source_type))].sort();
+    const verification_statuses = [...new Set(stored.map(r => r.verification_status))].sort();
+    return json(res, 200, { function_limit_seconds: FUNCTION_LIMIT_SECONDS, runs, selected, stored, providers, sources, not_collected: notCollected, queue: await queueCounts(sql), filter: { ticker, provider, verification, source_type: sourceType }, source_types, verification_statuses });
+  } catch (error) {
+    console.error('[ai-data]', error?.message || error);
+    return json(res, 500, { error: 'Could not load AI data.' });
+  }
+}
+ + params.length + ' OR excerpt ILIKE 
+    if (ticker) { params.push(ticker); where.push('upper(ticker)=$' + params.length); }
+    if (provider) { params.push(provider); where.push('publisher=$' + params.length); }
+    if (verification) { params.push(verification); where.push('verification_status=$' + params.length); }
+    if (sourceType) { params.push(sourceType); where.push('source_type=$' + params.length); }
+    const sources = await sql.query(`SELECT id,ticker,source_type,title,url,publisher,published_at,retrieved_at,verification_status,left(COALESCE(excerpt,''),240) AS excerpt
+      FROM wealth_stock_advisor_research_sources WHERE ${where.join(' AND ')} ORDER BY retrieved_at DESC LIMIT 100`, params);
+
+    // Holdings the job cannot collect for: it only reads active holdings whose instrument has a symbol AND a saved price-source symbol.
+    const notCollected = await sql.query(`SELECT DISTINCT i.name, i.symbol, i.asset_class,
+        CASE WHEN i.symbol IS NULL THEN 'no symbol saved' WHEN i.price_source_symbol IS NULL THEN 'no price-source symbol saved' ELSE 'not an Indian equity or mutual fund' END AS reason
+      FROM wealth_instruments i JOIN wealth_holdings h ON h.instrument_id=i.id
+      WHERE h.status='active' AND (i.symbol IS NULL OR i.price_source_symbol IS NULL OR i.asset_class NOT IN ('indian_equity','indian_mutual_fund'))
+      ORDER BY i.name LIMIT 100`);
+
+    const providers = [...new Set(stored.map(r => r.publisher))].sort();
+    const source_types = [...new Set(stored.map(r => r.source_type))].sort();
+    const verification_statuses = [...new Set(stored.map(r => r.verification_status))].sort();
+    return json(res, 200, { function_limit_seconds: FUNCTION_LIMIT_SECONDS, runs, selected, stored, providers, sources, not_collected: notCollected, queue: await queueCounts(sql), filter: { ticker, provider, verification, source_type: sourceType }, source_types, verification_statuses });
+  } catch (error) {
+    console.error('[ai-data]', error?.message || error);
+    return json(res, 500, { error: 'Could not load AI data.' });
+  }
+}
+ + params.length + ')'); }
     if (ticker) { params.push(ticker); where.push('upper(ticker)=$' + params.length); }
     if (provider) { params.push(provider); where.push('publisher=$' + params.length); }
     if (verification) { params.push(verification); where.push('verification_status=$' + params.length); }
