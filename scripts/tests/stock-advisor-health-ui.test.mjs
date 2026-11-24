@@ -10,7 +10,9 @@ test('Stock Advisor API exposes provider configuration and verified evidence cov
  assert.match(route,/research_health/);
  assert.match(route,/verified_financials/);
  assert.match(route,/GROQ_ZERO_DATA_RETENTION_CONFIRMED/);
- assert.match(route,/FINCRUX_API_KEY/);
+ // Fincrux is configured by stored keys now, not by an environment variable, so the route reports the key metadata.
+ assert.match(route,/listFincruxKeyMetadata/);
+ assert.match(route,/fincrux_keys:fincruxKeys/);
 });
 
 test('Stock Advisor overview displays provider health and collection freshness',()=>{
@@ -37,7 +39,8 @@ test('Provider Health can add, disable and remove encrypted Fincrux fallback key
  assert.match(app,/data-fincrux-key-save/);
  assert.match(app,/data-fincrux-key-toggle/);
  assert.match(app,/data-fincrux-key-delete/);
- assert.match(app,/Environment default/);
- assert.match(app,/Database override/);
+ // A key from the environment and a key saved in the database must be told apart on screen.
+ assert.match(app,/Environment key/);
+ assert.match(app,/Saved key/);
  assert.match(css,/\.advisor-key-manager/);
 });

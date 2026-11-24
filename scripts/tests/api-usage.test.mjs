@@ -36,6 +36,28 @@ test('the Fincrux quota is counted for the Indian day and runs out at five', asy
   assert.equal(Math.max(0, 5 - await used()), 2, 'two of the five left');
 });
 
+test('a manual Fincrux call counts against the account that paid for it', async () => {
+  // The reservation url carries the account as '#key-<id>', and a manual call appends '-manual-<uuid>'. That suffix
+  // made the per-account row a different key, so the account still read 0 of 5 used while the provider total said 2 —
+  // the owner would have believed there was quota left that was already spent (found 2026-11-24).
+  const { a } = await migratedDb();
+  const query = [...SRC.matchAll(/sql\.query\(`([\s\S]*?)`\)/g)].map(m => m[1]).find(q => /AS key_id/.test(q));
+  assert.ok(query, 'the page reads usage per account');
+  const add = (ticker, suffix) => a.query(`INSERT INTO wealth_stock_advisor_research_sources
+    (run_id,ticker,source_type,title,url,publisher,retrieved_at,evidence,verification_status)
+    VALUES (NULL,$1,'financial_statement','t','https://x.test/'||$1||'#key-'||$2,'Fincrux',now(),'{}'::jsonb,'unverified')`,
+    [ticker, suffix]);
+  await add('AUTO', '7');                                           // the scheduled run
+  await add('MANUAL', '7-manual-3f1b9c2e-0000-4000-8000-000000000001');  // the owner pressing the button
+  await add('OTHER', '8');                                          // a second account, untouched by either
+
+  const rows = await a.query(query.split('${IST_DAY}').join(IST), []);
+  const used = new Map(rows.map(r => [String(r.key_id), Number(r.used)]));
+  assert.equal(used.get('7'), 2, 'both calls belong to account 7, manual or not');
+  assert.equal(used.get('8'), 1, 'and the other account keeps its own count');
+  assert.equal(Math.max(0, 5 - used.get('7')), 3, 'three of the five left, not four');
+});
+
 test('model calls are counted, and an answer given without the model is counted apart from them', async () => {
   const { a } = await migratedDb();
   const [user] = await a.query(`INSERT INTO wealth_users(email,password_hash,role) VALUES('u@x.test','x','admin') RETURNING id`);
@@ -54,17 +76,20 @@ test('model calls are counted, and an answer given without the model is counted 
 });
 
 test('the page states a limit only where one is published, and never invents one', () => {
-  // Fincrux's five a day is the only hard cap in the code; the pacing of the free model is a rate, not a daily cap.
+  // Fincrux's allowance is five a day PER KEY, so the page multiplies it by the number of active accounts. That
+  // per-key figure must stay the one the adapter enforces, not a copy that can drift.
   const enforced = Number(read('api/_lib/stock-advisor-fincrux.js').match(/MAX_DAILY_REQUESTS = (\d+)/)[1]);
-  const shown = Number(SRC.match(/limit: (\d+), limit_window: 'per day \(IST\)'/)[1]);
-  assert.equal(shown, enforced, 'the page must show the quota the code actually enforces, not a copy that can drift');
+  const shown = Number(SRC.match(/const fincruxLimit = (\d+) \* activeFincruxAccounts\.length/)[1]);
+  assert.equal(shown, enforced, 'the per-key quota on the page is the one the adapter enforces');
+  assert.match(SRC, /limit_window: 'per day \(IST; 5 per account\)'/, 'and the window says it is per account');
   for (const p of ['tejhq', 'mfapi', 'nse']) {
     const block = SRC.slice(SRC.indexOf("key: '" + p + "'"));
     assert.match(block.slice(0, 200), /limit: null/, p + ' publishes no limit, so none is claimed');
   }
   const app = read('app.js');
   assert.match(app, /no published limit/);
-  assert.match(app, /A limit is shown only where the provider publishes one/);
+  // The wording may change; what must survive is that a missing quota is not read as "unlimited".
+  assert.match(app, /does not mean unlimited/i, 'the page says a missing limit is not permission to call freely');
   assert.doesNotMatch(SRC, /\b(INSERT|UPDATE|DELETE)\b\s/i, 'the page only reads');
   assert.match(SRC, /role === 'admin'/);
   assert.match(read('api/router.js'), /'api-usage': \(\) => import/);

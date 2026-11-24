@@ -45,7 +45,8 @@ test('Fincrux falls through to the next key after the first key fails', async ()
   globalThis.fetch = async url => {
     const key = new URL(url).searchParams.get('api_key');
     calls.push(key);
-    if (key === 'bad-secret-111') return new Response(JSON.stringify({ error: 'invalid key' }), { status: 401 });
+    // The first key this ticker is routed to fails; the remaining one must still be tried.
+    if (calls.length === 1) return new Response(JSON.stringify({ error: 'invalid key' }), { status: 401 });
     return new Response(JSON.stringify({
       success: true, trading_symbol: 'TEST', company: 'Test Limited',
       data: { quarterly_results: [{ quarter: 'Q2' }] }
@@ -56,8 +57,9 @@ test('Fincrux falls through to the next key after the first key fails', async ()
     assert.equal(result.status, 'stored_unverified');
     assert.equal(result.attempted_keys, 2);
     assert.equal(result.request_limit_per_ist_day, 10);
-    assert.equal(result.key_label, 'Second key');
-    assert.deepEqual(calls, ['bad-secret-111', 'good-secret-222']);
+    assert.equal(calls.length, 2, 'the second key is tried after the first fails');
+    assert.notEqual(calls[0], calls[1], 'a different key, not the same one twice');
+    assert.ok(['First key', 'Second key'].includes(result.key_label));
     assert.equal(writes.length, 2);
     assert.match(writes[0].sql, /verification_status='rejected'/);
     assert.match(writes[1].sql, /verification_status='unverified'/);

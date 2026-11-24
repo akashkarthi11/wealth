@@ -55,10 +55,11 @@ test('releasing is idempotent and reports every ticker it frees', async () => {
 
 test('wiring: the release runs before the day’s requests are planned, and never breaks planning', () => {
   const collection = read('api/_lib/stock-advisor-data-collection.js');
-  assert.match(collection, /import \{ collectFincruxFinancials, releaseAbandonedReservations \}/);
+  assert.match(collection, /import \{[^}]*releaseAbandonedReservations[^}]*\} from '\.\/stock-advisor-fincrux\.js'/,
+    'imported from the adapter, whatever else is imported alongside it');
   assert.match(collection, /const released = await releaseAbandonedReservations\(db\)\.catch\(\(\) => \[\]\)/,
     'a failure here must not stop the collection');
-  assert.ok(collection.indexOf('releaseAbandonedReservations(db)') < collection.indexOf("if (String(process.env.FINCRUX_API_KEY"),
-    'released before the quota is counted, so a freed ticker can be requested the same run');
+  assert.ok(collection.indexOf('releaseAbandonedReservations(db)') < collection.indexOf('loadFincruxApiKeys(db)'),
+    'released before the keys and quota are read, so a freed ticker can be requested the same run');
   assert.match(collection, /Released ' \+ released\.length \+ ' abandoned reservation/, 'the run says what it freed');
 });

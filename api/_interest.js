@@ -157,13 +157,13 @@ export function planAccrual({ kind, balances = [], rates = [], terms = null, led
   // 1. New days: from the day after the last accrual (or the first possible day) through `through`.
   let from;
   if (kind === 'fd') {
-    if (!terms?.principal || !terms?.bookedOn || !terms?.maturityOn || !terms?.payout) return { status: 'pending_terms', rows, skipped, last };
+    if (!terms?.principal || !terms?.bookedOn || !terms?.maturityOn || !terms?.payout) return { status: 'pending_terms', rows, skipped, last, dayTotals: new Map(), creditTotals: new Map() };
     from = last ? addDays(last, 1) : terms.bookedOn;
     if (addDays(through, -FD_MAX_DAYS) > from) from = addDays(through, -FD_MAX_DAYS);
   } else {
     const firstVerified = balances.filter(isBase).map(b => istDay(new Date(b.as_of).getTime())).sort()[0];
     from = last ? addDays(last, 1) : firstVerified;
-    if (!from) return { status: 'stale_balance', rows, skipped: [{ day: through, reason: 'no verified balance' }], last };
+    if (!from) return { status: 'stale_balance', rows, skipped: [{ day: through, reason: 'no verified balance' }], last, dayTotals: new Map(), creditTotals: new Map() };
     if (addDays(through, -MAX_CATCH_UP_DAYS) > from) from = addDays(through, -MAX_CATCH_UP_DAYS);
   }
   const until = kind === 'fd' && terms.maturityOn && addDays(terms.maturityOn, -1) < through ? addDays(terms.maturityOn, -1) : through;

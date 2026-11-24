@@ -61,17 +61,21 @@ export default async function handler(req, res) {
       FROM wealth_stock_advisor_research_sources
       WHERE publisher='Fincrux' AND retrieved_at >= ${IST_DAY}
         AND retrieved_at < (${IST_DAY} + interval '1 day')`);
-    const fincruxAccountRows = await sql.query(`SELECT regexp_replace(url, '^.*#key-', '') AS key_id, count(*)::int AS used
+    // The reservation url ends in '#key-<encodeURIComponent(id)>', and a manual call appends '-manual-<uuid>' to that
+    // (stock-advisor-fincrux.js). The suffix is stripped here: without it a manual call spends one of the five and this
+    // per-account panel still showed the account as untouched, while the provider total above counted it.
+    const fincruxAccountRows = await sql.query(`SELECT regexp_replace(regexp_replace(url, '^.*#key-', ''), '-manual-.*$', '') AS key_id,
+        count(*)::int AS used
       FROM wealth_stock_advisor_research_sources
       WHERE publisher='Fincrux' AND retrieved_at >= ${IST_DAY}
         AND retrieved_at < (${IST_DAY} + interval '1 day') AND url LIKE '%#key-%'
       GROUP BY 1`);
     const fincruxUsageByKey = new Map(fincruxAccountRows.map(row => [String(row.key_id), num(row.used)]));
-    const fincruxQuotas = activeFincruxAccounts.map(key => ({
-      label: key.label, source: key.source, limit: 5,
-      used: fincruxUsageByKey.get(encodeURIComponent(key.id)) || 0,
-      remaining: Math.max(0, 5 - (fincruxUsageByKey.get(String(key.id)) || 0))
-    }));
+    const fincruxQuotas = activeFincruxAccounts.map(key => {
+      // One lookup for both numbers: they disagreed when the id needed encoding.
+      const used = fincruxUsageByKey.get(encodeURIComponent(key.id)) || 0;
+      return { label: key.label, source: key.source, limit: 5, used, remaining: Math.max(0, 5 - used) };
+    });
 
     // Every debate message is one free-model call, except the evidence-gate result, which uses none.
     const [model] = await sql.query(`SELECT
@@ -85,9 +89,31 @@ export default async function handler(req, res) {
     const [slot] = await sql.query(`SELECT next_allowed_at FROM wealth_stock_advisor_ai_rate_limit WHERE id=1`).catch(() => []);
     const waitMs = slot?.next_allowed_at ? Math.max(0, new Date(slot.next_allowed_at).getTime() - Date.now()) : 0;
 
+    // One row per request actually sent today (IST), split by whether the provider answered or errored. A skipped or
+    // deferred step is not a request: it sent nothing and used no allowance, so it is reported separately and never
+    // counted as usage.
+    const answered = await sql.query(`SELECT provider,
+        count(*) FILTER (WHERE ok)::int AS succeeded,
+        count(*) FILTER (WHERE NOT ok)::int AS failed,
+        count(*)::int AS requests,
+        sum(COALESCE(duration_ms,0))::int AS total_ms,
+        max(created_at) AS last_at
+      FROM wealth_api_audit WHERE created_at >= ${IST_DAY} GROUP BY 1`).catch(() => []);
+    const answeredByProvider = new Map(answered.map(a => [String(a.provider || ''), a]));
+
     const fromSteps = (label, extra = {}) => {
       const s = byProvider.get(label) || {};
-      return { calls: num(s.calls), failed: num(s.failed), skipped: num(s.skipped), total_ms: num(s.total_ms), last_at: s.last_at || null, ...extra };
+      const a = answeredByProvider.get(label) || {};
+      return {
+        // what the provider answered, success or error: this is the usage
+        requests: num(a.requests), succeeded: num(a.succeeded), failed: num(a.failed),
+        calls: num(a.requests),
+        total_ms: num(a.total_ms) || num(s.total_ms),
+        last_at: a.last_at || s.last_at || null,
+        // planned work that never reached the provider, shown apart from usage
+        skipped: num(s.skipped),
+        ...extra,
+      };
     };
 
     const providers = [
@@ -107,15 +133,23 @@ export default async function handler(req, res) {
         next_slot_in_ms: waitMs, last_at: model?.last_at || null, ...health('free-model'),
         note: 'Paced to one call every 13 seconds (five a minute) across all runs. Calls answered without the model, such as the evidence-gate result, are counted separately.',
       },
-      { key: 'tejhq', name: 'TejHQ', purpose: 'NSE end-of-day prices and indicators', limit: null, limit_window: 'no published limit', ...fromSteps('TejHQ'), used: num((byProvider.get('TejHQ') || {}).calls), ...health('tejhq'),
+      { key: 'tejhq', name: 'TejHQ', purpose: 'NSE end-of-day prices and indicators', limit: null, limit_window: 'no published limit', ...fromSteps('TejHQ NSE EOD'), used: num((answeredByProvider.get('TejHQ NSE EOD') || {}).requests), ...health('tejhq'),
         note: 'One request per holding per run. No quota is published, so none is enforced here.' },
-      { key: 'mfapi', name: 'MFAPI.in', purpose: 'Mutual fund NAV', limit: null, limit_window: 'no published limit', ...fromSteps('MFAPI.in'), used: num((byProvider.get('MFAPI.in') || {}).calls), ...health('mfapi'),
+      { key: 'mfapi', name: 'MFAPI.in', purpose: 'Mutual fund NAV', limit: null, limit_window: 'no published limit', ...fromSteps('MFAPI.in'), used: num((answeredByProvider.get('MFAPI.in') || {}).requests), ...health('mfapi'),
         note: 'One request per fund per run.' },
-      { key: 'nse', name: 'NSE', purpose: 'Announcements, results and the company lists', limit: null, limit_window: 'no published limit', ...fromSteps('NSE RSS'), used: num((byProvider.get('NSE RSS') || {}).calls), ...health('nse'),
+      { key: 'nse', name: 'NSE', purpose: 'Announcements, results and the company lists', limit: null, limit_window: 'no published limit', ...fromSteps('NSE RSS'), used: num((answeredByProvider.get('NSE RSS') || {}).requests), ...health('nse'),
         note: 'Six announcement feeds per run, plus the symbol lists, which are downloaded once and reused for six hours.' },
+      { key: 'yahoo', name: 'Yahoo Finance fundamentals', purpose: 'Secondary quarterly figures (never verified)', limit: null,
+        limit_window: 'no published limit', ...fromSteps('Yahoo Finance fundamentals'),
+        used: num((answeredByProvider.get('Yahoo Finance fundamentals') || {}).requests), ...health('yahoo'),
+        note: 'One request per holding. The figures are stored unverified and never open the evidence gate.' },
+      { key: 'fx', name: 'Open currency API', purpose: 'USD to INR reference rate', limit: null,
+        limit_window: 'no published limit', ...fromSteps('Open currency API'),
+        used: num((answeredByProvider.get('Open currency API') || {}).requests), ...health('fx'),
+        note: 'One published rate a day, cached. Yahoo INR=X is the fallback if it cannot be read.' },
       { key: 'groq', name: 'Groq Free', purpose: 'Optional fallback model', limit: null, limit_window: 'no published limit', used: 0, calls: 0, ...health('groq'),
         note: 'Used only if the Vercel gateway fails and zero-data-retention has been confirmed.' },
-      { key: 'period-match', name: 'Period match with NSE', purpose: 'Verifying a statement against a filing', limit: null, limit_window: 'database only', ...fromSteps('Period match with NSE'), used: num((byProvider.get('Period match with NSE') || {}).calls), ...health('period-match'),
+      { key: 'period-match', name: 'Period match with NSE', purpose: 'Verifying a statement against a filing', limit: null, limit_window: 'database only', ...fromSteps('Period match with NSE'), used: 0, ...health('period-match'),
         note: 'Reads what is already stored. It calls no outside service.' },
     ];
 

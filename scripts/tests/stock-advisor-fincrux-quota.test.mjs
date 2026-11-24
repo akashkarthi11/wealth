@@ -4,14 +4,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { migratedDb } from './helpers/pglite.mjs';
-import { collectFincruxFinancials } from '../../api/_lib/stock-advisor-fincrux.js';
+import { collectFincruxFinancials, clearFincruxDailyUsageMemory } from '../../api/_lib/stock-advisor-fincrux.js';
 
 const instrument = symbol => ({ id: 'i-' + symbol, symbol, name: symbol + ' Limited', asset_class: 'indian_equity' });
-const row = (a, ticker) => a.query(`SELECT verification_status AS status, left(COALESCE(excerpt,''),60) AS excerpt,
-  (evidence ? 'reservation') AS placeholder, (evidence ? 'financials') AS has_data, evidence->>'error' AS err
-  FROM wealth_stock_advisor_research_sources WHERE publisher='Fincrux' AND upper(ticker)=upper($1)`, [ticker]).then(r => r[0]);
+const row = (a, ticker) => a.query(`SELECT verification_status AS status, left(COALESCE(excerpt,''),200) AS excerpt,
+  jsonb_exists(evidence,'reservation') AS placeholder, jsonb_exists(evidence,'financials') AS has_data, evidence->>'error' AS err
+  FROM wealth_stock_advisor_research_sources WHERE publisher='Fincrux' AND upper(ticker)=upper($1)
+  ORDER BY retrieved_at DESC LIMIT 1`, [ticker]).then(r => r[0] || null);
 
 async function withFincrux(payload, fn, { status = 200 } = {}) {
+  clearFincruxDailyUsageMemory();
   const originalFetch = globalThis.fetch, key = process.env.FINCRUX_API_KEY;
   process.env.FINCRUX_API_KEY = 'test-key';
   globalThis.fetch = async () => new Response(typeof payload === 'string' ? payload : JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json' } });
@@ -20,8 +22,9 @@ async function withFincrux(payload, fn, { status = 200 } = {}) {
 }
 
 // Exactly what Fincrux returned today: a successful response carrying no statement arrays.
-const EMPTY = { success: true, trading_symbol: 'BEL', company: 'Bharat Electronics Limited',
-  data: { about: 'Defence electronics.', ratios: [{ name: 'ROE', value: '21%' }], top_ratios: { pe: '42' } } };
+const emptyFor = ticker => ({ success: true, trading_symbol: ticker, company: ticker + ' Limited',
+  data: { about: 'Defence electronics.', ratios: [{ name: 'ROE', value: '21%' }], top_ratios: { pe: '42' } } });
+const EMPTY = emptyFor('BEL');
 
 test('a spent slot that returned no statements must not masquerade as a stored snapshot', async () => {
   const { a } = await migratedDb();
@@ -38,9 +41,14 @@ test('a spent slot that returned no statements must not masquerade as a stored s
 test('a request that is spent anyway keeps whatever the response did carry, and records its shape', async () => {
   const { a } = await migratedDb();
   await withFincrux(EMPTY, () => collectFincruxFinancials({ instrument: instrument('BEL'), db: a }));
-  const stored = await row(a, 'BEL');
-  assert.match(String(stored.err || ''), /about, ratios, top_ratios/,
-    'the keys the response did contain are recorded, so the next decision needs no further request');
+  const result = await withFincrux(emptyFor('ITC'), () => collectFincruxFinancials({ instrument: instrument('ITC'), db: a }));
+  assert.equal(result.status, 'failed');
+  assert.match(String(result.error || ''), /data keys: about, ratios, top_ratios/,
+    'the call reports the keys the response did contain');
+  const stored = await row(a, 'ITC');
+  assert.ok(stored, 'the spent request left a row behind');
+  assert.match(String(stored.err || '') + ' ' + String(stored.excerpt || ''), /about, ratios, top_ratios/,
+    'and they are stored, so the next decision needs no further request');
 });
 
 test('the same ticker is not tried twice in one day, but is no longer locked out for 30 days', async () => {
@@ -50,11 +58,12 @@ test('the same ticker is not tried twice in one day, but is no longer locked out
   // same IST day: refused on purpose, so a second slot is not spent on a ticker already attempted
   const sameDay = await withFincrux(EMPTY, () => collectFincruxFinancials({ instrument: instrument('BEL'), db: a }));
   assert.equal(sameDay.status, 'skipped');
-  assert.match(String(sameDay.reason), /already requested today|quota/);
+  assert.match(String(sameDay.reason), /already attempted for this stock today|already requested today|quota/);
 
   // a later day: the failed row must NOT count as a 30-day cached snapshot
   await a.query(`UPDATE wealth_stock_advisor_research_sources SET retrieved_at = now() - interval '2 days'
     WHERE publisher='Fincrux' AND upper(ticker)='BEL'`);
+  clearFincruxDailyUsageMemory();
   let called = 0;
   const good = { success: true, trading_symbol: 'BEL', company: 'Bharat Electronics Limited',
     data: { quarterly_results: [{ quarter: 'Q2 FY27', sales: '100' }] } };

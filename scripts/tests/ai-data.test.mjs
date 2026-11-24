@@ -28,7 +28,7 @@ test('each provider call of the job is timed, and the steps are saved while the 
     for (const s of r.steps) { assert.ok(s.started_at, s.provider + ' has a start time'); assert.equal(typeof s.ms, 'number', s.provider + ' has a duration'); assert.notEqual(s.status, 'running'); }
     const fx = r.steps.find(s => s.provider === 'Fincrux');
     assert.equal(fx.status, 'skipped');
-    assert.match(fx.note, /FINCRUX_API_KEY is not configured/);
+    assert.match(fx.note, /No Fincrux API keys are configured/);
     const nse = r.steps.find(s => s.provider === 'NSE RSS');
     assert.match(nse.note, /Announcements: network blocked in test/, 'feed errors are written out, not shown as [object Object]');
     assert.doesNotMatch(nse.note, /\[object Object\]/);
@@ -221,19 +221,24 @@ test('the data collection is queued as one item per provider call; when the last
 test('a job is queued once: running it again while its items wait says busy; an empty collection finishes at once; a due job queues without running', async () => {
   const { enqueueJob } = await import('../../api/_lib/scheduled-jobs.js');
   const { a } = await migratedDb();
-  const interest = await jobRow(a, 'interest-accrual');
-  const first = await enqueueJob(interest, 'manual', a);
+  const prices = await jobRow(a, 'market-price-refresh');
+  const first = await enqueueJob(prices, 'manual', a);
   assert.deepEqual([first.status, first.queued], ['queued', 1]);
-  assert.equal((await a.query(`SELECT status FROM wealth_job_queue WHERE job_id=$1`, [interest.id]))[0].status, 'pending', 'queueing runs nothing');
-  assert.equal((await enqueueJob(interest, 'manual', a)).status, 'busy');
+  assert.equal((await a.query(`SELECT status FROM wealth_job_queue WHERE job_id=$1`, [prices.id]))[0].status, 'pending', 'queueing runs nothing');
+  assert.equal((await enqueueJob(prices, 'manual', a)).status, 'busy');
+  // the nightly cron owns these two, so the queue refuses them outright
+  for (const key of ['interest-accrual', 'backup']) {
+    assert.equal((await enqueueJob(await jobRow(a, key), 'manual', a)).status, 'blocked', key + ' is run by the nightly cron, not the queue');
+  }
   const collection = await jobRow(a, 'stock-advisor-data-collection');
   const empty = await enqueueJob(collection, 'manual', a);
   assert.equal(empty.status, 'succeeded', 'no holdings with a symbol and price-source symbol: nothing to collect');
   assert.equal((await a.query(`SELECT status FROM wealth_scheduled_job_runs WHERE job_id=$1`, [collection.id]))[0].status, 'succeeded');
-  await a.query(`UPDATE wealth_scheduled_jobs SET next_run_at=now()-interval '1 minute', enabled=true WHERE id=$1`, [(await jobRow(a, 'backup')).id]);
-  const due = await enqueueJob(await jobRow(a, 'backup'), 'scheduled', a);
+  const research = await jobRow(a, 'stock-advisor-auto-research');
+  await a.query(`UPDATE wealth_scheduled_jobs SET next_run_at=now()-interval '1 minute', enabled=true WHERE id=$1`, [research.id]);
+  const due = await enqueueJob(await jobRow(a, 'stock-advisor-auto-research'), 'scheduled', a);
   assert.equal(due.status, 'queued');
-  assert.ok(new Date((await jobRow(a, 'backup')).next_run_at) > new Date(), 'a scheduled start moves the next run to the next day');
+  assert.ok(new Date((await jobRow(a, 'stock-advisor-auto-research')).next_run_at) > new Date(), 'a scheduled start moves the next run on');
 });
 
 test('wiring: the dispatch only queues and then drains; a worker route and cron entries keep the queue moving; the pages keep it moving while open', () => {
