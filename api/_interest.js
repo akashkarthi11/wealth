@@ -628,7 +628,10 @@ async function saveFdInterest(uid, a, b, { db, actor, now }) {
     }
   }
   await withActor(db, actor, stmts);
-  const run = paused ? null : await runAccrual(uid, { db, now, actor, accountId: a.id }).catch(e => ({ error: String(e?.message || e) }));
+  // Saving FD terms must never bypass the nightly job's exclusive write ownership.
+  // Preview the calculation here; /api/nightly performs the actual ledger and payout writes.
+  const run = paused ? null : await runAccrual(uid, { db, now, actor, accountId: a.id, dryRun: true })
+    .catch(e => ({ error: String(e?.message || e) }));
   return { accountId: a.id, productKey, created, rateChange, run: run && run.accounts ? run.accounts[0] || null : run };
 }
 
