@@ -1,28 +1,27 @@
-const TZ='Asia/Kolkata';
-
-function localParts(date,timezone=TZ) {
-  const p=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23',weekday:'short'}).formatToParts(date);
-  return Object.fromEntries(p.map(x=>[x.type,x.value]));
-}
-function zonedTimeToUtc(year,month,day,hour,minute,timezone) {
-  const target=Date.UTC(year,month-1,day,hour,minute);
-  let guess=target;
-  for(let i=0;i<3;i++){
-    const p=localParts(new Date(guess),timezone);
-    const represented=Date.UTC(Number(p.year),Number(p.month)-1,Number(p.day),Number(p.hour),Number(p.minute));
-    guess+=target-represented;
-  }
-  return new Date(guess);
-}
-export function nextJobRun(now,time,frequency='daily',timezone=TZ) {
-  const [hour,minute]=String(time).slice(0,5).split(':').map(Number);
-  const base=localParts(now,timezone);
-  for(let offset=0;offset<9;offset++){
-    const d=new Date(Date.UTC(Number(base.year),Number(base.month)-1,Number(base.day)+offset));
-    const weekday=new Intl.DateTimeFormat('en-US',{timeZone:timezone,weekday:'short'}).format(d);
-    if(frequency==='weekdays'&&['Sat','Sun'].includes(weekday))continue;
-    const candidate=zonedTimeToUtc(d.getUTCFullYear(),d.getUTCMonth()+1,d.getUTCDate(),hour,minute,timezone);
-    if(candidate>now)return candidate;
-  }
-  throw new Error('Could not calculate the next scheduled run.');
+// Scheduling decisions use PostgreSQL's clock as the single source of truth.
+// The application clock is intentionally used only for elapsed execution budgets.
+export async function nextJobRunFromDb(db,time,frequency='daily',timezone='Asia/Kolkata') {
+  const rows=await db.query(`WITH clock AS (
+      SELECT now() AS now_at, $1::time AS local_time, $2::text AS frequency, $3::text AS timezone
+    ), dates AS (
+      SELECT c.*, d::date AS local_date
+      FROM clock c
+      CROSS JOIN LATERAL generate_series(
+        (c.now_at AT TIME ZONE c.timezone)::date,
+        (c.now_at AT TIME ZONE c.timezone)::date + 8,
+        interval '1 day'
+      ) AS d
+    ), candidates AS (
+      SELECT ((local_date + local_time) AT TIME ZONE timezone) AS run_at,
+        frequency, local_date
+      FROM dates
+    )
+    SELECT run_at
+    FROM candidates
+    WHERE run_at > (SELECT now_at FROM clock)
+      AND (frequency <> 'weekdays' OR EXTRACT(ISODOW FROM local_date) < 6)
+    ORDER BY run_at
+    LIMIT 1`,[String(time).slice(0,5),frequency,timezone]);
+  if(!rows.length||!rows[0].run_at)throw new Error('Could not calculate the next scheduled run from database time.');
+  return rows[0].run_at;
 }
