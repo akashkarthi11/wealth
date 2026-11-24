@@ -49,3 +49,18 @@ test('a weekday schedule never lands on a Saturday or Sunday in Asia/Kolkata', a
   const [row] = await a.query(`SELECT extract(isodow FROM ($1::timestamptz AT TIME ZONE 'Asia/Kolkata'))::int AS dow`, [next.toISOString()]);
   assert.ok(row.dow >= 1 && row.dow <= 5, 'got ISO weekday ' + row.dow);
 });
+
+test('the Jobs screen shows backup is unconfigured directly, not only after a failed run', () => {
+  // The backup cron card said only "Waiting for first recorded invocation" until it had failed once. Backup had never
+  // run and the admin had no way to see why from this screen (owner's request 2026-11-24).
+  const route = readFileSync(new URL('../../api/_routes/jobs.js', import.meta.url), 'utf8');
+  assert.match(route, /import \{ sql, json, sessionUser, configStatus \} from '\.\.\/_lib\.js'/, 'reuses the existing presence-only check');
+  assert.match(route, /const backupConfigured=configStatus\(\)\.backup/);
+  assert.match(route, /schedulerActivity,backupConfigured/, 'sent to the page');
+
+  const app = readFileSync(new URL('../../app.js', import.meta.url), 'utf8');
+  assert.match(app, /data\?\.backupConfigured===false\?'Set WEALTH_BACKUP_KEY/);
+  assert.match(app, /BLOB_READ_WRITE_TOKEN in the Vercel project/);
+  assert.match(app, /never shown here, cannot be set from this screen/, 'still never settable or shown from the app, same rule as every other secret');
+  assert.match(app, /notConfigured\?'Needs setup'/);
+});

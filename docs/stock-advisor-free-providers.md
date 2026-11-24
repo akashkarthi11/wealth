@@ -10,6 +10,30 @@ This document describes the provider adapters used by the existing Stock Advisor
 | MFAPI.in | Indian mutual fund NAV history | No key | Scheme identity must be resolved by saved AMFI scheme code or a sufficiently close name match. |
 | NSE RSS | Announcements, results, annual reports, board meetings, shareholding patterns and corporate actions | No key | RSS entries are listings only and remain unverified until the linked filing content is checked. |
 | Fincrux Hobby | Structured quarterly/annual financial data | `FINCRUX_API_KEY` | Five requests per account per IST day. With two separate Hobby accounts, the combined allowance is ten requests. One stored snapshot is reused for 30 days. Third-party data remains unverified until corroborated against official filings. |
+| Agent web | Official pages a debate agent opens for itself | No key | Allowlisted hosts only: NSE, BSE, SEBI, AMFI, RBI, Yahoo. A refused URL makes no request. Text is returned as unverified context and never satisfies missing evidence. |
+| Web search (Tavily) | Free web search a debate agent may call for context | `TAVILY_API_KEY` | Offered to the agents only when the key is set. Thirty searches per IST day out of a free monthly allowance, counted from the API audit and refused before a credit is spent. Results are unverified context and can never unlock a BUY, HOLD or SELL. |
+
+## Agent-collected data (2026-11-24)
+
+Until this change the agents could only argue over whatever the nightly job had gathered. They may now stop during a
+turn and collect data themselves, through `api/_lib/agent-tools.js`. Two rules hold, and both are enforced in code:
+
+- **Only official sources satisfy the evidence gate.** `get_financial_statement` (NSE-filed XBRL),
+  `get_price_and_technicals` (NSE end-of-day) and `get_fund_nav` (AMFI) write research sources exactly as the nightly
+  adapters do. `get_announcements`, `fetch_official_page` and `search_web` return context only — `agent-search.js` never
+  touches the research-sources table, so a search result cannot reach the gate at all.
+- **Fetched text is data, never instruction.** Everything a page or a search returns is wrapped in an
+  `UNTRUSTED SOURCE DATA` frame that says so, with markup stripped and length capped. The gate that decides
+  BUY/HOLD/SELL is computed in code from verified sources and never reads model output.
+
+The loop is bounded at two collection rounds per turn and three tools per round, then a final call with no tools so JSON
+mode applies again. A model that returns no tool calls — including one that cannot do tools — takes exactly the path it
+took before, so offering tools cannot break a run.
+
+> **Unverified:** `docs.tavily.com` is unreachable from the development network, so Tavily's request and response field
+> names could not be read from its documentation. Both known auth styles are sent and the response is parsed tolerantly,
+> as the TejHQ adapter already does for an undocumented provider. The first real call records the true shape under
+> provider `Web search` on the API usage page; correct the field list from that evidence, not from guesswork.
 
 ### Fincrux setup
 
