@@ -3,7 +3,7 @@ import { sql } from '../_lib.js';
 import marketPriceRefresh from '../_routes/refresh-market-prices.js';
 import stockAdvisorResearch from '../_routes/stock-advisor-scheduled.js';
 import stockAdvisorCollection from '../_routes/stock-advisor-data-collection.js';
-import { nextJobRun } from './scheduled-job-time.js';
+import { nextJobRunFromDb } from './scheduled-job-time.js';
 import { enqueueItems, drainQueue, reapStalled, finishJobRun, queueCounts, DISPATCH_BUDGET_MS } from './job-queue.js';
 import { startCollectionRun, planCollection } from './stock-advisor-data-collection.js';
 export { DISPATCH_BUDGET_MS, reapStalled, queueCounts };
@@ -47,7 +47,7 @@ async function claimJob(job,triggerType,db=sql) {
   if(!rows.length)return null;
   const claimed=rows[0];
   if(triggerType==='scheduled'){
-    const next=nextJobRun(new Date(),String(claimed.schedule_time).slice(0,5),claimed.schedule_frequency,claimed.timezone);
+    const next=await nextJobRunFromDb(db,String(claimed.schedule_time).slice(0,5),claimed.schedule_frequency,claimed.timezone);
     await db.query('UPDATE wealth_scheduled_jobs SET next_run_at=$2 WHERE id=$1 AND lock_token=$3',[claimed.id,next.toISOString(),lock]);
   }
   const [run]=await db.query(`INSERT INTO wealth_scheduled_job_runs(job_id,trigger_type,status)
