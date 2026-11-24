@@ -31,7 +31,10 @@ test('the saved result is a clear DATA REQUIRED with what is missing and what to
 });
 
 test('wiring: the check runs on the first step, before any model call and before the CIO guard; the result is saved as the CIO message and completes the run', () => {
-  const skip = src.indexOf('shouldSkipDebate(evidence,process.env)'), cio = src.indexOf("if(step===8 && !cioReady(prior))"), model = src.indexOf('await callFreeModel([{role:\'system\'');
+  // The turn's model call goes through callWithTools now, so an agent may collect data before arguing (2026-11-24).
+  // The gate check must still come first: a run with missing evidence answers without spending a model call at all.
+  const skip = src.indexOf('shouldSkipDebate(evidence,process.env)'), cio = src.indexOf("if(step===8 && !cioReady(prior))"), model = src.indexOf('await callWithTools([{role:\'system\'');
+  assert.ok(model > 0, 'the turn calls the model through the tool loop');
   assert.ok(skip > 0 && skip < cio && skip < model, 'skip check comes before the CIO guard and the first model call');
   assert.match(src, /if\(step===0 && shouldSkipDebate/);
   assert.match(src, /'cio-evidence-gate'/);
