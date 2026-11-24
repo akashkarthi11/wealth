@@ -1789,8 +1789,15 @@ b.pj-medium{color:#f5c26b}
 /* Stock Advisor research-provider health */
 .advisor-research-health{display:grid;gap:12px}
 .advisor-provider-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-.advisor-provider-card{display:flex;flex-direction:column;justify-content:space-between;gap:9px;min-width:0;padding:10px;border:1px solid #2b3c55;border-radius:11px;background:#0d1929}
-.advisor-provider-card>div{display:grid;gap:4px;min-width:0}
+/* Each card is a <details>: clicking the chip or the row opens that provider's own config list (2026-11-24). */
+.advisor-provider-card{min-width:0;border:1px solid #2b3c55;border-radius:11px;background:#0d1929;transition:border-color .15s ease}
+.advisor-provider-card[open]{border-color:#3d5578}
+.advisor-provider-card summary{display:flex;align-items:flex-start;justify-content:space-between;gap:9px;padding:10px;cursor:pointer;list-style:none}
+.advisor-provider-card summary::-webkit-details-marker{display:none}
+.advisor-provider-card summary::after{content:'▸';flex:0 0 auto;align-self:center;color:var(--muted);font-size:10px;transition:transform .15s ease;margin-left:2px}
+.advisor-provider-card[open] summary::after{transform:rotate(90deg)}
+.advisor-provider-card summary:focus-visible{outline:2px solid #5b84bd;outline-offset:2px;border-radius:8px}
+.advisor-provider-card summary>div{display:grid;gap:4px;min-width:0}
 .advisor-provider-card b{font-size:12px;overflow-wrap:anywhere}
 .advisor-provider-card small{font-size:10px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}
 .advisor-provider-status{align-self:flex-start;padding:4px 7px;border:1px solid #40516a;border-radius:999px;font-size:9px;font-weight:750;letter-spacing:.45px;color:#c7d4e4;background:#152338}
@@ -1798,6 +1805,11 @@ b.pj-medium{color:#f5c26b}
 .advisor-provider-status.status-configured{border-color:#365f8d;color:#a8ceff;background:#182e49}
 .advisor-provider-status.status-needs_key{border-color:#675b37;color:#e7d49a;background:#302b1e}
 .advisor-provider-status.status-blocked{border-color:#804c50;color:#ffabb0;background:#3a2228}
+.advisor-provider-config{display:grid;gap:6px;padding:0 10px 10px;border-top:1px solid #1d2b40;margin-top:-1px;padding-top:9px}
+.advisor-provider-usageline{font-size:11px;color:#c7d4e4}
+.advisor-provider-keyline{font-size:10px;color:var(--muted)}
+.advisor-provider-keyline b{color:#c7d4e4;font-family:ui-monospace,Consolas,monospace;font-size:10px}
+.advisor-provider-config>.advisor-key-manager{margin:2px 0 0}
 .advisor-coverage-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .advisor-coverage-card{display:grid;gap:5px;min-width:0;padding:10px;border:1px solid #2b3c55;border-radius:11px;background:#111f32}
 .advisor-coverage-card small{font-size:10px;line-height:1.35;color:var(--muted)}
@@ -1815,7 +1827,7 @@ b.pj-medium{color:#f5c26b}
 @media(min-width:620px){
  .advisor-provider-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
  .advisor-coverage-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
- .advisor-provider-card{min-height:105px}
+ .advisor-provider-card summary{min-height:72px}
 }
 
 /* AI data page (admin): run timeline and stored-data rows */

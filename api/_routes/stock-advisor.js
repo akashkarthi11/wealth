@@ -3,6 +3,7 @@ import {timingSafeEqual,randomUUID} from 'node:crypto';
 import {startJob,finishJob} from '../_jobs.js';
 import {SCHEDULE_TIMEZONE,DEFAULT_SCHEDULE_TIME,nextScheduledAt,getLocalDateTime} from '../_lib/stock-advisor-schedule-time.js';
 import { listFincruxKeyMetadata } from '../_lib/provider-api-keys.js';
+import { buildProviderDirectory } from '../_lib/provider-directory.js';
 
 // The agents' shared WEALTH_INGEST_SECRET (Plan 3) or the older advisor-only secret.
 function validIngestSecret(req){
@@ -83,14 +84,10 @@ function cleanMessages(input){
 async function loadResearchHealth(uid,holdings){
  const fincruxKeys=await listFincruxKeyMetadata(sql,uid);
  const tickers=[...new Set((holdings||[]).filter(h=>h.currency==='INR'&&['EQUITY','ETF'].includes(String(h.record_type||'').toUpperCase())).map(h=>String(h.ticker||'').trim().toUpperCase()).filter(Boolean))];
- const providers=[
-  {key:'tejhq',name:'TejHQ',status:'available',detail:'NSE end-of-day prices · no API key'},
-  {key:'mfapi',name:'MFAPI.in',status:'available',detail:'Indian mutual-fund NAV · no API key'},
-  {key:'nse',name:'NSE disclosures',status:'available',detail:'Official RSS listings · filing content still needs verification'},
-  {key:'fincrux',name:'Fincrux',status:fincruxKeys.total_enabled?'configured':'needs_key',detail:'5 requests per account/day · '+(5*Number(fincruxKeys.total_enabled||0))+' total/day across '+fincruxKeys.total_enabled+' active account key(s) · automatic fallback · unverified until official cross-check'},
-  {key:'nemotron',name:'Nemotron Free',status:String(process.env.AI_GATEWAY_API_KEY||'').trim()?'configured':'needs_key',detail:'Primary free AI model through Vercel AI Gateway'},
-  {key:'groq',name:'Groq Free',status:String(process.env.GROQ_API_KEY||'').trim()?(String(process.env.GROQ_ZERO_DATA_RETENTION_CONFIRMED||'').toLowerCase()==='true'?'configured':'blocked'):'needs_key',detail:'Fallback requires API key and confirmed Zero Data Retention'}
- ];
+ // Read live from the database, the same provider list API usage shows - not a second, hand-kept array. The old
+ // six-entry list here had drifted from it: it did not know Agent web or Web search existed at all, and read only
+ // env-var presence where the real list already has today's usage counts (owner's request 2026-11-24).
+ const {providers}=await buildProviderDirectory(sql);
  if(!tickers.length)return {status:'ok',eligible_equities:0,coverage:{},providers,fincrux_keys:fincruxKeys,eligible_tickers:tickers,last_collection:null,evidence_summary:[]};
  try{
   const [coverageRows,evidenceRows,collectionRows]=await Promise.all([
