@@ -146,7 +146,7 @@ export async function runItem(db, item, { runHandler, deadlineAt }) {
     const outcomeError = executionStatus === 'failed' ? String(payload?.error || payload?.message || 'Provider task failed').slice(0, 500) : null;
     await db.query(`UPDATE wealth_job_queue SET status=$2,result=$3::jsonb,error=$4,finished_at=now(),locked_until=NULL WHERE id=$1`, [item.id, executionStatus, JSON.stringify(result), outcomeError]);
     await settle(db, item.job_run_id);
-    return { id: item.id, task: item.task, status: executionStatus, outcome: businessOutcome };
+    return { id: item.id, task: item.task, status: executionStatus, outcome: businessOutcome, error: outcomeError };
   } catch (e) {
     const message = String(e?.message || e).slice(0, 500);
     if (Number(item.attempts) < Number(item.max_attempts)) {
@@ -155,7 +155,7 @@ export async function runItem(db, item, { runHandler, deadlineAt }) {
     }
     await db.query(`UPDATE wealth_job_queue SET status='failed',error=$2,finished_at=now(),locked_until=NULL WHERE id=$1`, [item.id, message]);
     await settle(db, item.job_run_id);
-    return { id: item.id, task: item.task, status: 'failed' };
+    return { id: item.id, task: item.task, status: 'failed', error: message };
   }
 }
 
@@ -169,7 +169,7 @@ export async function drainQueue({ db, runHandler, deadlineAt = Date.now() + DIS
     if (!item) break;
     ran.push(await runItem(db, item, { runHandler, deadlineAt }));
   }
-  return { processed: ran.length, items: ran.map(x => x.task + ':' + x.status + (x.outcome ? ':' + x.outcome : '')), outcomes: ran.map(x => ({ task: x.task, execution: x.status, outcome: x.outcome || null })), queue: await queueCounts(db) };
+  return { processed: ran.length, items: ran.map(x => x.task + ':' + x.status + (x.outcome ? ':' + x.outcome : '')), outcomes: ran.map(x => ({ task: x.task, execution: x.status, outcome: x.outcome || null, error: x.error || null })), queue: await queueCounts(db) };
 }
 
 // Clean up after calls that were cut off: items out of attempts are failed, runs with nothing left to do are closed (a run with no items at

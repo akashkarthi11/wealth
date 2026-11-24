@@ -779,8 +779,11 @@ document.addEventListener('click',async e=>{
  try{
   const r=await api('/api/jobs/worker',{method:'POST',body:'{}'});
   const left=(r?.queue?.waiting!=null)?r.queue.waiting:((r?.queue?.pending||0)+(r?.queue?.running||0));
-  runQueue.textContent=(r?.processed||0)+' step'+((r?.processed||0)===1?'':'s')+' run'+(left?' · '+left+' waiting':'');
-  setTimeout(()=>{runQueue.textContent=back;runQueue.disabled=false},4000);
+  const bad=r?.failedTasks||[],failed=bad.length;
+  runQueue.textContent=(r?.processed||0)+' step'+((r?.processed||0)===1?'':'s')+' run'+(failed?' · '+failed+' failed':'')+(left?' · '+left+' waiting':'');
+  // Name what broke. Without this the admin saw a count and had to go digging for the reason.
+  if(failed)showError(new Error(failed+' step'+(failed===1?'':'s')+' failed: '+bad.slice(0,3).map(x=>x.task+(x.error?' — '+x.error:'')).join('; ')+(failed>3?'; …':'')));
+  setTimeout(()=>{runQueue.textContent=back;runQueue.disabled=false},failed?8000:4000);
  }catch(err){showError(err);runQueue.textContent=back;runQueue.disabled=false;return}
  if(activeView==='ai-data')loadAiData();else if(activeView==='jobs')loadJobs();
 });

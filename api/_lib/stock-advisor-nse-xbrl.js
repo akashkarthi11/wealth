@@ -54,23 +54,33 @@ function chooseFiling(data, ticker, announcement) {
   const requiredKeys = ['symbol','type','qe_Date','consolidated','xbrl'];
   const missingKeys = requiredKeys.filter(key => !observedKeys.includes(key));
   if (data.length && missingKeys.length) return { error: 'NSE filing row shape changed: missing ' + missingKeys.join(', ') + '; observed keys: ' + observedKeys.join(', '), observed_keys: observedKeys };
-  const publishedDay = dayIst(announcement.published_at);
-  const announcementPeriods = [...periodsPublishedBy(String(announcement.title || '') + ' ' + String(announcement.excerpt || ''), announcement.published_at)];
+  // With a stored announcement, the filing must match it on company, filing day and reporting period. Without one, NSE's
+  // own index is the authority: we asked it for this symbol, so a row it returns for that symbol with an XBRL instance
+  // is this company's filing. The announcement is a cross-check, never the source — the figures are still read only
+  // from the NSE-filed XBRL instance.
+  const publishedDay = announcement ? dayIst(announcement.published_at) : null;
+  const announcementPeriods = announcement
+    ? [...periodsPublishedBy(String(announcement.title || '') + ' ' + String(announcement.excerpt || ''), announcement.published_at)]
+    : [];
   const candidates = data.filter(row => {
     if (!row || typeof row !== 'object') return false;
     if (String(row.symbol || '').toUpperCase() !== String(ticker).toUpperCase()) return false;
     if (String(row.type || '') !== 'Integrated Filing- Financials') return false;
     if (!safeNseUrl(row.xbrl)) return false;
+    const period = nseDate(row.qe_Date)?.slice(0, 7) || null;
+    if (!period) return false;
+    if (!announcement) return true;
     const company = String(row.cmName || row.smName || '').trim();
     if (!announcementIsFor(announcement.title, ticker, company)) return false;
     const rowDay = nseDate(row.broadcast_Date || row.creation_Date);
     const exactPdf = safeNseUrl(row.pdf_attach) === safeNseUrl(announcement.url);
     if (!exactPdf && (!publishedDay || rowDay !== publishedDay)) return false;
-    const period = nseDate(row.qe_Date)?.slice(0, 7) || null;
-    if (!period || (announcementPeriods.length && !announcementPeriods.includes(period))) return false;
+    if (announcementPeriods.length && !announcementPeriods.includes(period)) return false;
     return true;
   });
-  if (!candidates.length) return { error: 'No NSE Integrated Filing XBRL record matched the stored Financial results announcement by ticker, company, filing date and reporting period.' };
+  if (!candidates.length) return { error: announcement
+    ? 'No NSE Integrated Filing XBRL record matched the stored Financial results announcement by ticker, company, filing date and reporting period.'
+    : 'NSE returned no Integrated Filing- Financials row with an XBRL instance and a reporting period for this symbol.' };
   const consolidated = candidates.filter(r => String(r.consolidated || '').toLowerCase() === 'consolidated');
   const basisCandidates = consolidated.length ? consolidated : candidates;
   const filingTime = row => nseTimestamp(row.revised_Date) || nseTimestamp(row.creation_Date) || 0;
@@ -82,32 +92,37 @@ export async function collectNseXbrlFinancialStatement({ instrument, db } = {}) 
   const ticker = String(instrument?.symbol || '').trim().toUpperCase();
   if (!ticker || !db?.query) return { ticker, status: 'failed', reason: 'A holding ticker and database connection are required.' };
   try {
-    const announcement = await readLatestAnnouncement(db, ticker);
-    if (!announcement) return { ticker, status: 'no_announcement', reason: 'No stored NSE Financial results announcement exists for this holding.' };
-    const announcementUrl = safeNseUrl(announcement.url);
-    if (!announcementUrl || !['nsearchives.nseindia.com', 'nsearchives.nseindia.in'].includes(new URL(announcementUrl).hostname)) {
-      return { ticker, status: 'failed', reason: 'Stored announcement URL is not an allowed NSE archive URL.' };
+    // A stored "Financial results" announcement is used when one exists, but it is not required. NSE's RSS carries only
+    // recent announcements, so a quarter filed weeks ago has already rolled off it; requiring one meant no holding could
+    // ever be verified outside the few days after its results were announced (fixed 2026-11-24).
+    let announcement = await readLatestAnnouncement(db, ticker);
+    let announcementUrl = announcement ? safeNseUrl(announcement.url) : null;
+    if (announcement && (!announcementUrl || !['nsearchives.nseindia.com', 'nsearchives.nseindia.in'].includes(new URL(announcementUrl).hostname))) {
+      announcement = null;            // unusable announcement: fall back to NSE's index rather than refusing the holding
+      announcementUrl = null;
     }
 
     // Audit the stored filing fetch before any document inspection.
     const pdfStarted = Date.now();
-    try {
+    if (announcementUrl) try {
       const pdfResponse = await fetch(announcementUrl, { headers: { 'User-Agent': USER_AGENT, Accept: 'application/pdf,application/octet-stream;q=0.9,*/*;q=0.1' }, signal: timeout() });
       const pdfBytes = new Uint8Array(await pdfResponse.arrayBuffer());
       await audit(db, { endpoint: announcementUrl, ticker, httpStatus: pdfResponse.status, ok: pdfResponse.ok,
         durationMs: Date.now() - pdfStarted, bytes: pdfBytes.byteLength,
         payload: { content_type: pdfResponse.headers.get('content-type') || '', document_kind: 'stored_nse_announcement', byte_length: pdfBytes.byteLength },
         usable: null, error: pdfResponse.ok ? null : 'NSE announcement download failed.' });
-      if (!pdfResponse.ok) return { ticker, status: 'failed', reason: 'NSE announcement download returned HTTP ' + pdfResponse.status + '.' };
+      // A bad announcement download no longer refuses the holding: the figures come from the XBRL instance, so we drop
+      // the cross-check and let NSE's own index identify the filing.
       const isPdf = new TextDecoder().decode(pdfBytes.slice(0, 5)) === '%PDF-';
-      if (!isPdf) return { ticker, status: 'failed', reason: 'Stored NSE announcement did not return a PDF document.' };
+      if (!pdfResponse.ok || !isPdf) { announcement = null; announcementUrl = null; }
     } catch (error) {
       await audit(db, { endpoint: announcementUrl, ticker, ok: false, durationMs: Date.now() - pdfStarted, error: String(error?.message || error) });
-      return { ticker, status: 'failed', reason: 'NSE announcement download failed: ' + String(error?.message || error).slice(0, 160) };
+      announcement = null; announcementUrl = null;
     }
 
-    // NSE's Integrated Filing endpoint is queried for the exact symbol and the stored announcement's IST date.
-    const publishedDay = dayIst(announcement.published_at);
+    // NSE's Integrated Filing endpoint is queried for the exact symbol. With a stored announcement the window is that
+    // announcement's IST day; without one the whole published history for the symbol is read and the newest filing wins.
+    const publishedDay = announcement ? dayIst(announcement.published_at) : null;
     const dateParam = nseDateParam(publishedDay);
     const params = new URLSearchParams({ index: 'equities', type: 'Integrated Filing- Financials', page: '1', size: '50', period_ended: 'all', symbol: ticker });
     if (dateParam) { params.set('from_date', dateParam); params.set('to_date', dateParam); }
@@ -157,12 +172,14 @@ export async function collectNseXbrlFinancialStatement({ instrument, db } = {}) 
     if (apiPeriod && parsed.period !== apiPeriod) return { ticker, status: 'period_mismatch', reason: 'Parsed XBRL period ' + parsed.period + ' does not match NSE metadata period ' + apiPeriod + '.', filing_url: announcementUrl, xbrl_url: xbrlUrl };
     if (parsed.symbol && parsed.symbol !== ticker) return { ticker, status: 'ticker_mismatch', reason: 'XBRL document symbol ' + parsed.symbol + ' does not match holding ' + ticker + '.', filing_url: announcementUrl, xbrl_url: xbrlUrl };
     const company = String(filing.cmName || filing.smName || instrument.name || ticker);
-    if (company && !announcementIsFor(announcement.title, ticker, company)) return { ticker, status: 'announcement_company_mismatch', reason: 'Stored announcement title does not identify NSE filing company ' + company + '.', filing_url: announcementUrl, xbrl_url: xbrlUrl };
+    if (announcement && company && !announcementIsFor(announcement.title, ticker, company)) return { ticker, status: 'announcement_company_mismatch', reason: 'Stored announcement title does not identify NSE filing company ' + company + '.', filing_url: announcementUrl, xbrl_url: xbrlUrl };
 
     const evidence = {
-      filing_url: announcementUrl,
+      filing_url: announcementUrl || xbrlUrl,
       xbrl_url: xbrlUrl,
-      filing_title: announcement.title,
+      filing_title: announcement ? announcement.title : 'NSE Integrated Filing — Financials — ' + company + ' — ' + parsed.period,
+      // Which route identified this filing, so the stored evidence says whether an announcement corroborated it.
+      match_basis: announcement ? 'stored_nse_announcement' : 'nse_integrated_filing_index',
       nse_symbol: ticker,
       company,
       reporting_period: parsed.period,
@@ -183,7 +200,7 @@ export async function collectNseXbrlFinancialStatement({ instrument, db } = {}) 
       source: 'NSE Integrated Filing - Financials'
     };
     const title = 'NSE filed financial statement — ' + company + ' — ' + parsed.period + (filing.consolidated ? ' — ' + filing.consolidated : '');
-    const publishedAt = nseTimestamp(filing.broadcast_Date) || nseTimestamp(filing.creation_Date) || announcement.published_at || null;
+    const publishedAt = nseTimestamp(filing.broadcast_Date) || nseTimestamp(filing.creation_Date) || (announcement ? announcement.published_at : null) || null;
     const insertSql = `WITH actor AS MATERIALIZED (SELECT set_config('wealth.actor', 'agent', true))
       INSERT INTO wealth_stock_advisor_research_sources
         (run_id,ticker,source_type,title,url,publisher,published_at,retrieved_at,excerpt,evidence,verification_status)
