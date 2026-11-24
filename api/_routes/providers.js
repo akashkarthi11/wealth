@@ -1,5 +1,6 @@
 import { sql, schema, json, sessionUser, cacheGet, cacheSet } from '../_lib.js';
-import { addFincruxApiKey, listFincruxKeyMetadata } from '../_lib/provider-api-keys.js';
+import { addFincruxApiKey, listFincruxKeyMetadata, getStoredProviderKey, saveStoredProviderKey, deleteStoredProviderKey } from '../_lib/provider-api-keys.js';
+import { PROVIDER_KEYS as DIRECTORY_PROVIDER_KEYS } from '../_lib/provider-directory.js';
 
 const EXA_URL = 'https://api.exa.ai/search';
 const MASSIVE_BASE = 'https://api.massive.com';
@@ -73,6 +74,31 @@ export default async function handler(req, res) {
       const deleted = await sql.query("DELETE FROM wealth_provider_api_keys WHERE id=$1 AND user_id=$2 AND provider='fincrux' RETURNING id", [id, auth.uid]);
       if (!deleted.length) return json(res, 404, { error: 'Saved Fincrux key not found.' });
       return json(res, 200, { deleted: true, ...(await listFincruxKeyMetadata(sql, auth.uid)) });
+    }
+    // Generic single-key providers (AI Gateway, Groq, Tavily, and any keyless provider — owner's request 2026-11-24:
+    // "every card need edit option .if no auth key requied just show empty enter field add option no issues").
+    // Fincrux keeps its own dedicated actions above: it has multiple keys with priority and ticker sharding, which a
+    // "one row replaces all" save here would corrupt.
+    const validProviderKey = key => DIRECTORY_PROVIDER_KEYS.includes(String(key || '')) && key !== 'fincrux';
+    if (action === 'provider_key_get') {
+      const provider = String(input.provider || '');
+      if (!validProviderKey(provider)) return json(res, 400, { error: 'Unknown provider.' });
+      return json(res, 200, { provider, key: await getStoredProviderKey(sql, auth.uid, provider) });
+    }
+    if (action === 'provider_key_save') {
+      const provider = String(input.provider || '');
+      if (!validProviderKey(provider)) return json(res, 400, { error: 'Unknown provider.' });
+      const saved = await saveStoredProviderKey(sql, auth.uid, provider, input.key);
+      return json(res, 201, { saved: true, provider, key: await getStoredProviderKey(sql, auth.uid, provider) });
+    }
+    if (action === 'provider_key_delete') {
+      const provider = String(input.provider || '');
+      if (!validProviderKey(provider)) return json(res, 400, { error: 'Unknown provider.' });
+      const id = String(input.id || '');
+      if (!/^[0-9a-f-]{36}$/i.test(id)) return json(res, 400, { error: 'Invalid key ID.' });
+      const deleted = await deleteStoredProviderKey(sql, auth.uid, provider, id);
+      if (!deleted) return json(res, 404, { error: 'Saved key not found.' });
+      return json(res, 200, { deleted: true, provider });
     }
     if (action === 'status') {
       const fincrux = await listFincruxKeyMetadata(sql, auth.uid);
@@ -154,7 +180,7 @@ export default async function handler(req, res) {
       return json(res, 200, payload);
     }
 
-    return json(res, 400, { error: 'Unsupported action. Use status, fincrux_keys, fincrux_key_add, fincrux_key_update, fincrux_key_configure, fincrux_key_delete, research, or quote.' });
+    return json(res, 400, { error: 'Unsupported action. Use status, fincrux_keys, fincrux_key_add, fincrux_key_update, fincrux_key_configure, fincrux_key_delete, provider_key_get, provider_key_save, provider_key_delete, research, or quote.' });
   } catch (error) {
     if (error?.status) return json(res, error.status, { error: error.message });
     console.error('[wealth-providers]', error?.message || error);

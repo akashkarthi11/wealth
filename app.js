@@ -1249,13 +1249,25 @@ async function loadStockAdvisor(runId=null){
    if(p.last_at)bits.push('last '+fmtJobDate(p.last_at));
    return bits.join(' · ');
   };
+  const providerKeys=researchHealth.provider_keys||{};
+  // Every non-Fincrux card gets the same single-key editor: an empty field and an Add button even when the provider
+  // needs no key at all, exactly as asked rather than hiding the control for the providers it does nothing for
+  // (owner's request 2026-11-24: "every card need edit option .if no auth key requied just show empty enter field
+  // add option no issues"). Fincrux keeps its own multi-key manager above; this always saves one value, replacing
+  // any value saved before.
+  const providerKeyEditor=p=>{
+   const saved=providerKeys[p.key];
+   const savedRow=saved&&!saved.error?'<div class="advisor-key-row"><div class="advisor-key-main"><div class="advisor-key-heading"><b>Saved key</b><span class="advisor-key-state is-active">ACTIVE</span></div><small>'+esc(saved.masked||'Unavailable')+'</small></div><button type="button" class="ghost danger" data-provider-key-delete="'+esc(p.key)+'" data-id="'+esc(saved.id)+'">Remove</button></div>':'';
+   const placeholder=p.key_env?'Paste '+p.key_env:'No key needed for this provider — save one anyway if you want';
+   return '<div class="advisor-provider-keyedit">'+savedRow
+    +'<div class="advisor-key-add"><input type="password" autocomplete="new-password" data-provider-key-input="'+esc(p.key)+'" placeholder="'+esc(placeholder)+'">'
+    +'<button type="button" class="primary" data-provider-key-save="'+esc(p.key)+'">'+(saved?'Replace':'Add')+'</button></div>'
+    +'<small class="advisor-key-status" data-provider-key-status="'+esc(p.key)+'">'+(p.key_env?'Encrypted before storage. Checked before '+esc(p.key_env)+' in the Vercel project.':'Encrypted before storage. No adapter reads a key for this provider yet.')+'</small></div>';
+  };
   const providerConfigBody=p=>{
    if(p.key==='fincrux')return fincruxKeyManager;
-   const keyLine=p.key_env
-    ?'<p class="advisor-provider-keyline"><b>'+esc(p.key_env)+'</b> in the Vercel project settings — never shown here, cannot be set from this screen.</p>'
-    :'<p class="advisor-provider-keyline muted">Open data; no key needed.</p>';
    const usage=providerUsageLine(p);
-   return '<div class="advisor-provider-config">'+(usage?'<p class="advisor-provider-usageline">'+esc(usage)+'</p>':'')+keyLine+(p.note?'<small class="muted">'+esc(p.note)+'</small>':'')+'</div>';
+   return '<div class="advisor-provider-config">'+(usage?'<p class="advisor-provider-usageline">'+esc(usage)+'</p>':'')+(p.note?'<small class="muted">'+esc(p.note)+'</small>':'')+providerKeyEditor(p)+'</div>';
   };
   const providerCards=providerRows.map(p=>'<details class="advisor-provider-card" data-provider-key="'+esc(p.key)+'"'+(providerHealthOpen.has(p.key)?' open':'')+'><summary><div><b>'+esc(p.name||p.key)+'</b><small>'+esc(p.detail||'')+'</small></div><span class="advisor-provider-status status-'+esc(p.status||'unknown')+'">'+providerStatusText(p.status)+'</span></summary>'+providerConfigBody(p)+'</details>').join('');
   const coverage=researchHealth.coverage||{};
@@ -1330,6 +1342,32 @@ $('viewContent').addEventListener('click',async e=>{
   if(activeView==='provider-health')await loadProviderHealth();else await loadStockAdvisor(advisorSelectedRunId);
  }catch(err){setStatus(err.message||'Could not update Fincrux keys.',true)}
  finally{buttons.forEach(b=>b.disabled=false)}
+});
+// The generic single-key editor every other provider card gets (owner's request 2026-11-24: "every card need edit
+// option"). One value per provider, replacing whatever was saved before - unlike Fincrux's multi-key list above.
+$('viewContent').addEventListener('click',async e=>{
+ const save=e.target.closest('[data-provider-key-save]');
+ const remove=e.target.closest('[data-provider-key-delete]');
+ if(!save&&!remove)return;
+ const provider=(save||remove).dataset.providerKeySave||(save||remove).dataset.providerKeyDelete;
+ const status=document.querySelector('[data-provider-key-status="'+provider+'"]');
+ const setStatus=(message,error=false)=>{if(status){status.textContent=message;status.classList.toggle('is-error',error)}};
+ const button=save||remove;button.disabled=true;
+ try{
+  if(save){
+   const input=document.querySelector('[data-provider-key-input="'+provider+'"]');
+   const key=input?.value||'';
+   if(!key.trim()){setStatus('Paste a key first.',true);button.disabled=false;return}
+   await api('/api/providers',{method:'POST',body:JSON.stringify({action:'provider_key_save',provider,key})});
+   if(input)input.value='';
+   setStatus('Key saved securely. It is checked before the environment variable.');
+  }else{
+   if(!confirm('Remove this saved key?')){button.disabled=false;return}
+   await api('/api/providers',{method:'POST',body:JSON.stringify({action:'provider_key_delete',provider,id:remove.dataset.id})});
+   setStatus('Saved key removed.');
+  }
+  if(activeView==='provider-health')await loadProviderHealth();else await loadStockAdvisor(advisorSelectedRunId);
+ }catch(err){setStatus(err.message||'Could not update this key.',true);button.disabled=false}
 });
 $('viewContent').addEventListener('click',async e=>{
  const button=e.target.closest('[data-advisor-schedule-run-now]');if(!button)return;

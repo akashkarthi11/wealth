@@ -8,7 +8,7 @@
  * Nothing here ever reads or returns a key's value — only whether one is present (`set`) — and the env var names are
  * what to set in the Vercel project, never settable from the app.
  */
-import { loadFincruxApiKeys } from './provider-api-keys.js';
+import { loadFincruxApiKeys, loadStoredProviderKeyValue } from './provider-api-keys.js';
 import { MAX_SEARCHES_PER_DAY as SEARCHES_PER_DAY } from './agent-search.js';
 
 const IST_DAY = "(date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata')";
@@ -18,25 +18,31 @@ const num = v => Number(v || 0);
 // Whether a provider is usable at all. Only the PRESENCE of a key is ever read, never its value, and the names below
 // are the environment variables to set in the Vercel project — they cannot be set from the app.
 const set = name => String(process.env[name] || '').trim().length > 0;
-export function health(key, configured = false) {
+export async function health(key, configured = false, db = null) {
+  // A key saved from the Provider Health card (owner's request 2026-11-24) counts the same as the env var: the real
+  // call sites (callFreeModel, callGroqFreeModel, searchWeb) check the same stored value themselves. Only queried for
+  // the providers that have anywhere to save one.
+  const stored = db && ['free-model', 'web-search', 'groq'].includes(key) ? Boolean(await loadStoredProviderKeyValue(db, key)) : false;
   if (key === 'fincrux') return configured
     ? { status: 'configured', detail: 'Fincrux account keys are configured.', key_env: null }
     : { status: 'needs_key', detail: 'No enabled Fincrux account keys are configured.', key_env: null };
   if (key === 'free-model') {
+    if (stored) return { status: 'configured', detail: 'Key saved from this card.', key_env: 'AI_GATEWAY_API_KEY' };
     if (set('AI_GATEWAY_API_KEY')) return { status: 'configured', detail: 'Vercel AI Gateway key present.', key_env: 'AI_GATEWAY_API_KEY' };
     if (set('VERCEL_OIDC_TOKEN')) return { status: 'configured', detail: 'No gateway key; falling back to the deployment OIDC token.', key_env: 'AI_GATEWAY_API_KEY' };
     return { status: 'needs_key', detail: 'No gateway key and no OIDC token, so no model call can be made.', key_env: 'AI_GATEWAY_API_KEY' };
   }
   if (key === 'web-search') {
+    if (stored) return { status: 'configured', detail: 'Key saved from this card.', key_env: 'TAVILY_API_KEY' };
     return set('TAVILY_API_KEY')
       ? { status: 'configured', detail: 'Free web search is enabled for the debate agents.', key_env: 'TAVILY_API_KEY' }
       : { status: 'needs_key', detail: 'No search key, so the agents are not offered web search at all.', key_env: 'TAVILY_API_KEY' };
   }
   if (key === 'groq') {
-    if (!set('GROQ_API_KEY')) return { status: 'needs_key', detail: 'Optional fallback model; no key set.', key_env: 'GROQ_API_KEY' };
+    if (!stored && !set('GROQ_API_KEY')) return { status: 'needs_key', detail: 'Optional fallback model; no key set.', key_env: 'GROQ_API_KEY' };
     return String(process.env.GROQ_ZERO_DATA_RETENTION_CONFIRMED || '').toLowerCase() === 'true'
-      ? { status: 'configured', detail: 'Key set and zero-data-retention confirmed.', key_env: 'GROQ_API_KEY' }
-      : { status: 'blocked', detail: 'Key is set but GROQ_ZERO_DATA_RETENTION_CONFIRMED is not true, so it stays unused.', key_env: 'GROQ_ZERO_DATA_RETENTION_CONFIRMED' };
+      ? { status: 'configured', detail: (stored ? 'Key saved from this card' : 'Key set') + ' and zero-data-retention confirmed.', key_env: 'GROQ_API_KEY' }
+      : { status: 'blocked', detail: 'A key is set but GROQ_ZERO_DATA_RETENTION_CONFIRMED is not true, so it stays unused.', key_env: 'GROQ_ZERO_DATA_RETENTION_CONFIRMED' };
   }
   return { status: 'available', detail: 'Open data; no key needed.', key_env: null };
 }
@@ -46,6 +52,10 @@ export function health(key, configured = false) {
  * wealth_stock_advisor_messages and the stored Fincrux accounts. Returns { providers, fincruxQuotas,
  * activeFincruxAccounts } — `providers` is the list both pages render.
  */
+// Every provider key this directory knows about, so a save request can be checked against a fixed list rather than
+// writing whatever string a request body sends (owner's request 2026-11-24: "every card need edit option").
+export const PROVIDER_KEYS = Object.freeze(['fincrux', 'free-model', 'tejhq', 'mfapi', 'nse', 'yahoo', 'fx', 'groq', 'agent-web', 'web-search', 'period-match']);
+
 export async function buildProviderDirectory(sql) {
   const activeFincruxAccounts = await loadFincruxApiKeys(sql);
   const fincruxLimit = 5 * activeFincruxAccounts.length;
@@ -122,13 +132,21 @@ export async function buildProviderDirectory(sql) {
     };
   };
 
+  // health() is async (it may check a stored key), so every result is resolved before the array literal is built -
+  // a spread cannot await a Promise.
+  const [hFincrux, hFreeModel, hTejhq, hMfapi, hNse, hYahoo, hFx, hGroq, hAgentWeb, hWebSearch, hPeriodMatch] = await Promise.all([
+    health('fincrux', fincruxLimit > 0, sql), health('free-model', false, sql), health('tejhq', false, sql), health('mfapi', false, sql),
+    health('nse', false, sql), health('yahoo', false, sql), health('fx', false, sql), health('groq', false, sql),
+    health('agent-web', false, sql), health('web-search', false, sql), health('period-match', false, sql),
+  ]);
+
   const providers = [
     {
       key: 'fincrux', name: 'Fincrux', purpose: 'Company financial statements',
       limit: fincruxLimit, limit_window: 'per day (IST; 5 per account)', used: num(fincrux?.used), remaining: Math.max(0, fincruxLimit - num(fincrux?.used)),
       account_count: activeFincruxAccounts.length, account_quotas: fincruxQuotas,
       resets_at_ist: 'midnight IST', last_at: fincrux?.last_at || null,
-      ...fromSteps('Fincrux', {}), ...health('fincrux', fincruxLimit > 0),
+      ...fromSteps('Fincrux', {}), ...hFincrux,
       note: 'Five requests per active Fincrux Hobby account each IST day. Each account is reserved and counted separately; failed attempts also consume that account’s allowance.',
     },
     {
@@ -136,36 +154,36 @@ export async function buildProviderDirectory(sql) {
       limit: null, limit_window: 'no daily cap published', pacing_ms: FREE_MODEL_PACING_MS,
       used: num(model?.calls), calls: num(model?.calls), failed: 0, skipped: 0,
       without_model: num(model?.without_model), prompt_tokens: num(model?.prompt_tokens), completion_tokens: num(model?.completion_tokens),
-      next_slot_in_ms: waitMs, last_at: model?.last_at || null, ...health('free-model'),
+      next_slot_in_ms: waitMs, last_at: model?.last_at || null, ...hFreeModel,
       note: 'Paced to one call every 13 seconds (five a minute) across all runs. Calls answered without the model, such as the evidence-gate result, are counted separately.',
     },
-    { key: 'tejhq', name: 'TejHQ', purpose: 'NSE end-of-day prices and indicators', limit: null, limit_window: 'no published limit', ...fromSteps('TejHQ NSE EOD'), used: num((answeredByProvider.get('TejHQ NSE EOD') || {}).requests), ...health('tejhq'),
+    { key: 'tejhq', name: 'TejHQ', purpose: 'NSE end-of-day prices and indicators', limit: null, limit_window: 'no published limit', ...fromSteps('TejHQ NSE EOD'), used: num((answeredByProvider.get('TejHQ NSE EOD') || {}).requests), ...hTejhq,
       note: 'One request per holding per run. No quota is published, so none is enforced here.' },
-    { key: 'mfapi', name: 'MFAPI.in', purpose: 'Mutual fund NAV', limit: null, limit_window: 'no published limit', ...fromSteps('MFAPI.in'), used: num((answeredByProvider.get('MFAPI.in') || {}).requests), ...health('mfapi'),
+    { key: 'mfapi', name: 'MFAPI.in', purpose: 'Mutual fund NAV', limit: null, limit_window: 'no published limit', ...fromSteps('MFAPI.in'), used: num((answeredByProvider.get('MFAPI.in') || {}).requests), ...hMfapi,
       note: 'One request per fund per run.' },
-    { key: 'nse', name: 'NSE', purpose: 'Announcements, results and the company lists', limit: null, limit_window: 'no published limit', ...fromSteps('NSE RSS'), used: num((answeredByProvider.get('NSE RSS') || {}).requests), ...health('nse'),
+    { key: 'nse', name: 'NSE', purpose: 'Announcements, results and the company lists', limit: null, limit_window: 'no published limit', ...fromSteps('NSE RSS'), used: num((answeredByProvider.get('NSE RSS') || {}).requests), ...hNse,
       note: 'Six announcement feeds per run, plus the symbol lists, which are downloaded once and reused for six hours.' },
     { key: 'yahoo', name: 'Yahoo Finance fundamentals', purpose: 'Secondary quarterly figures (never verified)', limit: null,
       limit_window: 'no published limit', ...fromSteps('Yahoo Finance fundamentals'),
-      used: num((answeredByProvider.get('Yahoo Finance fundamentals') || {}).requests), ...health('yahoo'),
+      used: num((answeredByProvider.get('Yahoo Finance fundamentals') || {}).requests), ...hYahoo,
       note: 'One request per holding. The figures are stored unverified and never open the evidence gate.' },
     { key: 'fx', name: 'Open currency API', purpose: 'USD to INR reference rate', limit: null,
       limit_window: 'no published limit', ...fromSteps('Open currency API'),
-      used: num((answeredByProvider.get('Open currency API') || {}).requests), ...health('fx'),
+      used: num((answeredByProvider.get('Open currency API') || {}).requests), ...hFx,
       note: 'One published rate a day, cached. Yahoo INR=X is the fallback if it cannot be read.' },
-    { key: 'groq', name: 'Groq Free', purpose: 'Optional fallback model', limit: null, limit_window: 'no published limit', used: 0, calls: 0, ...health('groq'),
+    { key: 'groq', name: 'Groq Free', purpose: 'Optional fallback model', limit: null, limit_window: 'no published limit', used: 0, calls: 0, ...hGroq,
       note: 'Used only if the Vercel gateway fails and zero-data-retention has been confirmed.' },
     // What the debate agents collected for themselves, rather than what the nightly job gathered (2026-11-24).
     { key: 'agent-web', name: 'Agent web', purpose: 'Official pages the agents opened during a debate', limit: null, limit_window: 'allowlisted hosts only',
-      ...fromSteps('Agent web'), used: num((answeredByProvider.get('Agent web') || {}).requests), ...health('agent-web'),
+      ...fromSteps('Agent web'), used: num((answeredByProvider.get('Agent web') || {}).requests), ...hAgentWeb,
       note: 'NSE, BSE, SEBI, AMFI, RBI and Yahoo only. Always unverified context; it never satisfies missing evidence.' },
     { key: 'web-search', name: 'Web search', purpose: 'Free web search the agents may call for context',
       limit: SEARCHES_PER_DAY, limit_window: 'per day (IST), from a free monthly allowance',
       ...fromSteps('Web search'), used: num((answeredByProvider.get('Web search') || {}).requests),
       remaining: Math.max(0, SEARCHES_PER_DAY - num((answeredByProvider.get('Web search') || {}).requests)),
-      ...health('web-search'),
+      ...hWebSearch,
       note: 'Results are unverified context and can never unlock a BUY, HOLD or SELL.' },
-    { key: 'period-match', name: 'Period match with NSE', purpose: 'Verifying a statement against a filing', limit: null, limit_window: 'database only', ...fromSteps('Period match with NSE'), used: 0, ...health('period-match'),
+    { key: 'period-match', name: 'Period match with NSE', purpose: 'Verifying a statement against a filing', limit: null, limit_window: 'database only', ...fromSteps('Period match with NSE'), used: 0, ...hPeriodMatch,
       note: 'Reads what is already stored. It calls no outside service.' },
   ];
 
