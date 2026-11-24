@@ -2157,3 +2157,8 @@ b.pj-medium{color:#f5c26b}
  grid-column:auto!important;grid-row:auto!important;grid-area:auto!important
 }
 .aid-record-list>.aid-record-row>.aid-end>*{text-align:left!important;max-width:100%!important}
+.au-rowfields{margin-top:6px;font-size:12px}
+.au-rowfields>small{color:var(--muted);display:block;margin-bottom:3px}
+.au-rowfields>div{display:flex;gap:6px;padding:2px 6px;border-top:1px solid #243041;font-family:ui-monospace,Consolas,monospace}
+.au-rowfields>div>b{color:var(--muted);font-weight:500;flex:0 0 auto}
+.au-rowfields>div>span{overflow-wrap:anywhere}
