@@ -53,8 +53,8 @@ export default async function handler(req,res) {
     if(typeof body.enabled!=='boolean')return json(res,400,{error:'enabled must be true or false.'});
     const [current]=await sql.query('SELECT id,schedule_time::text,schedule_frequency,timezone FROM wealth_scheduled_jobs WHERE id=$1',[id]);
     if(!current)return json(res,404,{error:'Job not found.'});
-    const {nextJobRun}=await import('../_lib/scheduled-job-time.js');
-    const next=body.enabled?nextJobRun(new Date(),time,frequency,current.timezone):null;
+    const {nextJobRunFromDb}=await import('../_lib/scheduled-job-time.js');
+    const next=body.enabled?await nextJobRunFromDb(sql,time,frequency,current.timezone):null;
     await sql.query(`UPDATE wealth_scheduled_jobs SET enabled=$2,schedule_time=$3::time,schedule_frequency=$4,
       next_run_at=$5,updated_at=now() WHERE id=$1`,[id,body.enabled,time,frequency,next?.toISOString()||null]);
     return json(res,200,{saved:true});
