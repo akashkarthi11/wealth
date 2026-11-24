@@ -74,3 +74,26 @@ test('wiring: the providers record their calls and the page shows the shape', ()
   assert.ok(read('api/_lib/api-audit.js').includes("WITH actor AS MATERIALIZED (SELECT set_config('wealth.actor', 'agent', true))"),
     'the audit insert sets the required actor in the same write statement');
 });
+
+test('the stored sample names the fields inside a row, so an unused provider field is visible', () => {
+  // The shape table says "rows: 120"; it never said what is in a row, so what TejHQ actually returns could only be
+  // guessed from the adapter. TejHQ publishes no documentation and is unreachable from this network, so the audit is
+  // the only way to answer it (owner asked what else TejHQ gives, 2026-11-24).
+  const tejhq = { rows: [
+    { date: '2026-11-24', open: 3100, high: 3140, low: 3090, close: 3125, volume: 1200000, deliverable_qty: 400000 },
+    { date: '2026-11-23', open: 3080, high: 3110, low: 3070, close: 3100, volume: 980000, deliverable_qty: 310000 },
+  ] };
+  const sample = sampleOf(tejhq);
+  assert.deepEqual(Object.keys(sample.rows), ['date','open','high','low','close','volume','deliverable_qty'],
+    'every field of the first bar is kept, including one no adapter reads');
+  assert.equal(describeShape(tejhq).rows, 2, 'and the shape still counts the rows');
+
+  const app = read('app.js');
+  assert.match(app, /function auRowFields\(sample\)/, 'the page has a row-field list');
+  assert.match(app, /auRowFields\(a\.sample\)/, 'and the audit panel renders it');
+});
+
+test('the audit query already sends the sample to the page', () => {
+  assert.match(read('api/_routes/api-usage.js'), /DISTINCT ON \(provider\)[\s\S]{0,200}?sample/,
+    'the sample is selected, so no extra query is needed to show the fields');
+});

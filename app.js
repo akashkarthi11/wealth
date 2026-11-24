@@ -671,6 +671,15 @@ function auHealth(p){
 }
 // What the provider actually sent back, from wealth_api_audit. This is how "which data do we get" is answered without
 // spending another request.
+// Each stored sample holds the first row of every array the provider returned, so its keys are that row's real field
+// names. Listed here so an unused field a provider already sends is visible without reading the adapter.
+function auRowFields(sample){
+ if(!sample||typeof sample!=='object')return '';
+ const groups=Object.entries(sample)
+  .filter(([,v])=>v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length)
+  .map(([k,v])=>'<div><b>'+esc(k)+'</b><span>'+esc(Object.keys(v).slice(0,30).join(', '))+'</span></div>');
+ return groups.length?'<div class="au-rowfields"><small>Fields in each row</small>'+groups.join('')+'</div>':'';
+}
 function auAudit(a){
  if(!a)return '';
  const counts=a.section_counts&&typeof a.section_counts==='object'?a.section_counts:{};
@@ -680,6 +689,9 @@ function auAudit(a){
   (a.usable===false?' · nothing usable':a.usable===true?' · usable':'')+'</summary>'+
   (empties.length?'<p class="au-meta idle">Came back empty: '+esc(empties.join(', '))+'</p>':'')+
   (rows?'<table class="au-shape"><tr><th>field</th><th>rows / size</th></tr>'+rows+'</table>':'<p class="au-meta">No fields recorded.</p>')+
+  // The field names inside each row. The counts above say a provider returned 120 rows; this says what is in one, so
+  // what a provider actually gives can be read here instead of guessing from the adapter (owner's question 2026-11-24).
+  auRowFields(a.sample)+
   (a.error?'<p class="au-meta idle">'+esc(String(a.error).slice(0,200))+'</p>':'')+
   '<p class="au-meta">'+esc(fmtJobDate(a.created_at))+(a.bytes?' · '+a.bytes+' bytes':'')+(a.duration_ms?' · '+aiMs(a.duration_ms):'')+'</p>'+
   '</details>';
