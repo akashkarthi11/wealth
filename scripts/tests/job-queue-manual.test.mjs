@@ -52,18 +52,25 @@ test('wiring: the pages watch "waiting" and give the admin a button that runs th
 });
 
 test('provider health sits with the usage, and no key value is ever exposed', () => {
+  // The provider list (quotas, usage, health) moved into provider-directory.js, shared by API usage and Provider
+  // Health (2026-11-24), so the security property lives there now — both pages render it, neither route computes it.
   const route = read('api/_routes/api-usage.js');
-  assert.match(route, /const set = name => String\(process\.env\[name\] \|\| ''\)\.trim\(\)\.length > 0/, 'presence only');
+  const dir = read('api/_lib/provider-directory.js');
+  assert.match(dir, /const set = name => String\(process\.env\[name\] \|\| ''\)\.trim\(\)\.length > 0/, 'presence only');
   // the env var NAME may be shown; its value must never be read into the response
-  assert.doesNotMatch(route, /process\.env\[[^\]]+\]\s*\)?\s*[,}]\s*$/m);
-  for (const k of ['AI_GATEWAY_API_KEY', 'GROQ_API_KEY']) assert.ok(route.includes(k), k + ' is named so it can be set in Vercel');
+  assert.doesNotMatch(dir, /process\.env\[[^\]]+\]\s*\)?\s*[,}]\s*$/m);
+  for (const k of ['AI_GATEWAY_API_KEY', 'GROQ_API_KEY']) assert.ok(dir.includes(k), k + ' is named so it can be set in Vercel');
   assert.match(route, /cannot be changed from the app/);
   // Fincrux is not an env var here: loadFincruxApiKeys (0050/0051) folds the stored per-account keys and the
   // FINCRUX_API_KEY* fallbacks into one list, so the page reports configuration from that list. Every entry in it
   // carries the DECRYPTED key in .value, so this page may read an account's label, source, id and count — nothing else.
-  assert.match(route, /const fincruxLimit = 5 \* activeFincruxAccounts\.length/, 'the quota comes from how many accounts are enabled');
-  assert.doesNotMatch(route, /\.value\b/, 'the decrypted key value is never read into the response');
-  assert.doesNotMatch(route, /\bmasked\b|\blast4\b/, 'not even a masked key or its last four digits belong on this page');
+  assert.match(dir, /const fincruxLimit = 5 \* activeFincruxAccounts\.length/, 'the quota comes from how many accounts are enabled');
+  assert.doesNotMatch(dir, /\.value\b/, 'the decrypted key value is never read into the response');
+  assert.doesNotMatch(dir, /\bmasked\b|\blast4\b/, 'not even a masked key or its last four digits belong on this page');
+  // Provider Health (stock-advisor.js) now reads the same shared directory, so it must not reintroduce a leak either.
+  const advisor = read('api/_routes/stock-advisor.js');
+  assert.match(advisor, /buildProviderDirectory\(sql\)/, 'Provider Health reads the same shared directory, not its own copy');
+  assert.doesNotMatch(advisor, /\.value\b.*fincrux/i);
   const app = read('app.js');
   assert.match(app, /Needs a key/);
   assert.match(app, /function auHealth\(p\)/);
