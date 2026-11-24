@@ -128,8 +128,11 @@ export const SEARCH_TOOL = Object.freeze({
 });
 
 // The tool list for one turn. Search appears only when TAVILY_API_KEY is set.
-export function toolsFor(env = process.env) {
-  return String(env?.TAVILY_API_KEY || '').trim() ? [...AGENT_TOOLS, SEARCH_TOOL] : [...AGENT_TOOLS];
+// dbConfigured: a key saved from the Provider Health card also offers the tool, not only the env var (owner's request
+// 2026-11-24). Resolving that is async (a DB read), so the caller resolves it once and passes the result in here,
+// which stays a plain synchronous function.
+export function toolsFor(env = process.env, dbConfigured = false) {
+  return (dbConfigured || String(env?.TAVILY_API_KEY || '').trim()) ? [...AGENT_TOOLS, SEARCH_TOOL] : [...AGENT_TOOLS];
 }
 
 export const TOOL_NAMES = Object.freeze([...AGENT_TOOLS.map(t => t.function.name), SEARCH_TOOL.function.name]);

@@ -1814,6 +1814,13 @@ b.pj-medium{color:#f5c26b}
 .advisor-provider-keyline{font-size:10px;color:var(--muted)}
 .advisor-provider-keyline b{color:#c7d4e4;font-family:ui-monospace,Consolas,monospace;font-size:10px}
 .advisor-provider-config>.advisor-key-manager{margin:2px 0 0}
+/* The generic single-key editor every non-Fincrux card gets (owner's request 2026-11-24: "every card need edit
+   option"). Reuses .advisor-key-row/.advisor-key-add from the Fincrux manager so both look consistent. */
+.advisor-provider-keyedit{display:grid;gap:8px;margin-top:2px}
+.advisor-provider-keyedit .advisor-key-row{padding:8px 9px}
+.advisor-provider-keyedit .advisor-key-add{grid-template-columns:minmax(0,1fr) auto}
+.advisor-provider-keyedit .advisor-key-add input{font-size:11px}
+@media(max-width:480px){.advisor-provider-keyedit .advisor-key-add{grid-template-columns:1fr}.advisor-provider-keyedit .advisor-key-add button{width:100%}}
 .advisor-coverage-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .advisor-coverage-card{display:grid;gap:5px;min-width:0;padding:10px;border:1px solid #2b3c55;border-radius:11px;background:#111f32}
 .advisor-coverage-card small{font-size:10px;line-height:1.35;color:var(--muted)}

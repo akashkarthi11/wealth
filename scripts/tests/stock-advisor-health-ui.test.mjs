@@ -67,11 +67,39 @@ test('a provider panel the admin opened stays open across a reload, e.g. after s
   assert.match(app, /addEventListener\('toggle',e=>\{const key=e\.target\?\.dataset\?\.providerKey/, 'and read back from the native toggle event');
 });
 
-test('every provider panel says whether a key can be set here, without ever showing one', () => {
+test('every non-Fincrux card has its own single-key editor, even one with no key at all', () => {
+  // Owner's request 2026-11-24: "every card need edit option .if no auth key requied just show empty enter field add
+  // option no issues" - every card gets the same add/replace/remove control, uniformly, rather than a read-only line
+  // on the providers that used to say the key could not be set from the app.
   assert.match(app, /const providerUsageLine=p=>/);
-  assert.match(app, /never shown here, cannot be set from this screen/);
-  assert.match(app, /Open data; no key needed/);
-  assert.doesNotMatch(app, /providerConfigBody[\s\S]{0,900}\.value\b/, 'the config panel never reads a decrypted key value');
+  assert.match(app, /const providerKeyEditor=p=>/);
+  assert.match(app, /data-provider-key-save="'\+esc\(p\.key\)/, 'every card gets a save control');
+  assert.match(app, /No key needed for this provider — save one anyway if you want/, 'a keyless provider still gets the field, not a special case');
+  assert.doesNotMatch(app, /providerKeyEditor[\s\S]{0,900}\.value\b/, 'the editor never reads a decrypted key value, only .masked');
+  assert.match(app, /saved\.masked\|\|'Unavailable'/, 'only the masked form is ever shown');
+
+  const providersRoute=readFileSync(new URL('../../api/_routes/providers.js',import.meta.url),'utf8');
+  assert.match(providersRoute, /action === 'provider_key_save'/);
+  assert.match(providersRoute, /action === 'provider_key_delete'/);
+  assert.doesNotMatch(providersRoute, /provider_key_save[\s\S]{0,400}\.value\b/, 'the save response never echoes the key back');
+  const providerApiKeysLib=readFileSync(new URL('../../api/_lib/provider-api-keys.js',import.meta.url),'utf8');
+  assert.match(providerApiKeysLib, /export async function saveStoredProviderKey/);
+  assert.match(providerApiKeysLib, /export async function getStoredProviderKey/);
+  assert.doesNotMatch(providerApiKeysLib.slice(providerApiKeysLib.indexOf('getStoredProviderKey')), /\.value\b/, 'the metadata reader never returns the decrypted value');
+});
+
+test('a saved single-key provider is checked by the real call sites, not only displayed', () => {
+  // A control that saves a key but that nothing reads would be exactly the kind of dead, misleading UI the project
+  // rules warn against - so every one of these three has to actually be checked at its real call site.
+  const debate=readFileSync(new URL('../../api/_lib/stock-advisor-debate.js',import.meta.url),'utf8');
+  assert.match(debate, /loadStoredProviderKeyValue\(sql,'free-model'\)/, 'the AI Gateway key is checked before the env var');
+  assert.match(debate, /loadStoredProviderKeyValue\(sql,'groq'\)/, 'the Groq key is checked before the env var');
+  const search=readFileSync(new URL('../../api/_lib/agent-search.js',import.meta.url),'utf8');
+  assert.match(search, /loadStoredProviderKeyValue\(db, 'web-search'\)/, 'the Tavily key is checked before the env var');
+  // Fincrux is excluded from the generic save path: it already has its own multi-key, ticker-sharded storage, which
+  // a "one row replaces all" save would corrupt.
+  const providersRoute=readFileSync(new URL('../../api/_routes/providers.js',import.meta.url),'utf8');
+  assert.match(providersRoute, /key !== 'fincrux'/);
 });
 
 test('provider cards are one column on a phone, not squeezed two or three to a row', () => {
