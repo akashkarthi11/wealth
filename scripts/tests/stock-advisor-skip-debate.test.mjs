@@ -42,3 +42,27 @@ test('wiring: the check runs on the first step, before any model call and before
   assert.equal(DEBATE_SEQUENCE[8].side, 'cio');
   assert.equal(cioReady([]), false, 'the normal CIO guard is unchanged');
 });
+
+test('gap-filling pass: the verified NSE XBRL path is tried synchronously on step 0, before the debate can be skipped', () => {
+  // Previously the only path that can verify financial_statement ran only through the nightly queue's nse_xbrl task, so
+  // a debate started before that queue reached this ticker answered DATA REQUIRED on evidence that was available right
+  // now - the debate never got a chance to look, because shouldSkipDebate runs before any agent gets a turn
+  // (owner's request 2026-11-24: "The gap-filling pass do it").
+  const refreshBlock = src.slice(src.indexOf("if(run.asset_type==='indian_equity')"), src.indexOf('if(step===0 && shouldSkipDebate'));
+  const news = refreshBlock.indexOf('refreshes.nse_news=');
+  const xbrl = refreshBlock.indexOf('refreshes.nse_xbrl=await collectNseXbrlFinancialStatement');
+  const fincrux = refreshBlock.indexOf('refreshes.fincrux=await collectFincruxFinancials');
+  assert.ok(news > 0 && xbrl > news, 'news is collected first, so a fresh announcement is there for the XBRL cross-check');
+  assert.ok(xbrl > 0 && fincrux > xbrl, 'the verified source is always tried before the unverified fallback');
+  assert.match(refreshBlock.slice(xbrl, xbrl + 300), /evidence=await loadEvidence\(/, 're-read after the XBRL attempt so the gate sees the stored, verified row');
+  assert.match(refreshBlock.slice(fincrux, fincrux + 300), /evidence=await loadEvidence\(/, 're-read after Fincrux too');
+
+  // A model that never asks for a tool still gets the normal path; this pass runs with no model call at all, so it
+  // works whether or not the free model honours tools.
+  assert.ok(xbrl < src.indexOf('await callWithTools('), 'the fill runs before any model call is made');
+});
+
+test('the debate queue step is sized for the gap-filling pass, not only a single model call', () => {
+  const jobQueue = readFileSync(new URL('../../api/_lib/job-queue.js', import.meta.url), 'utf8');
+  assert.match(jobQueue, /const DEBATE_STEP_MS = 36000/, 'raised from 16000 to leave room for NSE news + NSE XBRL + Fincrux + the model call on step 0');
+});

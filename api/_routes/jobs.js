@@ -1,4 +1,4 @@
-import { sql, json, sessionUser } from '../_lib.js';
+import { sql, json, sessionUser, configStatus } from '../_lib.js';
 import { queueCounts } from '../_lib/job-queue.js';
 
 async function adminUser(req) {
@@ -40,7 +40,10 @@ export default async function handler(req,res) {
       const scheduler=await sql.query(`SELECT DISTINCT ON (job) job,started_at,finished_at,status,summary
         FROM wealth_job_runs WHERE job IN ('jobs-dispatch','jobs-worker','interest-accrual','backup') ORDER BY job,started_at DESC`).catch(()=>[]);
       const schedulerActivity={dispatcher:scheduler.find(x=>x.job==='jobs-dispatch')||null,worker:scheduler.find(x=>x.job==='jobs-worker')||null,nightlyInterest:scheduler.find(x=>x.job==='interest-accrual')||null,nightlyBackup:scheduler.find(x=>x.job==='backup')||null};
-      return json(res,200,{jobs,queue:await queueCounts(sql),schedulerActivity});
+      // Presence only, never the value: so the Jobs screen can tell the owner directly, rather than only after a
+      // failed nightly run, that the backup cron has nothing to do until these are set (owner's request 2026-11-24).
+      const backupConfigured=configStatus().backup;
+      return json(res,200,{jobs,queue:await queueCounts(sql),schedulerActivity,backupConfigured});
     }
     const body=await (async()=>{let raw='';for await(const c of req)raw+=c;if(raw.length>5000)throw new Error('Request too large');return JSON.parse(raw||'{}')})();
     const id=String(body.id||'');

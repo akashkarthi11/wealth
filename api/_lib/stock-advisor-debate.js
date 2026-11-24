@@ -5,6 +5,7 @@ import { collectMutualFundEvidence } from './stock-advisor-mfapi.js';
 import { collectNseNews } from './stock-advisor-live-evidence.js';
 import { collectTejHqEquityEvidence } from './stock-advisor-tejhq.js';
 import { collectFincruxFinancials } from './stock-advisor-fincrux.js';
+import { collectNseXbrlFinancialStatement } from './stock-advisor-nse-xbrl.js';
 import { toolsFor, runAgentTool } from './agent-tools.js';
 
 export const FREE_AI_MODEL = 'nvidia/nemotron-3.5-lightning-free';
@@ -472,18 +473,23 @@ async function processStep(req, runId) {
       } else {
         refreshes.tejhq={status:'skipped',reason:'Fresh verified market price and technical evidence already exist in the database.'};
       }
-      // Financial statements are enriched from Fincrux only when the optional free key
-      // is configured. The provider payload remains unverified until official filings
-      // corroborate it, so it cannot unlock a BUY decision by itself.
+      // NSE announcement discovery first: a freshly discovered "Financial results" announcement lets the XBRL match
+      // below cross-check against it, same as the nightly job. Not required any more (a9b45b3), but used when present.
+      refreshes.nse_news=await collectNseNews({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
+      // GAP-FILLING PASS (owner's request 2026-11-24): the only path that can verify financial_statement was reachable
+      // only through the nightly queue's nse_xbrl task. A debate started before that queue reached this ticker always
+      // answered DATA REQUIRED on evidence that was available right now - the debate never got a chance to look,
+      // because shouldSkipDebate below runs before any agent gets a turn. Try the verified path synchronously first.
+      if(evidence.missing_evidence_types.includes('financial_statement')) {
+        refreshes.nse_xbrl=await collectNseXbrlFinancialStatement({instrument:{symbol:run.ticker,name:run.stock_name},db:sql});
+        evidence=await loadEvidence(run.user_id,holdingRows[0],run.asset_type,run.id);
+      }
+      // Still missing after the verified attempt (no matching NSE filing exists yet): Fincrux as secondary, unverified
+      // context only when the optional free key is configured. It cannot unlock a BUY decision by itself.
       if(evidence.missing_evidence_types.includes('financial_statement')) {
         refreshes.fincrux=await collectFincruxFinancials({instrument:{symbol:run.ticker,name:run.stock_name},db:sql});
         evidence=await loadEvidence(run.user_id,holdingRows[0],run.asset_type,run.id);
       }
-      // NSE announcement discovery remains an independent, low-cost refresh.
-      refreshes.nse_news=await collectNseNews({ticker:run.ticker,name:run.stock_name,runId:run.id,db:sql});
-      // Fincrux is retained as secondary unverified evidence. Only the queued NSE filed-XBRL task may verify financial statements.
-      refreshes.financial_verification={status:'handled_by_nse_xbrl_queue',note:'Fincrux remains unverified; NSE filed XBRL is the verified financial source.'};
-      evidence=await loadEvidence(run.user_id,holdingRows[0],run.asset_type,run.id);
     }
     evidence.provider_refreshes=refreshes;
     evidence.captured_at=new Date().toISOString();
