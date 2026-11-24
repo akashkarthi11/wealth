@@ -24,7 +24,11 @@ export default async function handler(req,res) {
     const ok=failedTasks.length===0;
     const summary={processed:result.processed||0,queue:result.queue||{},failedTasks,reaped};
     await finishJob(run,ok?'succeeded':'failed',summary);
-    return json(res,ok?200:500,{ok,status:ok?(result.queue?.waiting?'partial':'completed'):'failed',reaped,...result,failedTasks});
+    // The worker ran, so this is a 200 even when a task inside it failed: a provider that rate-limits or times out is an
+    // outcome to report, not a transport error. Returning 500 made "Run queue now" tell the admin the whole pass had
+    // failed when it had in fact done its work, and hid how much it got through (2026-11-24).
+    const status=failedTasks.length?'failed_tasks':result.queue?.waiting?'partial':'completed';
+    return json(res,200,{ok,status,reaped,...result,failedTasks});
   }catch(error){
     const message=String(error?.message||'Job worker failed.').slice(0,300);
     await finishJob(run,'failed',{error:message});
