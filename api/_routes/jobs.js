@@ -14,8 +14,8 @@ export default async function handler(req,res) {
     const uid=await adminUser(req);
     if(!uid)return json(res,403,{error:'Admin sign-in required'});
     if(req.method==='GET'){
-      const jobs=await sql.query(`SELECT j.id,j.job_key,j.name,j.description,j.enabled,
-        to_char(j.schedule_time,'HH24:MI') AS schedule_time,j.schedule_frequency,j.timezone,j.next_run_at,
+      const jobs=await sql.query(`SELECT j.id,j.job_key,j.handler_key,j.name,j.description,j.enabled,
+        to_char(j.schedule_time,'HH24:MI') AS schedule_time,j.schedule_frequency,j.timezone,j.next_run_at,(j.enabled AND j.next_run_at<=now()) AS is_due,
         CASE WHEN j.handler_key IN ('interest-accrual','backup') THEN
           COALESCE((SELECT r.started_at FROM wealth_job_runs r WHERE r.job=j.handler_key ORDER BY r.started_at DESC LIMIT 1),j.last_run_at)
           ELSE j.last_run_at END AS last_run_at,
@@ -38,8 +38,8 @@ export default async function handler(req,res) {
         END AS recent_runs
         FROM wealth_scheduled_jobs j ORDER BY j.schedule_time,j.name`);
       const scheduler=await sql.query(`SELECT DISTINCT ON (job) job,started_at,finished_at,status,summary
-        FROM wealth_job_runs WHERE job IN ('jobs-dispatch','jobs-worker') ORDER BY job,started_at DESC`).catch(()=>[]);
-      const schedulerActivity={dispatcher:scheduler.find(x=>x.job==='jobs-dispatch')||null,worker:scheduler.find(x=>x.job==='jobs-worker')||null};
+        FROM wealth_job_runs WHERE job IN ('jobs-dispatch','jobs-worker','interest-accrual','backup') ORDER BY job,started_at DESC`).catch(()=>[]);
+      const schedulerActivity={dispatcher:scheduler.find(x=>x.job==='jobs-dispatch')||null,worker:scheduler.find(x=>x.job==='jobs-worker')||null,nightlyInterest:scheduler.find(x=>x.job==='interest-accrual')||null,nightlyBackup:scheduler.find(x=>x.job==='backup')||null};
       return json(res,200,{jobs,queue:await queueCounts(sql),schedulerActivity});
     }
     const body=await (async()=>{let raw='';for await(const c of req)raw+=c;if(raw.length>5000)throw new Error('Request too large');return JSON.parse(raw||'{}')})();
@@ -51,8 +51,9 @@ export default async function handler(req,res) {
     if(time>'18:45')return json(res,400,{error:'On the free Vercel plan, automatic jobs dispatch once daily at 18:45 IST. Choose a due-time no later than 18:45.'});
     if(!['daily','weekdays'].includes(frequency))return json(res,400,{error:'Frequency must be daily or weekdays.'});
     if(typeof body.enabled!=='boolean')return json(res,400,{error:'enabled must be true or false.'});
-    const [current]=await sql.query('SELECT id,schedule_time::text,schedule_frequency,timezone FROM wealth_scheduled_jobs WHERE id=$1',[id]);
+    const [current]=await sql.query('SELECT id,handler_key,schedule_time::text,schedule_frequency,timezone FROM wealth_scheduled_jobs WHERE id=$1',[id]);
     if(!current)return json(res,404,{error:'Job not found.'});
+    if(['interest-accrual','backup'].includes(current.handler_key))return json(res,409,{error:'This task is managed by the nightly system cron and cannot be edited here.'});
     const {nextJobRunFromDb}=await import('../_lib/scheduled-job-time.js');
     const next=body.enabled?await nextJobRunFromDb(sql,time,frequency,current.timezone):null;
     await sql.query(`UPDATE wealth_scheduled_jobs SET enabled=$2,schedule_time=$3::time,schedule_frequency=$4,
