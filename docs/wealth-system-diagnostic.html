@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wealth — System & AI Research Diagnostic</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1020;--panel:#131c30;--panel2:#18243b;--text:#e8eefb;--muted:#9eacc4;--line:#34445f;--green:#45d49a;--red:#ff6b78;--amber:#ffc56b;--blue:#79b8ff}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 15% 0%,#162846 0,#0b1020 42%);color:var(--text);font:15px/1.55 Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:1200px;margin:auto;padding:28px 18px 64px}h1{font-size:clamp(26px,4vw,40px);line-height:1.1;margin:8px 0}h2{font-size:22px;margin:34px 0 12px}h3{font-size:16px;margin:0 0 8px}.sub,.muted{color:var(--muted)}.sub{margin:0 0 22px}
+.pill{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:3px 9px;font-size:12px;color:var(--muted);margin:2px}.bad{color:var(--red);border-color:#7b3541}.warn{color:var(--amber);border-color:#76552b}.good{color:var(--green);border-color:#28694f}.info{color:var(--blue);border-color:#315b8a}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}.card{background:linear-gradient(160deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:14px;padding:16px}.card p{margin:6px 0;color:var(--muted)}.metric{font-size:25px;font-weight:750}.callout{border-left:4px solid var(--red);background:#2b1928;padding:14px 16px;border-radius:8px;margin:18px 0}.callout.warnbox{border-color:var(--amber);background:#2b2418}
+.diagram{background:#0e1729;border:1px solid var(--line);border-radius:16px;padding:14px;overflow-x:auto}.diagram svg{display:block;width:100%;min-width:760px;height:auto}.node{fill:#172742;stroke:#4b6386;stroke-width:1.5}.node.red{stroke:#c95667;fill:#321d2b}.node.amber{stroke:#b88743;fill:#302719}.node.green{stroke:#3d9f79;fill:#15352e}.node.blue{stroke:#568dcc;fill:#172e4a}.node text{fill:var(--text);font-size:13px}.edge{stroke:#7890b3;stroke-width:2;fill:none;marker-end:url(#arrow)}.edge.red{stroke:#ff7b88}.edge.amber{stroke:#ffc56b}.edge.green{stroke:#45d49a}.edge.dash{stroke-dasharray:6 5}.edge-label{fill:#b9c8df;font-size:11px}
+table{width:100%;border-collapse:collapse;background:var(--panel);border-radius:12px;overflow:hidden}th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}th{color:#b9c8df;background:#19263d;font-size:12px;text-transform:uppercase;letter-spacing:.04em}td{font-size:14px}tr:last-child td{border-bottom:0}
+code{color:#ffd38b;background:#0b1424;padding:2px 5px;border-radius:5px;overflow-wrap:anywhere}.small{font-size:12px;color:var(--muted)}ul{padding-left:20px}li{margin:5px 0}.footer{border-top:1px solid var(--line);margin-top:34px;padding-top:16px;color:var(--muted);font-size:12px}
+@media(max-width:640px){main{padding:20px 12px 44px}td,th{padding:8px;font-size:12px}}
+</style>
+</head>
+<body><main>
+<span class="pill info">READ-ONLY DIAGNOSTIC</span><span class="pill">Wealth / development</span><span class="pill">24 Nov 2026 · DB UTC 18:39</span>
+<h1>Wealth system health & AI research</h1>
+<p class="sub">Evidence-based review of the Development Neon database and the <code>development</code> branch source code. No data or configuration was changed.</p>
+
+<div class="callout"><strong>Primary failure — free AI research cannot start.</strong><br>
+The latest AWL debate run failed with <code>AI Gateway is not configured in this Development Preview.</code> The queued debate stage failed with the same message. The code's primary model is <code>nvidia/nemotron-3.5-lightning-free</code> through Vercel AI Gateway.</div>
+
+<div class="grid">
+ <section class="card"><div class="small">Latest AI failure</div><div class="metric" style="color:var(--red)">22 Nov</div><p>AWL · run failed · debate queue failed</p></section>
+ <section class="card"><div class="small">Scheduled definitions</div><div class="metric">5</div><p>All enabled; all five show <code>last_run_at = null</code> in this DB.</p></section>
+ <section class="card"><div class="small">Recorded scheduled runs</div><div class="metric" style="color:var(--red)">0</div><p><code>wealth_scheduled_job_runs</code> has no rows.</p></section>
+ <section class="card"><div class="small">Research source rows</div><div class="metric" style="color:var(--amber)">0</div><p>No rows in <code>wealth_stock_advisor_research_sources</code> in this DB snapshot.</p></section>
+</div>
+
+<h2>1. System flow — where it breaks</h2>
+<div class="diagram">
+<svg viewBox="0 0 1040 690" role="img" aria-label="Wealth architecture and diagnostic flow diagram">
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#7890b3"/></marker></defs>
+<rect class="node blue" x="370" y="18" width="300" height="55" rx="10"/><text x="520" y="41" text-anchor="middle">Wealth UI / Stock Advisor</text><text x="520" y="59" text-anchor="middle" class="muted">User starts free research / scheduled run</text>
+<path class="edge" d="M520 73V111"/>
+<rect class="node" x="350" y="112" width="340" height="62" rx="10"/><text x="520" y="137" text-anchor="middle">Vercel API router</text><text x="520" y="156" text-anchor="middle">/api/stock-advisor · debate · jobs</text>
+<path class="edge" d="M520 174V212"/>
+<rect class="node red" x="320" y="213" width="400" height="76" rx="10"/><text x="520" y="240" text-anchor="middle">Free model gateway — FAILING</text><text x="520" y="260" text-anchor="middle">Nemotron Free · requires AI_GATEWAY_API_KEY</text><text x="520" y="278" text-anchor="middle">Observed preview error: gateway not configured</text>
+<path class="edge red" d="M520 289V325"/>
+<rect class="node amber" x="350" y="326" width="340" height="66" rx="10"/><text x="520" y="351" text-anchor="middle">Groq fallback — conditional</text><text x="520" y="371" text-anchor="middle">Needs GROQ_API_KEY + ZDR confirmation=true</text><text x="520" y="386" text-anchor="middle">Not proven configured in this preview</text>
+<path class="edge amber" d="M520 392V427"/>
+<rect class="node red" x="320" y="428" width="400" height="58" rx="10"/><text x="520" y="452" text-anchor="middle">Debate worker / queued stage</text><text x="520" y="471" text-anchor="middle">Observed: stage status = failed, same gateway error</text>
+<path class="edge" d="M520 486V521"/>
+<rect class="node" x="320" y="522" width="400" height="58" rx="10"/><text x="520" y="546" text-anchor="middle">Neon: runs / messages / reports</text><text x="520" y="565" text-anchor="middle">Run error is persisted; no report from failed AWL run</text>
+
+<rect class="node amber" x="20" y="220" width="245" height="100" rx="10"/><text x="142" y="245" text-anchor="middle">Web search tool</text><text x="142" y="266" text-anchor="middle">Tavily · TAVILY_API_KEY</text><text x="142" y="286" text-anchor="middle">No key in preview → not offered</text><text x="142" y="305" text-anchor="middle">Credential status unverified</text>
+<path class="edge amber dash" d="M265 270H318"/>
+<rect class="node amber" x="775" y="220" width="245" height="100" rx="10"/><text x="897" y="245" text-anchor="middle">Provider-key storage</text><text x="897" y="266" text-anchor="middle">wealth_provider_api_keys</text><text x="897" y="286" text-anchor="middle">MISSING from Development DB</text><text x="897" y="305" text-anchor="middle">Saved keys cannot be read/written</text>
+<path class="edge red" d="M775 270H722"/>
+<rect class="node red" x="20" y="425" width="245" height="110" rx="10"/><text x="142" y="450" text-anchor="middle">Provider audit / API usage</text><text x="142" y="471" text-anchor="middle">wealth_api_audit</text><text x="142" y="491" text-anchor="middle">MISSING from Development DB</text><text x="142" y="511" text-anchor="middle">Health / usage metrics can break</text>
+<path class="edge red dash" d="M265 480H318"/>
+<rect class="node red" x="775" y="425" width="245" height="110" rx="10"/><text x="897" y="450" text-anchor="middle">Durable job queue</text><text x="897" y="471" text-anchor="middle">wealth_job_queue</text><text x="897" y="491" text-anchor="middle">MISSING from Development DB</text><text x="897" y="511" text-anchor="middle">Dispatcher / worker needs it</text>
+<path class="edge red dash" d="M775 480H722"/>
+<rect class="node green" x="350" y="615" width="340" height="55" rx="10"/><text x="520" y="639" text-anchor="middle">Read-only data providers</text><text x="520" y="657" text-anchor="middle">NSE · TejHQ · MFAPI · Yahoo · FX · Fincrux</text>
+<path class="edge green dash" d="M520 580V614"/>
+</svg>
+<p class="small">Solid arrows show the main execution path. Dashed side links show supporting services or dependencies. Red = confirmed failure/missing schema; amber = configuration not verified or conditional; green = code integration present, live success not established.</p>
+</div>
+
+<h2>2. Scheduled jobs — Development DB snapshot</h2>
+<table><thead><tr><th>Job</th><th>Configured schedule (IST)</th><th>DB status</th><th>Finding</th></tr></thead><tbody>
+<tr><td>Encrypted backup</td><td>Daily 01:45</td><td><span class="pill warn">Not run</span></td><td><code>last_run_at</code> null; nightly route owns this task. Backup needs <code>WEALTH_BACKUP_KEY</code> and <code>BLOB_READ_WRITE_TOKEN</code>.</td></tr>
+<tr><td>Interest accrual</td><td>Daily 01:30</td><td><span class="pill warn">Not run</span></td><td><code>last_run_at</code> null; app rules say this is written only by <code>/api/nightly</code>.</td></tr>
+<tr><td>Market price refresh</td><td>Daily 04:30</td><td><span class="pill warn">Not run</span></td><td>Next run timestamp is stale (22 Nov); no recorded scheduled execution.</td></tr>
+<tr><td>Stock Advisor auto-research</td><td>Daily 09:45</td><td><span class="pill warn">Not run</span></td><td>No schedule-run rows. Preview does not receive Vercel Cron events.</td></tr>
+<tr><td>Stock Advisor data collection</td><td>Daily 18:30</td><td><span class="pill warn">Not run</span></td><td>No collection run rows; no saved research evidence rows.</td></tr>
+</tbody></table>
+<p class="muted">The DB timestamp at inspection was 2026-11-24 18:39 UTC (2026-11-25 00:09 IST). All five job definitions were enabled, but their next-run timestamps were already behind that time. There were no rows in <code>wealth_scheduled_job_runs</code> or <code>wealth_job_runs</code>. The Development preview is not a reliable place to validate automatic Cron execution: Vercel Cron is for Production deployments.</p>
+
+<h2>3. Third-party provider integration inventory</h2>
+<p class="muted">“Code integrated” means the Development source contains an adapter or call path. It does not prove the Vercel environment has valid credentials or that the provider is currently responding. Secret values were not read.</p>
+<table><thead><tr><th>Provider</th><th>Purpose</th><th>Integration status</th><th>What is needed / limitation</th></tr></thead><tbody>
+<tr><td>Vercel AI Gateway · Nemotron Free</td><td>Bull/Bear/CIO debate</td><td><span class="pill bad">Confirmed failing</span></td><td>Observed error says not configured in this Development Preview. Set <code>AI_GATEWAY_API_KEY</code> or save a key after provider-key schema migration.</td></tr>
+<tr><td>Groq Free</td><td>Fallback LLM</td><td><span class="pill warn">Conditional</span></td><td>Requires <code>GROQ_API_KEY</code> and <code>GROQ_ZERO_DATA_RETENTION_CONFIRMED=true</code>. Not confirmed active.</td></tr>
+<tr><td>Tavily</td><td>Agent web search</td><td><span class="pill warn">Credential unverified</span></td><td>Requires <code>TAVILY_API_KEY</code>. Without it, search tool is not exposed to agents.</td></tr>
+<tr><td>Exa</td><td>Provider research endpoint</td><td><span class="pill warn">Credential unverified</span></td><td><code>POST /api/providers</code> research action exists; requires <code>EXA_API_KEY</code>. Separate from debate agent search.</td></tr>
+<tr><td>Massive</td><td>Structured quote endpoint</td><td><span class="pill warn">Credential unverified</span></td><td>Requires <code>MASSIVE_API_KEY</code>. Current adapter is explicitly US Stocks/USD, not Indian equity pricing.</td></tr>
+<tr><td>Fincrux</td><td>Company financial statements</td><td><span class="pill warn">Integration present; key storage blocked</span></td><td>Multi-key encrypted adapter exists. Saved key table is missing in this Development DB; env keys <code>FINCRUX_API_KEY</code> … <code>_10</code> are an alternative.</td></tr>
+<tr><td>TejHQ</td><td>NSE EOD prices / indicators</td><td><span class="pill info">Code integrated</span></td><td>Direct adapter exists; provider response and freshness not verified because no collection run was recorded.</td></tr>
+<tr><td>MFAPI.in</td><td>Mutual-fund NAV</td><td><span class="pill info">Code integrated</span></td><td>Direct API adapter exists; no saved research rows in this DB snapshot.</td></tr>
+<tr><td>NSE RSS / XBRL</td><td>Announcements and financial statements</td><td><span class="pill info">Code integrated</span></td><td>Direct feeds/adapters exist; live retrieval not verified.</td></tr>
+<tr><td>Yahoo Finance</td><td>Secondary fundamentals / context</td><td><span class="pill info">Code integrated</span></td><td>Marked unverified by design; must not open evidence gate alone.</td></tr>
+<tr><td>Open currency API</td><td>USD/INR reference rate</td><td><span class="pill info">Code integrated</span></td><td>Keyless adapter with Yahoo INR=X fallback; live call not verified.</td></tr>
+<tr><td>Angel One SmartAPI</td><td>Broker holdings, RMS and positions</td><td><span class="pill warn">Optional / credential unverified</span></td><td>Read-only route exists; requires five vars: <code>ANGEL_API_KEY</code>, <code>ANGEL_CLIENT_CODE</code>, <code>ANGEL_PIN</code>, <code>ANGEL_TOTP_SECRET</code>, <code>ANGEL_MAC_ADDRESS</code>.</td></tr>
+<tr><td>Agent web fetch</td><td>Open official pages</td><td><span class="pill info">Code integrated</span></td><td>Allowlisted NSE, BSE, SEBI, AMFI, RBI and Yahoo pages; returned text is unverified context.</td></tr>
+<tr><td>Period-match / open data</td><td>Evidence helper</td><td><span class="pill warn">Not confirmed</span></td><td>Provider directory has a health entry, but no successful calls or evidence rows were found to verify operation.</td></tr>
+<tr><td>Redis</td><td>Short-lived cache</td><td><span class="pill info">Optional integration</span></td><td><code>REDIS_URL</code> is optional; app falls back to Neon when absent/unavailable. This DB review cannot verify the Vercel variable.</td></tr>
+<tr><td>Vercel Blob</td><td>Encrypted backup storage</td><td><span class="pill warn">Credential unverified</span></td><td>Backup needs <code>BLOB_READ_WRITE_TOKEN</code> plus <code>WEALTH_BACKUP_KEY</code>.</td></tr>
+<tr><td>Neon PostgreSQL</td><td>Primary Development DB</td><td><span class="pill good">Connected/readable</span></td><td>Development branch responds to read-only SQL. This is not a Production DB audit.</td></tr>
+</tbody></table>
+
+<h2>4. Confirmed schema mismatch</h2>
+<div class="grid">
+ <section class="card"><h3 style="color:var(--red)">Missing: provider keys</h3><code>wealth_provider_api_keys</code><p>Generic keys (AI Gateway, Groq, Tavily) and Fincrux keys are stored encrypted here. The table does not exist in the inspected DB.</p></section>
+ <section class="card"><h3 style="color:var(--red)">Missing: provider audit</h3><code>wealth_api_audit</code><p>Provider directory reads this table for real call/success/failure counts. It is absent from this DB.</p></section>
+ <section class="card"><h3 style="color:var(--red)">Missing: durable queue</h3><code>wealth_job_queue</code><p>Job dashboard and scheduled-job execution code query this table. It is absent from this DB.</p></section>
+</div>
+<p>The latest migration recorded in <code>wealth_schema_migrations</code> is <code>0046_archive_replaced_market_prices</code> (22 Nov 2026). The repo's build script explicitly skips migrations on Preview unless <code>WEALTH_MIGRATIONS=on</code>. That is the leading explanation for why Development DB schema and current code are out of sync; confirm the pending migration set before applying anything.</p>
+
+<h2>5. Why AI free research is not working</h2>
+<ol>
+<li>The run reaches the debate model stage and fails because the preview has no usable AI Gateway configuration.</li>
+<li>The primary code path reads a saved <code>free-model</code> key or <code>AI_GATEWAY_API_KEY</code>. It calls Vercel AI Gateway using the Nemotron Free model.</li>
+<li>Groq fallback is not automatic unless both a Groq key and the zero-data-retention confirmation are present.</li>
+<li>The Provider Health code treats a deployment OIDC token as a possible gateway configuration, but the debate caller's primary key lookup shown in source checks the saved key and <code>AI_GATEWAY_API_KEY</code>. Verify this discrepancy before relying on OIDC as a fallback.</li>
+<li>Even after the model is configured, agent web search is a separate capability and requires Tavily. No Tavily key means the search tool is omitted from the agent's tool list.</li>
+<li>Research collection has no recorded successful run and the source table has no rows in this DB snapshot, so the model also lacks a fresh evidence pack.</li>
+</ol>
+
+<h2>6. Recommended repair order (no changes made)</h2>
+<ol>
+<li><strong>Fix Development schema first.</strong> Compare the repository migration files with the DB's applied migration IDs. Apply only missing migrations to the Development Neon branch, after reviewing the exact SQL and confirming the target.</li>
+<li><strong>Configure one working free model.</strong> Set <code>AI_GATEWAY_API_KEY</code> in the Development Preview environment, or save it through Provider Health after the key table exists. Then run a one-request model smoke test.</li>
+<li><strong>Enable web search.</strong> Set <code>TAVILY_API_KEY</code> or save the key after schema repair; test a search and verify the returned source URLs.</li>
+<li><strong>Validate provider keys and adapters.</strong> Test Fincrux, TejHQ, MFAPI, NSE/XBRL, Yahoo and FX individually; distinguish a reachable API from usable, current evidence.</li>
+<li><strong>Repair/verify job dispatch.</strong> Once queue schema is current, run Development jobs manually through the admin endpoint for tests. Validate Production Cron separately; Preview does not receive Cron triggers.</li>
+<li><strong>Re-run AWL debate.</strong> Confirm all stages complete, model messages persist, sources are attached, and the report is saved before considering the issue resolved.</li>
+</ol>
+
+<h2>7. Scope and confidence</h2>
+<ul>
+<li>Inspected: Neon project <code>wealth-development</code>, branch <code>development</code> (<code>br-weathered-dew-b3kyntij</code>), and source files on Git branch <code>development</code>.</li>
+<li>DB reads were read-only. No Production database was accessed; the linked Primary Neon account returned no matching Wealth project in this inspection.</li>
+<li>Vercel Preview runtime-log query for the last 50 minutes returned no records. A seven-day query was rejected because the Hobby plan does not retain that range. No logs is not proof of no failures.</li>
+<li>Provider secrets were not exposed or inspected. For providers marked “credential unverified”, the code integration is visible but live configuration cannot be confirmed from this DB snapshot.</li>
+<li>Production scheduled jobs and Production provider health remain unverified. Do not infer their status from the Development DB.</li>
+</ul>
+<div class="footer">Generated from read-only database inspection and Development-branch source review. No schema migrations, key changes, job runs, or deployments were triggered.</div>
+</main></body></html>
