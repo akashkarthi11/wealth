@@ -519,6 +519,9 @@ function scheduledJobsHtml(data){
   '<article class="'+(failed?'has-failures':'')+'"><span>Failed</span><b>'+failed+'</b><small>Latest result needs attention</small></article>'+
  '</section>'+
  '<section class="jobs-next-up"><span class="jobs-next-icon">◷</span><div><small>NEXT SCHEDULED JOB</small><b>'+(nextJob?esc(nextJob.name):'No upcoming run scheduled')+'</b><span>'+(nextJob?esc(fmt(nextJob.next_run_at)):'Enable a job and save its schedule to see it here')+'</span></div></section>';
+ const scheduler=data?.schedulerActivity||{};
+ const schedulerCard=(key,label)=>{const r=scheduler[key];const state=r?.status||'not_seen';const good=state==='succeeded';const bad=state==='failed';const stamp=r?.started_at?fmt(r.started_at):'No recorded invocation yet';const detail=r?.summary?.error||'';return '<article><span>'+label+'</span><b class="jobs-status '+(good?'success':bad?'danger':'neutral')+'">'+(good?'Completed':bad?'Failed':r?'Partial / running':'Not seen')+'</b><small>'+esc(stamp)+'</small>'+(detail?'<small class="jobs-error">'+esc(detail)+'</small>':'')+'</article>';};
+ const schedulerHtml='<section class="jobs-overview" aria-label="Cron scheduler activity">'+schedulerCard('dispatcher','Dispatcher cron')+schedulerCard('worker','Worker cron')+'</section>';
  const cards=jobs.map(j=>{
   const enabled=!!j.enabled, time=String(j.schedule_time||'00:00').slice(0,5), frequency=j.schedule_frequency||'daily';
   const runs=Array.isArray(j.recent_runs)?j.recent_runs:[];
@@ -545,6 +548,7 @@ function scheduledJobsHtml(data){
  }).join('');
  return '<section class="jobs-page"><div class="jobs-page-head"><div><h4>Your scheduled jobs</h4><p>Monitor every automation, change its schedule and inspect recent runs. Changes are saved to your existing database schedules.</p></div><button type="button" class="primary" data-queue-run>▶ Run queue now</button> <button type="button" class="ghost" data-jobs-refresh>↻ Refresh</button></div>'+
  overview+
+ schedulerHtml+
  (jobs.length?'<div class="jobs-list">'+cards+'</div>':'<div class="jobs-empty">No scheduled jobs are configured yet.</div>')+
  '<p class="jobs-footnote">All times are India Standard Time. The central dispatcher processes due jobs; the saved time is a due-time cutoff, not an exact-minute guarantee. Run history is retained by the existing jobs service.</p></section>';
 }
