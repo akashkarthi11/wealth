@@ -67,3 +67,63 @@ test('an XBRL document that cannot be parsed creates no verified research row', 
     assert.equal(s.sourceWrites.length, 0, 'no row is inserted or marked verified');
   } finally { s.restore(); }
 });
+
+// NSE's RSS carries only recent announcements, so a quarter filed weeks ago has rolled off it. Requiring a stored
+// announcement meant every holding returned "no_announcement" and the advisor answered DATA REQUIRED for all of them,
+// outside the few days after results were announced. NSE's own filing index is queried by symbol, so it can identify
+// the filing on its own; the announcement is a cross-check, and the figures still come only from the XBRL instance.
+function setupNoAnnouncement() {
+  const s = setup();
+  const inner = s.db.query;
+  s.db.query = async (sql, params = []) => {
+    if (sql.includes('FROM wealth_stock_advisor_research_sources') && sql.includes('feed_label')) return [];
+    return inner(sql, params);
+  };
+  return s;
+}
+
+test('with no stored announcement, the filing is still verified from the NSE index', async () => {
+  const s = setupNoAnnouncement();
+  try {
+    const result = await collectNseXbrlFinancialStatement({ instrument: { symbol: 'TESTCO', name: 'Test Company Limited' }, db: s.db });
+    assert.equal(result.status, 'verified', 'reason: ' + (result.reason || ''));
+    assert.equal(result.period, '2026-09');
+    const write = s.sourceWrites.at(-1);
+    assert.ok(write, 'a research source was written');
+    assert.match(write.sql, /'verified'/, 'stored verified: the figures came from the NSE-filed XBRL');
+    const evidence = JSON.parse(write.params[5]);
+    assert.equal(evidence.match_basis, 'nse_integrated_filing_index', 'the evidence records which route identified it');
+    assert.equal(evidence.xbrl_url, xbrlUrl);
+    assert.equal(evidence.filing_url, xbrlUrl, 'with no announcement PDF, the filing url is the XBRL instance');
+  } finally { s.restore(); }
+});
+
+test('with no announcement the index is read for the whole history, not one day', async () => {
+  const s = setupNoAnnouncement();
+  const urls = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async url => { urls.push(String(url)); return realFetch(url); };
+  try {
+    await collectNseXbrlFinancialStatement({ instrument: { symbol: 'TESTCO' }, db: s.db });
+    const index = urls.find(u => u.startsWith('https://www.nseindia.com/api/integrated-filing-results'));
+    assert.ok(index, 'the filing index was queried');
+    assert.ok(index.includes('symbol=TESTCO'), 'by symbol');
+    assert.ok(!index.includes('from_date'), 'and with no single-day window, or an older quarter can never be found');
+    assert.ok(!urls.includes(announcementUrl), 'no announcement PDF is fetched when there is no announcement');
+  } finally { globalThis.fetch = realFetch; s.restore(); }
+});
+
+test('a stored announcement is still honoured, and still pins the query to its day', async () => {
+  const s = setup();
+  const urls = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async url => { urls.push(String(url)); return realFetch(url); };
+  try {
+    const result = await collectNseXbrlFinancialStatement({ instrument: { symbol: 'TESTCO' }, db: s.db });
+    assert.equal(result.status, 'verified');
+    const evidence = JSON.parse(s.sourceWrites.at(-1).params[5]);
+    assert.equal(evidence.match_basis, 'stored_nse_announcement');
+    assert.ok(urls.includes(announcementUrl), 'the announcement is still downloaded and checked');
+    assert.ok(urls.find(u => u.includes('integrated-filing-results')).includes('from_date=10-11-2026'), 'still pinned to its day');
+  } finally { globalThis.fetch = realFetch; s.restore(); }
+});

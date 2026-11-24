@@ -201,13 +201,22 @@ test('the data collection is queued as one item per provider call; when the last
   ]);
   const [{ n: before }] = await a.query(`SELECT count(*)::int AS n FROM wealth_job_queue WHERE payload->>'collection_run_id'=$1`, [crid]);
   assert.equal(before, 2);
-  const out = await drainQueue({ db: a, runHandler: async () => { throw new Error('not used'); }, deadlineAt: Date.now() + 40000 });
+  // No announcement is stored, so the XBRL step now asks NSE's filing index directly instead of refusing outright.
+  // NSE is stubbed to answer with an empty index, so this stays offline and deterministic: nothing matches the symbol,
+  // and the collection still ends with no verified financial source.
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async url => String(url).startsWith('https://www.nseindia.com/api/integrated-filing-results')
+    ? new Response(JSON.stringify({ data: [] }), { status: 200, headers: { 'content-type': 'application/json' } })
+    : realFetch(url);
+  let out;
+  try { out = await drainQueue({ db: a, runHandler: async () => { throw new Error('not used'); }, deadlineAt: Date.now() + 40000 }); }
+  finally { globalThis.fetch = realFetch; }
   assert.equal(out.processed, 2);
   const [c] = await a.query('SELECT status,finished_at,summary FROM wealth_stock_advisor_data_collection_runs WHERE id=$1', [crid]);
   const s = typeof c.summary === 'string' ? JSON.parse(c.summary) : c.summary;
   assert.equal(c.status, 'failed', 'a collection with no verified financial source is incomplete'); assert.ok(c.finished_at);
   assert.deepEqual(s.steps.map(x => x.provider + (x.ticker ? ':' + x.ticker : '')), ['NSE XBRL:TCS', 'Fincrux']);
-  assert.equal(s.steps[0].status, 'no_announcement');
+  assert.equal(s.steps[0].status, 'no_xbrl_match', 'NSE was asked and had no filing for the symbol, rather than never being asked');
   assert.equal(s.steps[1].status, 'skipped'); assert.match(s.steps[1].note, /FINCRUX_API_KEY/);
   assert.equal(s.financials_missing, 1);
   assert.equal(typeof s.work_ms, 'number');

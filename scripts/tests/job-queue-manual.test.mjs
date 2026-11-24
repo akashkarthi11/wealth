@@ -87,3 +87,23 @@ test('claimNext executes its SQL successfully when the queue is empty', async ()
   const { a } = await migratedDb();
   assert.equal(await claimNext(a, 10000), null);
 });
+
+test('a worker pass that ran is a success, even when a task inside it failed', () => {
+  // "Run queue now" reported failure to the admin whenever a single provider task failed, because the route answered
+  // 500 and the button's catch showed an error - hiding that the pass had processed its work (2026-11-24).
+  const route = read('api/_routes/jobs-worker.js');
+  const success = route.match(/const status=[\s\S]*?return json\(res,[^;]*\);/);
+  assert.ok(success, 'the success path returns a response');
+  assert.match(success[0], /return json\(res,200,/, 'the pass that ran answers 200, not 500');
+  assert.match(success[0], /failedTasks\.length\?'failed_tasks'/, 'and says so in the status');
+  assert.match(success[0], /failedTasks/, 'the failed tasks are reported in the body for the admin to read');
+  // A worker that could not run at all is still a server error.
+  assert.match(route, /json\(res,500,\{ok:false/, 'a worker that threw is still a 500');
+
+  const app = read('app.js');
+  const start = app.indexOf("const runQueue=e.target.closest('[data-queue-run]')");
+  assert.ok(start > 0, 'the button handler is present');
+  const button = app.slice(start, start + 900);
+  assert.ok(button.includes('failedTasks||[]'), 'the button reads the failed tasks');
+  assert.ok(button.includes("' · '+failed+' failed'"), 'and shows how many failed next to how many ran');
+});
