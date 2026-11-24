@@ -27,6 +27,7 @@ export const ROUTES = {
   'api-usage': () => import('./_routes/api-usage.js'),
   'jobs': () => import('./_routes/jobs.js'),
   'jobs/run-now': () => import('./_routes/jobs-run-now.js'),
+  'jobs/test': () => import('./_routes/jobs-test.js'),
   'jobs/dispatch': () => import('./_routes/jobs-dispatch.js'),
   'jobs/worker': () => import('./_routes/jobs-worker.js'),
   'snapshot': () => import('./_routes/snapshot.js'),
