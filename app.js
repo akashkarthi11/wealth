@@ -1,4 +1,4 @@
-const APP_BUILD_ID='20261123-provider-health-menu-1';
+const APP_BUILD_ID='20261124-cron-dashboard-1';
 (function promptForUpdatedApp(){
   try {
     const key='wealth-ledger:app-build';
