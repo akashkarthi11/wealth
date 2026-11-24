@@ -22,7 +22,7 @@ export async function health(key, configured = false, db = null) {
   // A key saved from the Provider Health card (owner's request 2026-11-24) counts the same as the env var: the real
   // call sites (callFreeModel, callGroqFreeModel, searchWeb) check the same stored value themselves. Only queried for
   // the providers that have anywhere to save one.
-  const stored = db && ['free-model', 'web-search', 'groq'].includes(key) ? Boolean(await loadStoredProviderKeyValue(db, key)) : false;
+  const stored = db && ['free-model', 'web-search', 'groq', 'gemini-vision'].includes(key) ? Boolean(await loadStoredProviderKeyValue(db, key)) : false;
   if (key === 'fincrux') return configured
     ? { status: 'configured', detail: 'Fincrux account keys are configured.', key_env: null }
     : { status: 'needs_key', detail: 'No enabled Fincrux account keys are configured.', key_env: null };
@@ -44,6 +44,12 @@ export async function health(key, configured = false, db = null) {
       ? { status: 'configured', detail: (stored ? 'Key saved from this card' : 'Key set') + ' and zero-data-retention confirmed.', key_env: 'GROQ_API_KEY' }
       : { status: 'blocked', detail: 'A key is set but GROQ_ZERO_DATA_RETENTION_CONFIRMED is not true, so it stays unused.', key_env: 'GROQ_ZERO_DATA_RETENTION_CONFIRMED' };
   }
+  if (key === 'gemini-vision') {
+    if (stored) return { status: 'configured', detail: 'Key saved from this card. Free tier reads screenshots and PDF statements.', key_env: 'GEMINI_API_KEY' };
+    return set('GEMINI_API_KEY')
+      ? { status: 'configured', detail: 'Free tier reads screenshots and PDF statements.', key_env: 'GEMINI_API_KEY' }
+      : { status: 'needs_key', detail: 'No key set, so screenshot/PDF uploads fall back to the paid Gateway path if one is configured, or are refused.', key_env: 'GEMINI_API_KEY' };
+  }
   return { status: 'available', detail: 'Open data; no key needed.', key_env: null };
 }
 
@@ -54,7 +60,7 @@ export async function health(key, configured = false, db = null) {
  */
 // Every provider key this directory knows about, so a save request can be checked against a fixed list rather than
 // writing whatever string a request body sends (owner's request 2026-11-24: "every card need edit option").
-export const PROVIDER_KEYS = Object.freeze(['fincrux', 'free-model', 'tejhq', 'mfapi', 'nse', 'yahoo', 'fx', 'groq', 'agent-web', 'web-search', 'period-match']);
+export const PROVIDER_KEYS = Object.freeze(['fincrux', 'free-model', 'tejhq', 'mfapi', 'nse', 'yahoo', 'fx', 'groq', 'agent-web', 'web-search', 'period-match', 'gemini-vision']);
 
 export async function buildProviderDirectory(sql) {
   const activeFincruxAccounts = await loadFincruxApiKeys(sql);
@@ -134,10 +140,10 @@ export async function buildProviderDirectory(sql) {
 
   // health() is async (it may check a stored key), so every result is resolved before the array literal is built -
   // a spread cannot await a Promise.
-  const [hFincrux, hFreeModel, hTejhq, hMfapi, hNse, hYahoo, hFx, hGroq, hAgentWeb, hWebSearch, hPeriodMatch] = await Promise.all([
+  const [hFincrux, hFreeModel, hTejhq, hMfapi, hNse, hYahoo, hFx, hGroq, hAgentWeb, hWebSearch, hPeriodMatch, hGeminiVision] = await Promise.all([
     health('fincrux', fincruxLimit > 0, sql), health('free-model', false, sql), health('tejhq', false, sql), health('mfapi', false, sql),
     health('nse', false, sql), health('yahoo', false, sql), health('fx', false, sql), health('groq', false, sql),
-    health('agent-web', false, sql), health('web-search', false, sql), health('period-match', false, sql),
+    health('agent-web', false, sql), health('web-search', false, sql), health('period-match', false, sql), health('gemini-vision', false, sql),
   ]);
 
   const providers = [
@@ -185,6 +191,16 @@ export async function buildProviderDirectory(sql) {
       note: 'Results are unverified context and can never unlock a BUY, HOLD or SELL.' },
     { key: 'period-match', name: 'Period match with NSE', purpose: 'Verifying a statement against a filing', limit: null, limit_window: 'database only', ...fromSteps('Period match with NSE'), used: 0, ...hPeriodMatch,
       note: 'Reads what is already stored. It calls no outside service.' },
+    // Reads an uploaded payment screenshot or PDF bank/card statement for the user (2026-11-24, "i need free"). Tried
+    // before the paid Gateway/Haiku path, and the only one of the two that reads a PDF at all.
+    { key: 'gemini-vision', name: 'Gemini Vision', purpose: 'Reading uploaded payment screenshots and PDF statements', limit: null, limit_window: 'free tier; no published daily cap',
+      ...fromSteps('Gemini Vision'), used: num((answeredByProvider.get('Gemini Vision') || {}).requests), ...hGeminiVision,
+      note: 'Free tier covers image input. PDF input was not separately confirmed free on Google\'s pricing page, so check what each call actually billed.' },
+    { key: 'screenshot-gateway', name: 'Vercel AI Gateway · Claude Haiku (screenshots)', purpose: 'Paid fallback for reading payment screenshots', limit: null, limit_window: 'no published limit, billed per use',
+      ...fromSteps('Vercel AI Gateway (screenshots)'), used: num((answeredByProvider.get('Vercel AI Gateway (screenshots)') || {}).requests),
+      status: set('AI_GATEWAY_API_KEY') ? 'available' : 'needs_key', key_env: 'AI_GATEWAY_API_KEY',
+      detail: set('AI_GATEWAY_API_KEY') ? 'Uses the same AI_GATEWAY_API_KEY as the free debate model; billed separately per call.' : 'No gateway key set.',
+      note: 'Only reached when Gemini is not configured, or fails on an image upload. Never used for a PDF.' },
   ];
 
   return { providers, fincruxQuotas, activeFincruxAccounts, fincruxLimit };

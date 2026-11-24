@@ -122,20 +122,21 @@ test('a read screenshot cannot be read again, and cannot be removed to be sent a
   assert.equal(m.calls.length, 1);
 });
 
-test('reading is off without the AI Gateway key; accounts offered to the user are only their own cash and card accounts', async () => {
+test('reading is off without either key; either one turns it on; accounts offered to the user are only their own cash and card accounts', async () => {
   assert.equal(readingConfigured({}), false);
   assert.equal(readingConfigured({ AI_GATEWAY_API_KEY: 'k' }), true);
+  assert.equal(readingConfigured({ GEMINI_API_KEY: 'k' }), true, 'the free path alone is enough');
   const { a, uid } = await setup();
   assert.deepEqual((await userAccounts(uid, { db: a })).map(x => x.label).sort(), ['HDFC · Savings', 'SBI · Card']);
 });
 
-test('wiring: password first, key check before saving, upload page accepts only Excel and screenshots', () => {
+test('wiring: password first, key check before saving, upload page accepts Excel, screenshots and PDF statements', () => {
   const route = read('api/_routes/uploads.js');
   assert.ok(route.indexOf('Password is incorrect') < route.indexOf('readScreenshot('), 'password is checked before reading');
   assert.ok(route.indexOf('readingConfigured(aiEnv)') < route.indexOf('saveScreenshot(uid'), 'key is checked before the image is saved');
   assert.match(route, /VERCEL_OIDC_TOKEN/);
   const app = read('app.js');
-  assert.match(app, /accept="\.xlsx,image\/png,image\/jpeg,image\/webp"/);
+  assert.match(app, /accept="\.xlsx,image\/png,image\/jpeg,image\/webp,\.pdf,application\/pdf"/);
   assert.doesNotMatch(app, /csvParse|\.csv/);
   assert.match(read('scripts/migrations/0031_upload_screenshots.sql'), /CREATE TABLE IF NOT EXISTS wealth_upload_screenshots/);
   assert.doesNotMatch(read('scripts/migrations/0031_upload_screenshots.sql'), /\bDROP TABLE\b|\bTRUNCATE\b|DELETE FROM|CREATE TRIGGER/i);
