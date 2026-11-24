@@ -12,8 +12,8 @@ Three independent GitHub repositories:
 
 | Repository | Application | Responsibility |
 |---|---|---|
-| `akashkarthi11/wealth-api` | Spring Boot API | Main REST API, authentication integration, ledger and wealth business operations |
-| `akashkarthi11/wealth-services` | Spring Boot services | External provider adapters, market-data integrations, AI/research integrations and internal service APIs |
+| `akashkarthi11/wealth-bff` | Spring Boot API | Main REST API, authentication integration, ledger and wealth business operations |
+| `akashkarthi11/wealth-bss` | Spring Boot services | External provider adapters, market-data integrations, AI/research integrations and internal service APIs |
 | `akashkarthi11/wealth-batch` | Spring Batch | Durable scheduled/bulk jobs, reconciliation, retries, restartable batch steps and job metadata |
 
 All three applications run as separate Docker containers on the **same OCI VM**. The batch application is not deployed to a separate VM.
@@ -63,8 +63,8 @@ Starting limits only; tune after observing real usage:
 
 | Component | Initial memory limit |
 |---|---:|
-| wealth-api | 1.5 GB |
-| wealth-services | 1.0 GB |
+| wealth-bff | 1.5 GB |
+| wealth-bss | 1.0 GB |
 | wealth-batch | 1.0 GB |
 | OS, Docker, Nginx and monitoring | 1.5 GB |
 | Unallocated headroom | 7.0 GB |
@@ -140,8 +140,8 @@ Prefer GitHub Environments for development secrets and required deployment appro
 **Exit:** A test commit to each development branch deploys successfully and can be rolled back.
 
 ### Phase 4 — Application development
-- Implement API contracts and database access in wealth-api.
-- Implement external integrations in wealth-services.
+- Implement API contracts and database access in wealth-bff.
+- Implement external integrations in wealth-bss.
 - Implement restartable, idempotent jobs in wealth-batch.
 - Add authentication/authorization, audit logging, retries and observability.
 
@@ -166,11 +166,11 @@ Prefer GitHub Environments for development secrets and required deployment appro
 
 ## 11. Decisions still required before resource creation
 
-1. Confirm the three repository names: `wealth-api`, `wealth-services`, `wealth-batch`.
+1. Repository names approved: `wealth-bff`, `wealth-bss`, `wealth-batch`.
 2. Confirm a domain/subdomain for the development API, or use the VM public IP temporarily.
 3. Confirm whether the existing Neon development branch is the intended integration database.
 4. Confirm OCI provisioning has completed and the account's A1 quota is visible.
 
 ## 12. Current execution boundary
 
-This document is a plan only. No new GitHub repositories, OCI instances, DNS records, secrets, database migrations, or deployments have been created by this change. Development is the only authorized deployment target in this phase.
+This document is a plan only. Repository names are approved, but repository creation is pending because the connected GitHub actions do not expose a create-repository operation. No OCI instances, DNS records, secrets, database migrations, or deployments have been created. Development is the only authorized deployment target in this phase.
