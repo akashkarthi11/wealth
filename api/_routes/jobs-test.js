@@ -1,4 +1,4 @@
-import { sql, json, safeEqual } from '../_lib.js';
+import { sql, json, safeEqual, sessionUser } from '../_lib.js';
 import { startJob, finishJob } from '../_jobs.js';
 
 // A no-op probe for verifying CRON_SECRET, database connectivity and job-run recording.
@@ -6,7 +6,15 @@ import { startJob, finishJob } from '../_jobs.js';
 export default async function handler(req,res) {
   if(req.method!=='GET'&&req.method!=='POST')return json(res,405,{error:'Method not allowed'});
   const secret=String(process.env.CRON_SECRET||'').trim();
-  if(secret.length<32||!safeEqual(String(req.headers.authorization||''),'Bearer '+secret))return json(res,401,{ok:false,status:'unauthorized',error:'Valid cron secret required.'});
+  let authorized=secret.length>=32&&safeEqual(String(req.headers.authorization||''),'Bearer '+secret);
+  if(!authorized){
+    const uid=await sessionUser(req);
+    if(uid){
+      const [user]=await sql.query('SELECT role FROM wealth_users WHERE id=$1',[uid]);
+      authorized=user?.role==='admin';
+    }
+  }
+  if(!authorized)return json(res,401,{ok:false,status:'unauthorized',error:'Admin sign-in or valid cron secret required.'});
   if(!sql)return json(res,503,{ok:false,status:'failed',error:'Database is not configured'});
   const run=await startJob('jobs-test');
   if(!run)return json(res,500,{ok:false,status:'failed',error:'Could not create test run record.'});
