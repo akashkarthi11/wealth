@@ -7,7 +7,11 @@ import { runDebateStep } from './stock-advisor-debate.js';
 // Stock Advisor data collection, one provider call for one stock.
 export const DEBATE_HANDLER = 'stock-advisor-debate';
 export const DEBATE_PRIORITY = 60;        // after the day's data collection, before anything optional
-const DEBATE_STEP_MS = 16000;             // one free-model call, with headroom
+// First step only may now also run the gap-filling pass: NSE news, then NSE XBRL (up to three audited requests, each
+// an 8s timeout - XBRL_CALL_MS in stock-advisor-data-collection.js), then Fincrux if XBRL still finds nothing, then the
+// model call itself. One value is used for every step (enqueueDebateStep does not know which step comes next), so it
+// is sized for that worst case rather than the common case of a later step's single model call (2026-11-24).
+const DEBATE_STEP_MS = 36000;
 export const DISPATCH_BUDGET_MS = 52000;
 export const MIN_START_MS = 1000;
 const LOCK_SECONDS = 90;

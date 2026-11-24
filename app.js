@@ -522,10 +522,13 @@ function scheduledJobsHtml(data){
  '</section>'+
  '<section class="jobs-next-up"><span class="jobs-next-icon">◷</span><div><small>NEXT QUEUED JOB</small><b>'+(nextJob?esc(nextJob.name):'No upcoming run scheduled')+'</b><span>'+esc(nextTime)+'</span></div></section>';
  const scheduler=data?.schedulerActivity||{};
- const schedulerCard=(key,label,when)=>{const r=scheduler[key];const state=String(r?.status||'not_seen').toLowerCase();const good=state==='succeeded'||state==='success';const bad=state==='failed';const partial=state==='partial';const stamp=r?.started_at?'Last invocation '+fmt(r.started_at):'Waiting for first recorded invocation';const detail=r?.summary?.error||'';const stateLabel=good?'Completed':bad?'Failed':partial?'Partly done':state==='running'?'Running':'Waiting';return '<article><span>'+label+'</span><b class="jobs-status '+(good?'success':bad?'danger':state==='running'?'info':'neutral')+'">'+stateLabel+'</b><small>'+esc(when)+'</small><small>'+esc(stamp)+'</small>'+(detail?'<small class="jobs-error">'+esc(detail)+'</small>':'')+'</article>';};
+ // notConfigured: shown instead of the normal state, so a backup that has never run yet still tells the admin
+ // exactly what to set, right here, rather than only after the cron fails once (owner's request 2026-11-24).
+ const schedulerCard=(key,label,when,notConfigured)=>{const r=scheduler[key];const state=String(r?.status||'not_seen').toLowerCase();const good=state==='succeeded'||state==='success';const bad=state==='failed'||!!notConfigured;const partial=state==='partial';const stamp=r?.started_at?'Last invocation '+fmt(r.started_at):'Waiting for first recorded invocation';const detail=notConfigured||r?.summary?.error||'';const stateLabel=notConfigured?'Needs setup':good?'Completed':bad?'Failed':partial?'Partly done':state==='running'?'Running':'Waiting';return '<article><span>'+label+'</span><b class="jobs-status '+(good?'success':bad?'danger':state==='running'?'info':'neutral')+'">'+stateLabel+'</b><small>'+esc(when)+'</small><small>'+esc(stamp)+'</small>'+(detail?'<small class="jobs-error">'+esc(detail)+'</small>':'')+'</article>';};
  const schedulerHtml='<section class="jobs-overview" aria-label="System cron activity">'+
   schedulerCard('nightlyInterest','Nightly interest cron','Daily · 1:30 AM IST')+
-  schedulerCard('nightlyBackup','Nightly backup cron','Daily · 1:30 AM IST')+
+  schedulerCard('nightlyBackup','Nightly backup cron','Daily · 1:30 AM IST',
+    data?.backupConfigured===false?'Set WEALTH_BACKUP_KEY (32+ characters) and BLOB_READ_WRITE_TOKEN in the Vercel project — never shown here, cannot be set from this screen.':null)+
   schedulerCard('dispatcher','Dispatcher cron','Daily · 6:45 PM IST')+
   schedulerCard('worker','Worker cron','Daily · 7:45–10:45 PM IST')+
  '</section>';

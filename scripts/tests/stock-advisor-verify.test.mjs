@@ -60,7 +60,12 @@ test('wiring: debate never verifies Fincrux and data collection queues one NSE X
   const debate = readFileSync(new URL('../../api/_lib/stock-advisor-debate.js', import.meta.url), 'utf8');
   const coll = readFileSync(new URL('../../api/_lib/stock-advisor-data-collection.js', import.meta.url), 'utf8');
   assert.doesNotMatch(debate, /verifyFinancialStatements/);
-  assert.match(debate, /handled_by_nse_xbrl_queue/);
+  // The debate's own gap-filling pass (2026-11-24) now tries NSE XBRL synchronously on the first step too, not only
+  // through the nightly queue - but Fincrux is still only ever tried after that, and only as a fallback.
+  assert.match(debate, /collectNseXbrlFinancialStatement/);
+  const xbrlCall = debate.indexOf('refreshes.nse_xbrl=await collectNseXbrlFinancialStatement');
+  const fincruxCall = debate.indexOf('refreshes.fincrux=await collectFincruxFinancials');
+  assert.ok(xbrlCall > 0 && fincruxCall > xbrlCall, 'the verified path is always attempted before the unverified fallback');
   assert.match(coll, /collectNseXbrlFinancialStatement/);
   assert.match(coll, /add\('nse_xbrl', \{ instrument: slim\(e\) \}\)/);
   assert.match(coll, /financials_verified/);
