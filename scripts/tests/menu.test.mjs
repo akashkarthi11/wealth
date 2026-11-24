@@ -34,3 +34,26 @@ test('mobile tab bar: Home, Banks, Invest, Activity, More; alert badge on More',
   assert.match(mobile, /id="mobileMore"[^>]*>[\s\S]*data-alert-badge/);
   assert.match(nav, /data-view="alerts"[\s\S]*?data-alert-badge/);
 });
+
+test('no menu is listed twice, in the More hub or anywhere else', () => {
+  // The provider-key merge left Provider Health in the More hub twice, with two icons and two descriptions, and left a
+  // second "provider-health" key in VIEW_GROUPS. Both read as one duplicated row to anyone using the app (2026-11-24).
+  const hub = app.match(/function moreHubHtml\(\)\{[\s\S]*?\n\}/)[0];
+  const twice = [];
+  for (const group of hub.matchAll(/\{group:'([^']+)',items:\[([\s\S]*?)\]\}/g)) {
+    const keys = [...group[2].matchAll(/\['([a-z-]+)',/g)].map(m => m[1]);
+    for (const k of keys) if (keys.indexOf(k) !== keys.lastIndexOf(k)) twice.push(group[1] + ' › ' + k);
+  }
+  assert.deepEqual([...new Set(twice)], [], 'listed twice in the More hub');
+
+  const groupKeys = [...app.match(/const VIEW_GROUPS=\{([\s\S]*?)\};/)[1].matchAll(/"?([a-z-]+)"?:"/g)].map(m => m[1]);
+  const repeated = groupKeys.filter(k => groupKeys.indexOf(k) !== groupKeys.lastIndexOf(k));
+  assert.deepEqual([...new Set(repeated)], [], 'repeated key in VIEW_GROUPS');
+
+  // Every owner-only tool reaches its page from both places, exactly once each.
+  const tools = viewsIn(nav.match(/id="toolsMenu"[\s\S]*$/)[0]);
+  for (const v of ['ai-data', 'api-usage', 'provider-health']) {
+    assert.equal(tools.filter(t => t === v).length, 1, v + ' appears once in the Tools menu');
+    assert.equal(hub.split("['" + v + "',").length - 1, 1, v + ' appears once in the More hub');
+  }
+});
