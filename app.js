@@ -505,26 +505,34 @@ function jobWork(key,result){
 }
 function scheduledJobsHtml(data){
  const jobs=data?.jobs||[];
+ const userJobs=jobs.filter(j=>!['interest-accrual','backup'].includes(String(j.handler_key||'')));
  const fmt=value=>value?new Date(value).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Kolkata'}):'Not yet';
  const status=value=>{const s=String(value||'not_run').toLowerCase();const done=s==='success'||s==='succeeded';const label=done?'Completed':s==='partial'?'Partly done':s==='running'?'Running':s==='failed'?'Failed':s==='skipped'?'Skipped':'Not run';const tone=done?'success':s==='running'?'info':s==='failed'?'danger':'neutral';return '<span class="jobs-status '+tone+'">'+label+'</span>'};
- const active=jobs.filter(j=>!!j.enabled).length;
- const running=jobs.filter(j=>String(j.last_status||'').toLowerCase()==='running').length;
- const failed=jobs.filter(j=>String(j.last_status||'').toLowerCase()==='failed').length;
- const paused=jobs.length-active;
- const nextJob=jobs.filter(j=>j.enabled&&j.next_run_at).sort((a,b)=>new Date(a.next_run_at)-new Date(b.next_run_at))[0];
+ const active=userJobs.filter(j=>!!j.enabled).length;
+ const running=userJobs.filter(j=>String(j.last_status||'').toLowerCase()==='running').length;
+ const failed=userJobs.filter(j=>String(j.last_status||'').toLowerCase()==='failed').length;
+ const paused=userJobs.length-active;
+ const nextJob=userJobs.filter(j=>j.enabled&&j.next_run_at).sort((a,b)=>(Number(!!b.is_due)-Number(!!a.is_due))||(new Date(a.next_run_at)-new Date(b.next_run_at)))[0];
+ const nextTime=nextJob?(nextJob.is_due?'Due · waiting for dispatcher (6:45 PM IST)':fmt(nextJob.next_run_at)):'Enable a job and save its schedule to see it here';
  const overview='<section class="jobs-overview" aria-label="Scheduled jobs overview">'+
-  '<article><span>Active</span><b>'+active+'</b><small>Enabled schedules</small></article>'+
+  '<article><span>Active</span><b>'+active+'</b><small>Enabled queue schedules</small></article>'+
   '<article><span>Paused</span><b>'+paused+'</b><small>Not running automatically</small></article>'+
   '<article><span>Running</span><b>'+running+'</b><small>Currently executing</small></article>'+
   '<article class="'+(failed?'has-failures':'')+'"><span>Failed</span><b>'+failed+'</b><small>Latest result needs attention</small></article>'+
  '</section>'+
- '<section class="jobs-next-up"><span class="jobs-next-icon">◷</span><div><small>NEXT SCHEDULED JOB</small><b>'+(nextJob?esc(nextJob.name):'No upcoming run scheduled')+'</b><span>'+(nextJob?esc(fmt(nextJob.next_run_at)):'Enable a job and save its schedule to see it here')+'</span></div></section>';
+ '<section class="jobs-next-up"><span class="jobs-next-icon">◷</span><div><small>NEXT QUEUED JOB</small><b>'+(nextJob?esc(nextJob.name):'No upcoming run scheduled')+'</b><span>'+esc(nextTime)+'</span></div></section>';
  const scheduler=data?.schedulerActivity||{};
- const schedulerCard=(key,label)=>{const r=scheduler[key];const state=r?.status||'not_seen';const good=state==='succeeded';const bad=state==='failed';const stamp=r?.started_at?fmt(r.started_at):'No recorded invocation yet';const detail=r?.summary?.error||'';return '<article><span>'+label+'</span><b class="jobs-status '+(good?'success':bad?'danger':'neutral')+'">'+(good?'Completed':bad?'Failed':r?'Partial / running':'Not seen')+'</b><small>'+esc(stamp)+'</small>'+(detail?'<small class="jobs-error">'+esc(detail)+'</small>':'')+'</article>';};
- const schedulerHtml='<section class="jobs-overview" aria-label="Cron scheduler activity">'+schedulerCard('dispatcher','Dispatcher cron')+schedulerCard('worker','Worker cron')+'</section>';
- const cards=jobs.map(j=>{
+ const schedulerCard=(key,label,when)=>{const r=scheduler[key];const state=String(r?.status||'not_seen').toLowerCase();const good=state==='succeeded'||state==='success';const bad=state==='failed';const partial=state==='partial';const stamp=r?.started_at?'Last invocation '+fmt(r.started_at):'Waiting for first recorded invocation';const detail=r?.summary?.error||'';const stateLabel=good?'Completed':bad?'Failed':partial?'Partly done':state==='running'?'Running':'Waiting';return '<article><span>'+label+'</span><b class="jobs-status '+(good?'success':bad?'danger':state==='running'?'info':'neutral')+'">'+stateLabel+'</b><small>'+esc(when)+'</small><small>'+esc(stamp)+'</small>'+(detail?'<small class="jobs-error">'+esc(detail)+'</small>':'')+'</article>';};
+ const schedulerHtml='<section class="jobs-overview" aria-label="System cron activity">'+
+  schedulerCard('nightlyInterest','Nightly interest cron','Daily · 1:30 AM IST')+
+  schedulerCard('nightlyBackup','Nightly backup cron','Daily · 1:30 AM IST')+
+  schedulerCard('dispatcher','Dispatcher cron','Daily · 6:45 PM IST')+
+  schedulerCard('worker','Worker cron','Daily · 7:45–10:45 PM IST')+
+ '</section>';
+ const cards=userJobs.map(j=>{
   const enabled=!!j.enabled, time=String(j.schedule_time||'00:00').slice(0,5), frequency=j.schedule_frequency||'daily';
   const runs=Array.isArray(j.recent_runs)?j.recent_runs:[];
+  const nextLabel=j.is_due?'Due · waiting for dispatcher':j.next_run_at?fmt(j.next_run_at):enabled?'Waiting for dispatcher':'Paused';
   return '<article class="jobs-card" data-job-card="'+esc(j.id)+'">'+
    '<div class="jobs-card-head"><div class="jobs-job-title"><span class="jobs-job-icon">◷</span><div><h4>'+esc(j.name)+'</h4><p>'+esc(j.description||'Scheduled automation')+'</p></div></div>'+
    '<label class="jobs-switch" title="'+(enabled?'Pause job':'Enable job')+'"><input type="checkbox" data-job-enabled'+(enabled?' checked':'')+' aria-label="Enable '+esc(j.name)+'"><span></span></label></div>'+
@@ -543,14 +551,14 @@ function scheduledJobsHtml(data){
     const w=jobWork(j.job_key,run.result);
     return '<div><span><b>'+esc(began)+'</b><small>'+(finished?'Finished '+esc(finished):'')+esc(run.trigger_type?' · '+run.trigger_type:'')+duration+'</small>'+(w.text?'<small class="jobs-work'+(w.idle?' idle':'')+'">'+esc(w.text)+'</small>':'')+(run.error?'<small class="jobs-error">'+esc(run.error)+'</small>':'')+'</span>'+status(run.status)+'</div>';
    }).join('')+'</div>':'<p class="muted">No execution history yet. Use Run now to test this job.</p>')+'</details>'+
-   '<p class="jobs-next">Next scheduled run: <b>'+esc(enabled&&j.next_run_at?fmt(j.next_run_at):enabled?'Waiting for dispatcher':'Paused')+'</b></p>'+
+   '<p class="jobs-next">Next scheduled run: <b>'+esc(nextLabel)+'</b></p>'+
   '</article>';
  }).join('');
- return '<section class="jobs-page"><div class="jobs-page-head"><div><h4>Your scheduled jobs</h4><p>Monitor every automation, change its schedule and inspect recent runs. Changes are saved to your existing database schedules.</p></div><button type="button" class="primary" data-queue-run>▶ Run queue now</button> <button type="button" class="ghost" data-jobs-refresh>↻ Refresh</button></div>'+
+ return '<section class="jobs-page"><div class="jobs-page-head"><div><h4>Your scheduled jobs</h4><p>Monitor queue automations, change their schedules and inspect recent runs. Nightly interest and backup are managed separately by the 1:30 AM IST system cron.</p></div><button type="button" class="primary" data-queue-run>▶ Run queue now</button> <button type="button" class="ghost" data-jobs-refresh>↻ Refresh</button></div>'+
  overview+
  schedulerHtml+
- (jobs.length?'<div class="jobs-list">'+cards+'</div>':'<div class="jobs-empty">No scheduled jobs are configured yet.</div>')+
- '<p class="jobs-footnote">All times are India Standard Time. The central dispatcher processes due jobs; the saved time is a due-time cutoff, not an exact-minute guarantee. Run history is retained by the existing jobs service.</p></section>';
+ (userJobs.length?'<div class="jobs-list">'+cards+'</div>':'<div class="jobs-empty">No user-managed scheduled jobs are configured yet.</div>')+
+ '<p class="jobs-footnote">All times are India Standard Time. The central dispatcher processes due jobs at 6:45 PM IST; workers continue the queue through the evening. A due job waits for dispatch—it does not run at the displayed due minute.</p></section>';
 }
 function stockResearchScheduleCard(settings,schedule,data){
  const holdings=Array.isArray(data?.holdings)?data.holdings:[];
