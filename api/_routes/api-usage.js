@@ -1,4 +1,5 @@
 import { sql, json, sessionUser } from '../_lib.js';
+import { MAX_SEARCHES_PER_DAY as SEARCHES_PER_DAY } from '../_lib/agent-search.js';
 import { loadFincruxApiKeys } from '../_lib/provider-api-keys.js';
 
 // GET /api/api-usage   (admin only, read only)
@@ -25,6 +26,11 @@ function health(key, configured = false) {
     if (set('AI_GATEWAY_API_KEY')) return { status: 'configured', detail: 'Vercel AI Gateway key present.', key_env: 'AI_GATEWAY_API_KEY' };
     if (set('VERCEL_OIDC_TOKEN')) return { status: 'configured', detail: 'No gateway key; falling back to the deployment OIDC token.', key_env: 'AI_GATEWAY_API_KEY' };
     return { status: 'needs_key', detail: 'No gateway key and no OIDC token, so no model call can be made.', key_env: 'AI_GATEWAY_API_KEY' };
+  }
+  if (key === 'web-search') {
+    return set('TAVILY_API_KEY')
+      ? { status: 'configured', detail: 'Free web search is enabled for the debate agents.', key_env: 'TAVILY_API_KEY' }
+      : { status: 'needs_key', detail: 'No search key, so the agents are not offered web search at all.', key_env: 'TAVILY_API_KEY' };
   }
   if (key === 'groq') {
     if (!set('GROQ_API_KEY')) return { status: 'needs_key', detail: 'Optional fallback model; no key set.', key_env: 'GROQ_API_KEY' };
@@ -149,6 +155,16 @@ export default async function handler(req, res) {
         note: 'One published rate a day, cached. Yahoo INR=X is the fallback if it cannot be read.' },
       { key: 'groq', name: 'Groq Free', purpose: 'Optional fallback model', limit: null, limit_window: 'no published limit', used: 0, calls: 0, ...health('groq'),
         note: 'Used only if the Vercel gateway fails and zero-data-retention has been confirmed.' },
+      // What the debate agents collected for themselves, rather than what the nightly job gathered (2026-11-24).
+      { key: 'agent-web', name: 'Agent web', purpose: 'Official pages the agents opened during a debate', limit: null, limit_window: 'allowlisted hosts only',
+        ...fromSteps('Agent web'), used: num((answeredByProvider.get('Agent web') || {}).requests), ...health('agent-web'),
+        note: 'NSE, BSE, SEBI, AMFI, RBI and Yahoo only. Always unverified context; it never satisfies missing evidence.' },
+      { key: 'web-search', name: 'Web search', purpose: 'Free web search the agents may call for context',
+        limit: SEARCHES_PER_DAY, limit_window: 'per day (IST), from a free monthly allowance',
+        ...fromSteps('Web search'), used: num((answeredByProvider.get('Web search') || {}).requests),
+        remaining: Math.max(0, SEARCHES_PER_DAY - num((answeredByProvider.get('Web search') || {}).requests)),
+        ...health('web-search'),
+        note: 'Results are unverified context and can never unlock a BUY, HOLD or SELL.' },
       { key: 'period-match', name: 'Period match with NSE', purpose: 'Verifying a statement against a filing', limit: null, limit_window: 'database only', ...fromSteps('Period match with NSE'), used: 0, ...health('period-match'),
         note: 'Reads what is already stored. It calls no outside service.' },
     ];
