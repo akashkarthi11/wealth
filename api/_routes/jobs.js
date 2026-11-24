@@ -37,7 +37,10 @@ export default async function handler(req,res) {
              FROM wealth_scheduled_job_runs r WHERE r.job_id=j.id ORDER BY r.created_at DESC LIMIT 10) x)
         END AS recent_runs
         FROM wealth_scheduled_jobs j ORDER BY j.schedule_time,j.name`);
-      return json(res,200,{jobs,queue:await queueCounts(sql)});
+      const scheduler=await sql.query(`SELECT DISTINCT ON (job) job,started_at,finished_at,status,summary
+        FROM wealth_job_runs WHERE job IN ('jobs-dispatch','jobs-worker') ORDER BY job,started_at DESC`).catch(()=>[]);
+      const schedulerActivity={dispatcher:scheduler.find(x=>x.job==='jobs-dispatch')||null,worker:scheduler.find(x=>x.job==='jobs-worker')||null};
+      return json(res,200,{jobs,queue:await queueCounts(sql),schedulerActivity});
     }
     const body=await (async()=>{let raw='';for await(const c of req)raw+=c;if(raw.length>5000)throw new Error('Request too large');return JSON.parse(raw||'{}')})();
     const id=String(body.id||'');
