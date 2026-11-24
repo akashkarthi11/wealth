@@ -1788,19 +1788,23 @@ b.pj-medium{color:#f5c26b}
 
 /* Stock Advisor research-provider health */
 .advisor-research-health{display:grid;gap:12px}
-.advisor-provider-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+/* One column on a phone: two or three columns squeezed a provider name, its detail line, the status chip and the new
+   expand chevron into ~160px, so the chip wrapped or the name truncated badly (owner's report 2026-11-24: "look the
+   view in mobile, worst solve it"). Two only from a small-tablet width up; three stays desktop-only (below). */
+.advisor-provider-grid{display:grid;grid-template-columns:1fr;gap:8px}
+@media(min-width:480px){.advisor-provider-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* Each card is a <details>: clicking the chip or the row opens that provider's own config list (2026-11-24). */
 .advisor-provider-card{min-width:0;border:1px solid #2b3c55;border-radius:11px;background:#0d1929;transition:border-color .15s ease}
 .advisor-provider-card[open]{border-color:#3d5578}
-.advisor-provider-card summary{display:flex;align-items:flex-start;justify-content:space-between;gap:9px;padding:10px;cursor:pointer;list-style:none}
+.advisor-provider-card summary{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:12px;cursor:pointer;list-style:none;min-height:48px}
 .advisor-provider-card summary::-webkit-details-marker{display:none}
 .advisor-provider-card summary::after{content:'▸';flex:0 0 auto;align-self:center;color:var(--muted);font-size:10px;transition:transform .15s ease;margin-left:2px}
 .advisor-provider-card[open] summary::after{transform:rotate(90deg)}
 .advisor-provider-card summary:focus-visible{outline:2px solid #5b84bd;outline-offset:2px;border-radius:8px}
-.advisor-provider-card summary>div{display:grid;gap:4px;min-width:0}
+.advisor-provider-card summary>div{display:grid;gap:4px;min-width:0;flex:1 1 auto}
 .advisor-provider-card b{font-size:12px;overflow-wrap:anywhere}
 .advisor-provider-card small{font-size:10px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}
-.advisor-provider-status{align-self:flex-start;padding:4px 7px;border:1px solid #40516a;border-radius:999px;font-size:9px;font-weight:750;letter-spacing:.45px;color:#c7d4e4;background:#152338}
+.advisor-provider-status{flex:0 0 auto;white-space:nowrap;align-self:center;padding:4px 7px;border:1px solid #40516a;border-radius:999px;font-size:9px;font-weight:750;letter-spacing:.45px;color:#c7d4e4;background:#152338}
 .advisor-provider-status.status-available{border-color:#286c56;color:#83e2bb;background:#14392f}
 .advisor-provider-status.status-configured{border-color:#365f8d;color:#a8ceff;background:#182e49}
 .advisor-provider-status.status-needs_key{border-color:#675b37;color:#e7d49a;background:#302b1e}

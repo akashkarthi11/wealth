@@ -73,3 +73,14 @@ test('every provider panel says whether a key can be set here, without ever show
   assert.match(app, /Open data; no key needed/);
   assert.doesNotMatch(app, /providerConfigBody[\s\S]{0,900}\.value\b/, 'the config panel never reads a decrypted key value');
 });
+
+test('provider cards are one column on a phone, not squeezed two or three to a row', () => {
+  // A 2- or 3-column grid gave each card ~110-160px on a phone, so the name, detail, status chip and the new expand
+  // chevron were cramped into it - the chip wrapped or the name truncated (owner's report 2026-11-24: "look the view
+  // in mobile, worst solve it").
+  const base = css.slice(css.indexOf('.advisor-provider-grid{'), css.indexOf('.advisor-provider-grid{', css.indexOf('.advisor-provider-grid{') + 1));
+  assert.match(base, /grid-template-columns:1fr/, 'one column by default (mobile-first)');
+  assert.match(css, /@media\(min-width:480px\)\{\.advisor-provider-grid\{grid-template-columns:repeat\(2,/, 'two only from a small-tablet width up');
+  assert.match(css, /\.advisor-provider-status\{[^}]*flex:0 0 auto[^}]*white-space:nowrap/, 'the chip can never wrap or get crushed to nothing');
+  assert.match(css, /\.advisor-provider-card summary>div\{[^}]*flex:1 1 auto/, 'the name/detail column takes the remaining space, not a fixed share');
+});
