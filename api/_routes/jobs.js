@@ -16,11 +16,26 @@ export default async function handler(req,res) {
     if(req.method==='GET'){
       const jobs=await sql.query(`SELECT j.id,j.job_key,j.name,j.description,j.enabled,
         to_char(j.schedule_time,'HH24:MI') AS schedule_time,j.schedule_frequency,j.timezone,j.next_run_at,
-        j.last_run_at,j.last_status,j.last_error,
+        CASE WHEN j.handler_key IN ('interest-accrual','backup') THEN
+          COALESCE((SELECT r.started_at FROM wealth_job_runs r WHERE r.job=j.handler_key ORDER BY r.started_at DESC LIMIT 1),j.last_run_at)
+          ELSE j.last_run_at END AS last_run_at,
+        CASE WHEN j.handler_key IN ('interest-accrual','backup') THEN
+          COALESCE((SELECT r.status FROM wealth_job_runs r WHERE r.job=j.handler_key ORDER BY r.started_at DESC LIMIT 1),j.last_status)
+          ELSE j.last_status END AS last_status,
+        CASE WHEN j.handler_key IN ('interest-accrual','backup') THEN
+          (SELECT r.summary->>'error' FROM wealth_job_runs r WHERE r.job=j.handler_key ORDER BY r.started_at DESC LIMIT 1)
+          ELSE j.last_error END AS last_error,
         (SELECT count(*)::int FROM wealth_job_queue q WHERE q.job_id=j.id AND q.status IN ('pending','running')) AS queued,
-        (SELECT json_agg(x ORDER BY x.created_at DESC) FROM
-          (SELECT id,trigger_type,status,started_at,finished_at,http_status,error,result,created_at
-           FROM wealth_scheduled_job_runs r WHERE r.job_id=j.id ORDER BY r.created_at DESC LIMIT 10) x) AS recent_runs
+        CASE WHEN j.handler_key IN ('interest-accrual','backup') THEN
+          COALESCE((SELECT json_agg(x ORDER BY x.created_at DESC) FROM
+            (SELECT r.id,'nightly-cron'::text AS trigger_type,r.status,r.started_at,r.finished_at,
+              NULL::int AS http_status,r.summary->>'error' AS error,r.summary AS result,r.started_at AS created_at
+             FROM wealth_job_runs r WHERE r.job=j.handler_key ORDER BY r.started_at DESC LIMIT 10) x),
+            '[]'::json)
+          ELSE (SELECT json_agg(x ORDER BY x.created_at DESC) FROM
+            (SELECT id,trigger_type,status,started_at,finished_at,http_status,error,result,created_at
+             FROM wealth_scheduled_job_runs r WHERE r.job_id=j.id ORDER BY r.created_at DESC LIMIT 10) x)
+        END AS recent_runs
         FROM wealth_scheduled_jobs j ORDER BY j.schedule_time,j.name`);
       return json(res,200,{jobs,queue:await queueCounts(sql)});
     }
