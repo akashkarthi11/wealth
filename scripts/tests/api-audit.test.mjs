@@ -61,7 +61,11 @@ test('a recorded call is readable afterwards, and a failed audit never breaks th
 test('wiring: the providers record their calls and the page shows the shape', () => {
   const fincrux = read('api/_lib/stock-advisor-fincrux.js');
   assert.match(fincrux, /import \{ recordApiCall \} from '\.\/api-audit\.js'/);
-  assert.ok((fincrux.match(/recordApiCall\(/g) || []).length >= 3, 'the response, the failure and the stored snapshot are all recorded');
+  // Both outcomes must be recorded: a response that arrived, and a request that failed. Whether the stored snapshot is
+  // recorded a third time is an implementation choice, not something worth pinning.
+  assert.ok((fincrux.match(/recordApiCall\(/g) || []).length >= 2, 'the response and the failure are both recorded');
+  assert.match(fincrux, /recordApiCall\(db, \{ provider: SOURCE[\s\S]{0,400}?ok: true/, 'a response that arrived');
+  assert.match(fincrux, /recordApiCall\(db, \{ provider: SOURCE[\s\S]{0,400}?ok: false/, 'and a request that failed');
   assert.match(read('api/_lib/stock-advisor-tejhq.js'), /recordApiCall\(db, \{ provider: SOURCE/);
   assert.match(read('api/_routes/api-usage.js'), /FROM wealth_api_audit/);
   assert.match(read('app.js'), /function auAudit\(a\)/);

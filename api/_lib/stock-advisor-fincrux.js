@@ -10,6 +10,9 @@ const timeout = ms => AbortSignal.timeout(ms);
 // persisted records, updated after each reservation, and cleared when the collection run ends.
 // The database check/reservation remains authoritative across separate serverless isolates.
 let dailyTickersMemory = null;
+// The set of tickers already attempted today is cached per IST day for the life of the instance. It is only a cheap
+// pre-check: the per-key reservation in the database is what actually prevents a slot being spent twice, so a stale
+// cache can never overspend. Exported so a test can start from a clean instance.
 async function dailyFincruxTickers(db, dateKey) {
   if (!dailyTickersMemory || dailyTickersMemory.dateKey !== dateKey) {
     const rows = await db.query(`

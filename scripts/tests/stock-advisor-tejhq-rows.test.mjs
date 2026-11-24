@@ -11,10 +11,12 @@ import { collectTejHqEquityEvidence } from '../../api/_lib/stock-advisor-tejhq.j
 const API_DIR = fileURLToPath(new URL('../../api/', import.meta.url));
 
 // 60 trading days, so the indicator set (needs 50 closes) is produced too.
+// Dates end today: the collector refuses an end-of-day series whose latest observation is more than 7 days old.
 function payload(days = 60) {
   const rows = [];
+  const firstDay = Date.now() - (days - 1) * 86400000;
   for (let i = 0; i < days; i++) {
-    const d = new Date(Date.UTC(2026, 7, 3) + i * 86400000).toISOString().slice(0, 10);
+    const d = new Date(firstDay + i * 86400000).toISOString().slice(0, 10);
     const close = 100 + i;
     rows.push({ date: d, open: close - 1, high: close + 2, low: close - 2, close, volume: 1000 + i });
   }
@@ -41,7 +43,8 @@ test('a normal TejHQ response is accepted: prices and indicators are stored, not
 
 test('a response with genuinely bad rows is still rejected, so the date check is not simply switched off', async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response(JSON.stringify({ data: [{ date: 'not-a-date', open: 1, high: 1, low: 1, close: 1 }, { date: '2026-08-03', open: 0, high: 0, low: 0, close: 0 }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  const today = new Date().toISOString().slice(0, 10);
+  globalThis.fetch = async () => new Response(JSON.stringify({ data: [{ date: 'not-a-date', open: 1, high: 1, low: 1, close: 1 }, { date: today, open: 0, high: 0, low: 0, close: 0 }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   try {
     const r = await collectTejHqEquityEvidence({ ticker: 'TCS', name: 'Tata Consultancy Services', db: { query: async () => [] } });
     assert.equal(r.status, 'unavailable');
