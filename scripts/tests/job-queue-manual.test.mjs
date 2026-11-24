@@ -56,8 +56,14 @@ test('provider health sits with the usage, and no key value is ever exposed', ()
   assert.match(route, /const set = name => String\(process\.env\[name\] \|\| ''\)\.trim\(\)\.length > 0/, 'presence only');
   // the env var NAME may be shown; its value must never be read into the response
   assert.doesNotMatch(route, /process\.env\[[^\]]+\]\s*\)?\s*[,}]\s*$/m);
-  for (const k of ['FINCRUX_API_KEY', 'AI_GATEWAY_API_KEY', 'GROQ_API_KEY']) assert.ok(route.includes(k), k + ' is named so it can be set in Vercel');
+  for (const k of ['AI_GATEWAY_API_KEY', 'GROQ_API_KEY']) assert.ok(route.includes(k), k + ' is named so it can be set in Vercel');
   assert.match(route, /cannot be changed from the app/);
+  // Fincrux is not an env var here: loadFincruxApiKeys (0050/0051) folds the stored per-account keys and the
+  // FINCRUX_API_KEY* fallbacks into one list, so the page reports configuration from that list. Every entry in it
+  // carries the DECRYPTED key in .value, so this page may read an account's label, source, id and count — nothing else.
+  assert.match(route, /const fincruxLimit = 5 \* activeFincruxAccounts\.length/, 'the quota comes from how many accounts are enabled');
+  assert.doesNotMatch(route, /\.value\b/, 'the decrypted key value is never read into the response');
+  assert.doesNotMatch(route, /\bmasked\b|\blast4\b/, 'not even a masked key or its last four digits belong on this page');
   const app = read('app.js');
   assert.match(app, /Needs a key/);
   assert.match(app, /function auHealth\(p\)/);

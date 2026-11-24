@@ -16,7 +16,7 @@ test('desktop menu: Money · Activity · Tools, in that order', () => {
     ['Activity', ['transactions', 'alerts', 'subscriptions', 'upload']],
   ]);
   const tools = viewsIn(nav.match(/id="toolsMenu"[\s\S]*$/)[0]);
-  assert.deepEqual(tools, ['stock-advisor', 'angel-one', 'other', 'data-quality', 'settings', 'jobs', 'ai-data', 'api-usage']);
+  assert.deepEqual(tools, ['stock-advisor', 'angel-one', 'other', 'data-quality', 'settings', 'jobs', 'ai-data', 'api-usage', 'provider-health']);
   assert.match(nav, /data-view="ai-data"[^>]*data-owner-only/, 'AI data is owner-only');
   assert.match(nav, /data-view="data-quality"[^>]*data-owner-only/, 'data quality is owner-only');
   assert.match(nav, /data-view="jobs"[^>]*data-owner-only/, 'scheduled jobs are owner-only');

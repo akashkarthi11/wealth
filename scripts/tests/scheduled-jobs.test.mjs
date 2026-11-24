@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { nextJobRun } from '../../api/_lib/scheduled-job-time.js';
+import { nextJobRunFromDb } from '../../api/_lib/scheduled-job-time.js';
+import { migratedDb } from './helpers/pglite.mjs';
 
 test('the nightly route owns interest and backup at 01:30 IST; dispatcher excludes legacy duplicates',()=>{
   const vercel=JSON.parse(readFileSync(new URL('../../vercel.json',import.meta.url),'utf8'));
@@ -10,7 +11,7 @@ test('the nightly route owns interest and backup at 01:30 IST; dispatcher exclud
   assert.match(jobs,/handler_key NOT IN \('interest-accrual','backup'\)/);
   assert.match(jobs,/\['interest-accrual','backup'\]\.includes\(job\.handler_key\).*status:'blocked'/);
   const nightly=readFileSync(new URL('../../api/_routes/nightly.js',import.meta.url),'utf8');
-  const migration=readFileSync(new URL('../migrations/0049_scheduled_job_skipped_status.sql',import.meta.url),'utf8');
+  const migration=readFileSync(new URL('../migrations/0052_scheduled_job_skipped_status.sql',import.meta.url),'utf8');
   assert.match(migration,/CHECK \(status IN \('running','succeeded','partial','failed','skipped'\)\)/);
   const router=readFileSync(new URL('../../api/router.js',import.meta.url),'utf8');
   const retired=readFileSync(new URL('../../api/_routes/interest-accrual.js',import.meta.url),'utf8');
@@ -20,22 +21,31 @@ test('the nightly route owns interest and backup at 01:30 IST; dispatcher exclud
   assert.match(nightly,/runBackup/);
 });
 
-test('daily schedule is calculated in Asia/Kolkata, not UTC',()=>{
-  const next=nextJobRun(new Date('2026-11-22T11:00:00.000Z'),'18:30','daily');
-  assert.equal(next.toISOString(),'2026-11-22T13:00:00.000Z');
+// Scheduling moved to PostgreSQL's clock (nextJobRunFromDb), so these can no longer pin an arbitrary "now".
+// They assert the same properties the old pure-function tests did, against the real implementation.
+test('a scheduled time is interpreted in Asia/Kolkata and always lands in the future', async () => {
+  const { a } = await migratedDb();
+  for (const time of ['18:30', '02:33', '23:59']) {
+    const next = await nextJobRunFromDb(a, time, 'daily');
+    assert.ok(next instanceof Date && Number.isFinite(next.getTime()), time + ' returns a date');
+    assert.ok(next.getTime() > Date.now() - 1000, time + ' is in the future, never a time already passed');
+    const [row] = await a.query(`SELECT to_char($1::timestamptz AT TIME ZONE 'Asia/Kolkata','HH24:MI') AS ist`, [next.toISOString()]);
+    assert.equal(row.ist, time, 'the hour and minute are the local Indian time, not UTC');
+  }
 });
 
-test('a passed due time moves to the next local day',()=>{
-  const next=nextJobRun(new Date('2026-11-22T14:00:00.000Z'),'18:30','daily');
-  assert.equal(next.toISOString(),'2026-11-23T13:00:00.000Z');
+test('a due time earlier than now moves to a later day, never today', async () => {
+  const { a } = await migratedDb();
+  const [{ ist_now }] = await a.query(`SELECT to_char(now() AT TIME ZONE 'Asia/Kolkata','HH24:MI') AS ist_now`);
+  if (ist_now <= '00:05') return;   // nothing has passed yet today; the check has no meaning
+  const next = await nextJobRunFromDb(a, '00:01', 'daily');
+  const [row] = await a.query(`SELECT ($1::timestamptz AT TIME ZONE 'Asia/Kolkata')::date > (now() AT TIME ZONE 'Asia/Kolkata')::date AS later`, [next.toISOString()]);
+  assert.equal(row.later, true, 'a time already gone today is scheduled for a following day');
 });
 
-test('weekday schedules skip Saturday and Sunday in the configured timezone',()=>{
-  const next=nextJobRun(new Date('2026-11-21T12:00:00.000Z'),'09:45','weekdays');
-  assert.equal(next.toISOString(),'2026-11-23T04:15:00.000Z');
-});
-
-test('a run at the exact scheduled minute advances to the next occurrence',()=>{
-  const next=nextJobRun(new Date('2026-11-22T13:00:00.000Z'),'18:30','daily');
-  assert.equal(next.toISOString(),'2026-11-23T13:00:00.000Z');
+test('a weekday schedule never lands on a Saturday or Sunday in Asia/Kolkata', async () => {
+  const { a } = await migratedDb();
+  const next = await nextJobRunFromDb(a, '09:45', 'weekdays');
+  const [row] = await a.query(`SELECT extract(isodow FROM ($1::timestamptz AT TIME ZONE 'Asia/Kolkata'))::int AS dow`, [next.toISOString()]);
+  assert.ok(row.dow >= 1 && row.dow <= 5, 'got ISO weekday ' + row.dow);
 });

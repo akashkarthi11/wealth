@@ -19,7 +19,8 @@ test('normalizes Fincrux positional array rows instead of discarding them', () =
     }
   }, 'EXAMPLE');
 
-  assert.equal(result.statement_row_count, 6);
+  // quarterly 2 + P&L 1 + balance sheet 1 + cash flow 1; ratios and shareholding are not statement rows
+  assert.equal(result.statement_row_count, 5);
   assert.equal(result.financials.quarterly_results.length, 2);
   assert.equal(result.financials.profit_and_loss.length, 1);
   assert.equal(result.financials.balance_sheet.length, 1);
