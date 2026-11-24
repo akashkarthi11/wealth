@@ -2,8 +2,9 @@ import {sql,schema,json,sessionUser,body} from '../_lib.js';
 import {timingSafeEqual,randomUUID} from 'node:crypto';
 import {startJob,finishJob} from '../_jobs.js';
 import {SCHEDULE_TIMEZONE,DEFAULT_SCHEDULE_TIME,nextScheduledAt,getLocalDateTime} from '../_lib/stock-advisor-schedule-time.js';
-import { listFincruxKeyMetadata } from '../_lib/provider-api-keys.js';
-import { buildProviderDirectory } from '../_lib/provider-directory.js';
+import { listFincruxKeyMetadata, getStoredProviderKey } from '../_lib/provider-api-keys.js';
+import { buildProviderDirectory, PROVIDER_KEYS } from '../_lib/provider-directory.js';
+const SINGLE_KEY_PROVIDERS = PROVIDER_KEYS.filter(k => k !== 'fincrux');
 
 // The agents' shared WEALTH_INGEST_SECRET (Plan 3) or the older advisor-only secret.
 function validIngestSecret(req){
@@ -88,7 +89,11 @@ async function loadResearchHealth(uid,holdings){
  // six-entry list here had drifted from it: it did not know Agent web or Web search existed at all, and read only
  // env-var presence where the real list already has today's usage counts (owner's request 2026-11-24).
  const {providers}=await buildProviderDirectory(sql);
- if(!tickers.length)return {status:'ok',eligible_equities:0,coverage:{},providers,fincrux_keys:fincruxKeys,eligible_tickers:tickers,last_collection:null,evidence_summary:[]};
+ // Whether a single-key provider (AI Gateway, Groq, Tavily) has a saved key, masked only - same exposure as the
+ // existing fincrux_keys above (owner's request 2026-11-24: "every card need edit option").
+ const providerKeys={};
+ await Promise.all(SINGLE_KEY_PROVIDERS.map(async key=>{providerKeys[key]=await getStoredProviderKey(sql,uid,key)}));
+ if(!tickers.length)return {status:'ok',eligible_equities:0,coverage:{},providers,fincrux_keys:fincruxKeys,provider_keys:providerKeys,eligible_tickers:tickers,last_collection:null,evidence_summary:[]};
  try{
   const [coverageRows,evidenceRows,collectionRows]=await Promise.all([
    sql.query(`SELECT
@@ -116,11 +121,12 @@ async function loadResearchHealth(uid,holdings){
    },
    providers,
    fincrux_keys:fincruxKeys,
+   provider_keys:providerKeys,
    last_collection:collectionRows[0]||null,
    evidence_summary:evidenceRows
   };
  }catch(error){
-  return {status:'unavailable',eligible_equities:tickers.length,coverage:{},providers,fincrux_keys:fincruxKeys,last_collection:null,evidence_summary:[],error:String(error?.message||error).slice(0,180)};
+  return {status:'unavailable',eligible_equities:tickers.length,coverage:{},providers,fincrux_keys:fincruxKeys,provider_keys:providerKeys,last_collection:null,evidence_summary:[],error:String(error?.message||error).slice(0,180)};
  }
 }
 

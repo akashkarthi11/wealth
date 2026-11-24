@@ -21,6 +21,7 @@
  */
 import { recordApiCall } from './api-audit.js';
 import { wrapUntrusted } from './agent-tools.js';
+import { loadStoredProviderKeyValue } from './provider-api-keys.js';
 
 const ENDPOINT = 'https://api.tavily.com/search';
 const TIMEOUT_MS = 9000;
@@ -67,8 +68,10 @@ export async function searchWeb({ query, days = null } = {}, { db, ticker = null
   const text = String(query || '').trim().slice(0, 300);
   if (!text) return { ok: false, error: 'A search query is required.' };
 
-  const key = searchKey(env);
-  if (!key) return { ok: false, error: 'Web search is not configured. Set TAVILY_API_KEY in the Vercel project to enable it.' };
+  // A key saved from the Provider Health card is checked first, then the env var (owner's request 2026-11-24).
+  const stored = db ? await loadStoredProviderKeyValue(db, 'web-search') : null;
+  const key = stored || searchKey(env);
+  if (!key) return { ok: false, error: 'Web search is not configured. Set TAVILY_API_KEY in the Vercel project, or save a key on this card, to enable it.' };
 
   const used = await searchesUsedToday(db);
   if (used >= MAX_SEARCHES_PER_DAY) {

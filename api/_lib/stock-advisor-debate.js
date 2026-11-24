@@ -7,6 +7,7 @@ import { collectTejHqEquityEvidence } from './stock-advisor-tejhq.js';
 import { collectFincruxFinancials } from './stock-advisor-fincrux.js';
 import { collectNseXbrlFinancialStatement } from './stock-advisor-nse-xbrl.js';
 import { toolsFor, runAgentTool } from './agent-tools.js';
+import { loadStoredProviderKeyValue } from './provider-api-keys.js';
 
 export const FREE_AI_MODEL = 'nvidia/nemotron-3.5-lightning-free';
 export const DEBATE_SEQUENCE = Object.freeze([
@@ -174,7 +175,9 @@ async function reserveFreeModelSlot() {
 }
 
 async function callGroqFreeModel(messages,maxTokens=2200) {
-  const key=String(process.env.GROQ_API_KEY||'').trim();
+  // A key saved from the Provider Health card (owner's request 2026-11-24) is checked first, then the env var. The
+  // zero-data-retention confirmation stays env-only: it is a compliance attestation the admin makes once, not a secret.
+  const key=(await loadStoredProviderKeyValue(sql,'groq'))||String(process.env.GROQ_API_KEY||'').trim();
   const zeroRetention=String(process.env.GROQ_ZERO_DATA_RETENTION_CONFIRMED||'').trim().toLowerCase()==='true';
   if(!key||!zeroRetention)return null;
   const model='openai/gpt-oss-20b';
@@ -192,7 +195,8 @@ async function callGroqFreeModel(messages,maxTokens=2200) {
 }
 
 async function callFreeModel(messages,maxTokens=2200,tools=null) {
-  const key=String(process.env.AI_GATEWAY_API_KEY||'').trim();
+  // A key saved from the Provider Health card (owner's request 2026-11-24) is checked first, then the env var.
+  const key=(await loadStoredProviderKeyValue(sql,'free-model'))||String(process.env.AI_GATEWAY_API_KEY||'').trim();
   let primaryError=null;
   if(key) {
     try {
@@ -382,8 +386,12 @@ export async function callWithTools(messages,ctx={},{maxRounds=MAX_TOOL_ROUNDS,c
   const thread=[...messages];
   if(thread[0]?.role==='system')thread[0]={...thread[0],content:thread[0].content+'\n\n'+TOOL_INSTRUCTIONS};
   const used=[];
+  // Resolved once per turn, not per round: whether a key was saved from the Provider Health card decides whether the
+  // model is offered search_web at all, same as an env var would (2026-11-24).
+  const searchKeyStored=ctx.db?Boolean(await loadStoredProviderKeyValue(ctx.db,'web-search')):false;
+  const tools=toolsFor(process.env,searchKeyStored);
   for(let round=0;round<maxRounds;round++) {
-    const reply=await call(thread,2200,toolsFor());
+    const reply=await call(thread,2200,tools);
     const calls=Array.isArray(reply?.tool_calls)?reply.tool_calls.slice(0,MAX_TOOLS_PER_ROUND):[];
     if(!calls.length) return {...reply,tools_used:used};
     thread.push(reply.message||{role:'assistant',content:reply.raw||'',tool_calls:calls});

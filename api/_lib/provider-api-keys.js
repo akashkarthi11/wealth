@@ -83,6 +83,51 @@ export async function loadFincruxApiKeys(db) {
   return output;
 }
 
+// Generic single-key providers (owner's request 2026-11-24: "every card need edit option"). Fincrux keeps its own
+// multi-key, ticker-sharded functions above; these are for the AI Gateway, Groq and Tavily keys, which need only one
+// active value each. Reuses the same table and encryption — "one row per provider" is enforced here, in the
+// application, rather than by a schema change, since wealth_provider_api_keys already allows any provider.
+// A provider with no key at all (TejHQ, MFAPI, NSE, Agent web, Period match) can still have a row saved here; nothing
+// reads it today, and the UI says so, but saving one is harmless — there is nothing to invent, only an unused value.
+const SINGLE_KEY_LABEL = provider => provider + ' key';
+
+export async function getStoredProviderKey(db, userId, provider) {
+  const [row] = await db.query('SELECT id,label,encrypted_key,key_iv,key_tag,created_at,updated_at FROM wealth_provider_api_keys WHERE user_id=$1 AND provider=$2 ORDER BY created_at DESC LIMIT 1', [userId, String(provider)]);
+  if (!row) return null;
+  try {
+    const value = decryptProviderKey(row);
+    return { id: row.id, label: row.label, masked: mask(value), last4: value.slice(-4), source: 'database', updated_at: row.updated_at };
+  } catch {
+    return { id: row.id, label: row.label, masked: 'Unavailable', source: 'database', error: 'Cannot decrypt; check the session secret has not changed.' };
+  }
+}
+
+// For a runtime call site: the decrypted value if one is stored, else null (env var is the caller's own fallback).
+export async function loadStoredProviderKeyValue(db, provider) {
+  const owners = await db.query("SELECT id FROM wealth_users WHERE role='admin' ORDER BY created_at LIMIT 1");
+  const userId = owners[0]?.id;
+  if (!userId) return null;
+  const [row] = await db.query('SELECT encrypted_key,key_iv,key_tag FROM wealth_provider_api_keys WHERE user_id=$1 AND provider=$2 ORDER BY created_at DESC LIMIT 1', [userId, String(provider)]);
+  if (!row) return null;
+  try { const value = decryptProviderKey(row); return value || null; } catch { return null; }
+}
+
+// Replaces any previously saved key for this provider: single-key providers have exactly one row, not a list.
+export async function saveStoredProviderKey(db, userId, provider, key) {
+  const value = clean(key);
+  if (value.length < 4 || value.length > 500) throw Object.assign(new Error('Enter a key (4–500 characters).'), { status: 400 });
+  const encrypted = encryptProviderKey(value);
+  const fp = fingerprint(value);
+  await db.query('DELETE FROM wealth_provider_api_keys WHERE user_id=$1 AND provider=$2', [userId, String(provider)]);
+  const [saved] = await db.query("INSERT INTO wealth_provider_api_keys (user_id,provider,label,encrypted_key,key_iv,key_tag,key_fingerprint,priority,enabled) VALUES ($1,$2,$3,$4,$5,$6,$7,1,true) RETURNING id", [userId, String(provider), SINGLE_KEY_LABEL(provider), encrypted.encrypted_key, encrypted.key_iv, encrypted.key_tag, fp]);
+  return saved;
+}
+
+export async function deleteStoredProviderKey(db, userId, provider, id) {
+  const deleted = await db.query('DELETE FROM wealth_provider_api_keys WHERE id=$1 AND user_id=$2 AND provider=$3 RETURNING id', [id, userId, String(provider)]);
+  return deleted.length > 0;
+}
+
 export async function addFincruxApiKey(db, userId, { key, label }) {
   const value = clean(key);
   if (value.length < 8 || value.length > 500) throw Object.assign(new Error('Enter a valid Fincrux API key.'), { status: 400 });
