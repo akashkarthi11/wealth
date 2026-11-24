@@ -1,44 +1,17 @@
 import { sql, json, sessionUser } from '../_lib.js';
-import { MAX_SEARCHES_PER_DAY as SEARCHES_PER_DAY } from '../_lib/agent-search.js';
-import { loadFincruxApiKeys } from '../_lib/provider-api-keys.js';
+import { buildProviderDirectory } from '../_lib/provider-directory.js';
 
 // GET /api/api-usage   (admin only, read only)
 // What each outside provider allows, what has been used today, and what is left. Limits are only shown where the
 // provider actually publishes one and the code enforces it; everything else says so rather than inventing a number.
-const IST_DAY = "(date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata')";
-const FREE_MODEL_PACING_MS = 13000;   // reserveFreeModelSlot in stock-advisor-debate.js
+// The provider list itself (quotas, usage, health) lives in provider-directory.js, shared with Provider Health
+// (loadResearchHealth in stock-advisor.js) so the two pages cannot show two different answers (2026-11-24).
 
 async function adminUser(req) {
   const uid = await sessionUser(req);
   if (!uid) return null;
   const [user] = await sql.query('SELECT role FROM wealth_users WHERE id=$1', [uid]);
   return user?.role === 'admin' ? uid : null;
-}
-const num = v => Number(v || 0);
-// Whether a provider is usable at all. Only the PRESENCE of a key is ever read, never its value, and the names below
-// are the environment variables to set in the Vercel project — they cannot be set from the app.
-const set = name => String(process.env[name] || '').trim().length > 0;
-function health(key, configured = false) {
-  if (key === 'fincrux') return configured
-    ? { status: 'configured', detail: 'Fincrux account keys are configured.', key_env: null }
-    : { status: 'needs_key', detail: 'No enabled Fincrux account keys are configured.', key_env: null };
-  if (key === 'free-model') {
-    if (set('AI_GATEWAY_API_KEY')) return { status: 'configured', detail: 'Vercel AI Gateway key present.', key_env: 'AI_GATEWAY_API_KEY' };
-    if (set('VERCEL_OIDC_TOKEN')) return { status: 'configured', detail: 'No gateway key; falling back to the deployment OIDC token.', key_env: 'AI_GATEWAY_API_KEY' };
-    return { status: 'needs_key', detail: 'No gateway key and no OIDC token, so no model call can be made.', key_env: 'AI_GATEWAY_API_KEY' };
-  }
-  if (key === 'web-search') {
-    return set('TAVILY_API_KEY')
-      ? { status: 'configured', detail: 'Free web search is enabled for the debate agents.', key_env: 'TAVILY_API_KEY' }
-      : { status: 'needs_key', detail: 'No search key, so the agents are not offered web search at all.', key_env: 'TAVILY_API_KEY' };
-  }
-  if (key === 'groq') {
-    if (!set('GROQ_API_KEY')) return { status: 'needs_key', detail: 'Optional fallback model; no key set.', key_env: 'GROQ_API_KEY' };
-    return String(process.env.GROQ_ZERO_DATA_RETENTION_CONFIRMED || '').toLowerCase() === 'true'
-      ? { status: 'configured', detail: 'Key set and zero-data-retention confirmed.', key_env: 'GROQ_API_KEY' }
-      : { status: 'blocked', detail: 'Key is set but GROQ_ZERO_DATA_RETENTION_CONFIRMED is not true, so it stays unused.', key_env: 'GROQ_ZERO_DATA_RETENTION_CONFIRMED' };
-  }
-  return { status: 'available', detail: 'Open data; no key needed.', key_env: null };
 }
 
 export default async function handler(req, res) {
@@ -47,127 +20,8 @@ export default async function handler(req, res) {
     if (req.method !== 'GET') return json(res, 405, { error: 'Method not allowed' });
     const uid = await adminUser(req);
     if (!uid) return json(res, 403, { error: 'Admin sign-in required' });
-    const activeFincruxAccounts = await loadFincruxApiKeys(sql);
-    const fincruxLimit = 5 * activeFincruxAccounts.length;
 
-    // One row per provider call made by today's data collection runs.
-    const steps = await sql.query(`SELECT s->>'provider' AS provider,
-        count(*)::int AS calls,
-        count(*) FILTER (WHERE s->>'status' IN ('failed','unavailable','market_data_failed'))::int AS failed,
-        count(*) FILTER (WHERE s->>'status' = 'skipped')::int AS skipped,
-        sum(CASE WHEN s->>'ms' ~ '^[0-9]+$' THEN (s->>'ms')::int ELSE 0 END)::int AS total_ms,
-        max(r.started_at) AS last_at
-      FROM wealth_stock_advisor_data_collection_runs r,
-        LATERAL jsonb_array_elements(COALESCE(r.summary->'steps','[]'::jsonb)) s
-      WHERE r.started_at >= ${IST_DAY}
-      GROUP BY 1`);
-    const byProvider = new Map(steps.map(s => [String(s.provider || ''), s]));
-
-    const [fincrux] = await sql.query(`SELECT count(*)::int AS used, max(retrieved_at) AS last_at
-      FROM wealth_stock_advisor_research_sources
-      WHERE publisher='Fincrux' AND retrieved_at >= ${IST_DAY}
-        AND retrieved_at < (${IST_DAY} + interval '1 day')`);
-    // The reservation url ends in '#key-<encodeURIComponent(id)>', and a manual call appends '-manual-<uuid>' to that
-    // (stock-advisor-fincrux.js). The suffix is stripped here: without it a manual call spends one of the five and this
-    // per-account panel still showed the account as untouched, while the provider total above counted it.
-    const fincruxAccountRows = await sql.query(`SELECT regexp_replace(regexp_replace(url, '^.*#key-', ''), '-manual-.*$', '') AS key_id,
-        count(*)::int AS used
-      FROM wealth_stock_advisor_research_sources
-      WHERE publisher='Fincrux' AND retrieved_at >= ${IST_DAY}
-        AND retrieved_at < (${IST_DAY} + interval '1 day') AND url LIKE '%#key-%'
-      GROUP BY 1`);
-    const fincruxUsageByKey = new Map(fincruxAccountRows.map(row => [String(row.key_id), num(row.used)]));
-    const fincruxQuotas = activeFincruxAccounts.map(key => {
-      // One lookup for both numbers: they disagreed when the id needed encoding.
-      const used = fincruxUsageByKey.get(encodeURIComponent(key.id)) || 0;
-      return { label: key.label, source: key.source, limit: 5, used, remaining: Math.max(0, 5 - used) };
-    });
-
-    // Every debate message is one free-model call, except the evidence-gate result, which uses none.
-    const [model] = await sql.query(`SELECT
-        count(*) FILTER (WHERE COALESCE(metadata->>'no_model','') <> 'true')::int AS calls,
-        count(*) FILTER (WHERE metadata->>'no_model' = 'true')::int AS without_model,
-        sum(CASE WHEN metadata->'usage'->>'prompt_tokens' ~ '^[0-9]+$' THEN (metadata->'usage'->>'prompt_tokens')::int ELSE 0 END)::int AS prompt_tokens,
-        sum(CASE WHEN metadata->'usage'->>'completion_tokens' ~ '^[0-9]+$' THEN (metadata->'usage'->>'completion_tokens')::int ELSE 0 END)::int AS completion_tokens,
-        max(created_at) AS last_at
-      FROM wealth_stock_advisor_messages WHERE created_at >= ${IST_DAY}`);
-
-    const [slot] = await sql.query(`SELECT next_allowed_at FROM wealth_stock_advisor_ai_rate_limit WHERE id=1`).catch(() => []);
-    const waitMs = slot?.next_allowed_at ? Math.max(0, new Date(slot.next_allowed_at).getTime() - Date.now()) : 0;
-
-    // One row per request actually sent today (IST), split by whether the provider answered or errored. A skipped or
-    // deferred step is not a request: it sent nothing and used no allowance, so it is reported separately and never
-    // counted as usage.
-    const answered = await sql.query(`SELECT provider,
-        count(*) FILTER (WHERE ok)::int AS succeeded,
-        count(*) FILTER (WHERE NOT ok)::int AS failed,
-        count(*)::int AS requests,
-        sum(COALESCE(duration_ms,0))::int AS total_ms,
-        max(created_at) AS last_at
-      FROM wealth_api_audit WHERE created_at >= ${IST_DAY} GROUP BY 1`).catch(() => []);
-    const answeredByProvider = new Map(answered.map(a => [String(a.provider || ''), a]));
-
-    const fromSteps = (label, extra = {}) => {
-      const s = byProvider.get(label) || {};
-      const a = answeredByProvider.get(label) || {};
-      return {
-        // what the provider answered, success or error: this is the usage
-        requests: num(a.requests), succeeded: num(a.succeeded), failed: num(a.failed),
-        calls: num(a.requests),
-        total_ms: num(a.total_ms) || num(s.total_ms),
-        last_at: a.last_at || s.last_at || null,
-        // planned work that never reached the provider, shown apart from usage
-        skipped: num(s.skipped),
-        ...extra,
-      };
-    };
-
-    const providers = [
-      {
-        key: 'fincrux', name: 'Fincrux', purpose: 'Company financial statements',
-        limit: fincruxLimit, limit_window: 'per day (IST; 5 per account)', used: num(fincrux?.used), remaining: Math.max(0, fincruxLimit - num(fincrux?.used)),
-        account_count: activeFincruxAccounts.length, account_quotas: fincruxQuotas,
-        resets_at_ist: 'midnight IST', last_at: fincrux?.last_at || null,
-        ...fromSteps('Fincrux', {}), ...health('fincrux', fincruxLimit > 0),
-        note: 'Five requests per active Fincrux Hobby account each IST day. Each account is reserved and counted separately; failed attempts also consume that account’s allowance.',
-      },
-      {
-        key: 'free-model', name: 'Vercel AI Gateway · Nemotron Free', purpose: 'Bull, Bear and CIO debate steps',
-        limit: null, limit_window: 'no daily cap published', pacing_ms: FREE_MODEL_PACING_MS,
-        used: num(model?.calls), calls: num(model?.calls), failed: 0, skipped: 0,
-        without_model: num(model?.without_model), prompt_tokens: num(model?.prompt_tokens), completion_tokens: num(model?.completion_tokens),
-        next_slot_in_ms: waitMs, last_at: model?.last_at || null, ...health('free-model'),
-        note: 'Paced to one call every 13 seconds (five a minute) across all runs. Calls answered without the model, such as the evidence-gate result, are counted separately.',
-      },
-      { key: 'tejhq', name: 'TejHQ', purpose: 'NSE end-of-day prices and indicators', limit: null, limit_window: 'no published limit', ...fromSteps('TejHQ NSE EOD'), used: num((answeredByProvider.get('TejHQ NSE EOD') || {}).requests), ...health('tejhq'),
-        note: 'One request per holding per run. No quota is published, so none is enforced here.' },
-      { key: 'mfapi', name: 'MFAPI.in', purpose: 'Mutual fund NAV', limit: null, limit_window: 'no published limit', ...fromSteps('MFAPI.in'), used: num((answeredByProvider.get('MFAPI.in') || {}).requests), ...health('mfapi'),
-        note: 'One request per fund per run.' },
-      { key: 'nse', name: 'NSE', purpose: 'Announcements, results and the company lists', limit: null, limit_window: 'no published limit', ...fromSteps('NSE RSS'), used: num((answeredByProvider.get('NSE RSS') || {}).requests), ...health('nse'),
-        note: 'Six announcement feeds per run, plus the symbol lists, which are downloaded once and reused for six hours.' },
-      { key: 'yahoo', name: 'Yahoo Finance fundamentals', purpose: 'Secondary quarterly figures (never verified)', limit: null,
-        limit_window: 'no published limit', ...fromSteps('Yahoo Finance fundamentals'),
-        used: num((answeredByProvider.get('Yahoo Finance fundamentals') || {}).requests), ...health('yahoo'),
-        note: 'One request per holding. The figures are stored unverified and never open the evidence gate.' },
-      { key: 'fx', name: 'Open currency API', purpose: 'USD to INR reference rate', limit: null,
-        limit_window: 'no published limit', ...fromSteps('Open currency API'),
-        used: num((answeredByProvider.get('Open currency API') || {}).requests), ...health('fx'),
-        note: 'One published rate a day, cached. Yahoo INR=X is the fallback if it cannot be read.' },
-      { key: 'groq', name: 'Groq Free', purpose: 'Optional fallback model', limit: null, limit_window: 'no published limit', used: 0, calls: 0, ...health('groq'),
-        note: 'Used only if the Vercel gateway fails and zero-data-retention has been confirmed.' },
-      // What the debate agents collected for themselves, rather than what the nightly job gathered (2026-11-24).
-      { key: 'agent-web', name: 'Agent web', purpose: 'Official pages the agents opened during a debate', limit: null, limit_window: 'allowlisted hosts only',
-        ...fromSteps('Agent web'), used: num((answeredByProvider.get('Agent web') || {}).requests), ...health('agent-web'),
-        note: 'NSE, BSE, SEBI, AMFI, RBI and Yahoo only. Always unverified context; it never satisfies missing evidence.' },
-      { key: 'web-search', name: 'Web search', purpose: 'Free web search the agents may call for context',
-        limit: SEARCHES_PER_DAY, limit_window: 'per day (IST), from a free monthly allowance',
-        ...fromSteps('Web search'), used: num((answeredByProvider.get('Web search') || {}).requests),
-        remaining: Math.max(0, SEARCHES_PER_DAY - num((answeredByProvider.get('Web search') || {}).requests)),
-        ...health('web-search'),
-        note: 'Results are unverified context and can never unlock a BUY, HOLD or SELL.' },
-      { key: 'period-match', name: 'Period match with NSE', purpose: 'Verifying a statement against a filing', limit: null, limit_window: 'database only', ...fromSteps('Period match with NSE'), used: 0, ...health('period-match'),
-        note: 'Reads what is already stored. It calls no outside service.' },
-    ];
+    const { providers } = await buildProviderDirectory(sql);
 
     // The latest audited response per provider: what the outside service actually returned, shape and all.
     const audit = await sql.query(`SELECT DISTINCT ON (provider) provider, ticker, endpoint, http_status, ok, usable,

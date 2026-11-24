@@ -7,11 +7,14 @@ import { migratedDb } from './helpers/pglite.mjs';
 
 const read = p => readFileSync(new URL('../../' + p, import.meta.url), 'utf8');
 const SRC = read('api/_routes/api-usage.js');
+// The provider list itself — quotas, usage, health — lives in provider-directory.js, shared with Provider Health, so
+// both pages read the same queries rather than two copies that can drift (2026-11-24).
+const DIR = read('api/_lib/provider-directory.js');
 const IST = "(date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata')";
 
 test('every query the page runs is valid against the real schema', async () => {
   const { a } = await migratedDb();
-  const queries = [...SRC.matchAll(/sql\.query\(`([\s\S]*?)`/g)].map(m => m[1]).filter(q => /FROM wealth_/.test(q));
+  const queries = [...(SRC + DIR).matchAll(/sql\.query\(`([\s\S]*?)`/g)].map(m => m[1]).filter(q => /FROM wealth_/.test(q));
   assert.ok(queries.length >= 3, 'the page reads provider activity, the Fincrux quota and the model calls');
   for (const q of queries) {
     const text = q.split('${IST_DAY}').join(IST);
@@ -41,7 +44,7 @@ test('a manual Fincrux call counts against the account that paid for it', async 
   // made the per-account row a different key, so the account still read 0 of 5 used while the provider total said 2 —
   // the owner would have believed there was quota left that was already spent (found 2026-11-24).
   const { a } = await migratedDb();
-  const query = [...SRC.matchAll(/sql\.query\(`([\s\S]*?)`\)/g)].map(m => m[1]).find(q => /AS key_id/.test(q));
+  const query = [...DIR.matchAll(/sql\.query\(`([\s\S]*?)`\)/g)].map(m => m[1]).find(q => /AS key_id/.test(q));
   assert.ok(query, 'the page reads usage per account');
   const add = (ticker, suffix) => a.query(`INSERT INTO wealth_stock_advisor_research_sources
     (run_id,ticker,source_type,title,url,publisher,retrieved_at,evidence,verification_status)
@@ -79,11 +82,11 @@ test('the page states a limit only where one is published, and never invents one
   // Fincrux's allowance is five a day PER KEY, so the page multiplies it by the number of active accounts. That
   // per-key figure must stay the one the adapter enforces, not a copy that can drift.
   const enforced = Number(read('api/_lib/stock-advisor-fincrux.js').match(/MAX_DAILY_REQUESTS = (\d+)/)[1]);
-  const shown = Number(SRC.match(/const fincruxLimit = (\d+) \* activeFincruxAccounts\.length/)[1]);
+  const shown = Number(DIR.match(/const fincruxLimit = (\d+) \* activeFincruxAccounts\.length/)[1]);
   assert.equal(shown, enforced, 'the per-key quota on the page is the one the adapter enforces');
-  assert.match(SRC, /limit_window: 'per day \(IST; 5 per account\)'/, 'and the window says it is per account');
+  assert.match(DIR, /limit_window: 'per day \(IST; 5 per account\)'/, 'and the window says it is per account');
   for (const p of ['tejhq', 'mfapi', 'nse']) {
-    const block = SRC.slice(SRC.indexOf("key: '" + p + "'"));
+    const block = DIR.slice(DIR.indexOf("key: '" + p + "'"));
     assert.match(block.slice(0, 200), /limit: null/, p + ' publishes no limit, so none is claimed');
   }
   const app = read('app.js');
@@ -91,8 +94,22 @@ test('the page states a limit only where one is published, and never invents one
   // The wording may change; what must survive is that a missing quota is not read as "unlimited".
   assert.match(app, /does not mean unlimited/i, 'the page says a missing limit is not permission to call freely');
   assert.doesNotMatch(SRC, /\b(INSERT|UPDATE|DELETE)\b\s/i, 'the page only reads');
+  assert.doesNotMatch(DIR, /\b(INSERT|UPDATE|DELETE)\b\s/i, 'the shared directory only reads too');
   assert.match(SRC, /role === 'admin'/);
   assert.match(read('api/router.js'), /'api-usage': \(\) => import/);
   assert.match(read('api/_roles.js'), /ADMIN_ONLY_VIEWS = \[[^\]]*'api-usage'/);
   assert.match(read('index.html'), /data-view="api-usage"[^>]*data-owner-only/);
+});
+
+test('Provider Health and API usage read the exact same provider list, so they cannot drift', () => {
+  // Provider Health had its own hardcoded six-provider array in stock-advisor.js, built from env checks only. It did
+  // not know Agent web or Web search existed, and never showed real usage numbers the way API usage already did -
+  // the two pages disagreed about what providers even exist (owner's request 2026-11-24).
+  const advisor = read('api/_routes/stock-advisor.js');
+  assert.match(SRC, /buildProviderDirectory\(sql\)/, 'API usage reads the shared directory');
+  assert.match(advisor, /buildProviderDirectory\(sql\)/, 'Provider Health reads the same shared directory');
+  assert.doesNotMatch(advisor, /key:'tejhq'|key:'nemotron'/, 'the old hardcoded provider array is gone, not left dead alongside the real one');
+  // The full directory, not a trimmed one: agent tooling that API usage already tracks must reach Provider Health too.
+  for (const key of ['agent-web', 'web-search', 'fincrux', 'free-model', 'tejhq', 'mfapi', 'nse', 'yahoo', 'fx', 'groq', 'period-match'])
+    assert.ok(DIR.includes("key: '" + key + "'"), key + ' is in the one shared list');
 });
